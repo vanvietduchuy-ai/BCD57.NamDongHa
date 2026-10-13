@@ -14,6 +14,7 @@ const NopBaoCao = lazy(() => import('./pages/NopBaoCao'));
 const QuanTri = lazy(() => import('./pages/QuanTri'));
 const NhiemVu = lazy(() => import('./pages/NhiemVu'));
 const NhiemVuChiTiet = lazy(() => import('./pages/NhiemVuChiTiet'));
+const DanhMucNhiemVu = lazy(() => import('./pages/DanhMucNhiemVu'));
 const KhoVanBan = lazy(() => import('./pages/KhoVanBan'));
 const SoanBaoCaoChung = lazy(() => import('./pages/SoanBaoCaoChung'));
 const SoCongVan = lazy(() => import('./pages/SoCongVan'));
@@ -45,6 +46,7 @@ function CacTrang() {
           <Route path="viec-can-nop" element={<ViecCanNop />} />
           <Route path="viec-can-nop/:id" element={<NopBaoCao />} />
           <Route path="nhiem-vu" element={<NhiemVu />} />
+          <Route path="nhiem-vu/danh-muc" element={<DanhMucNhiemVu />} />
           <Route path="nhiem-vu/:id" element={<NhiemVuChiTiet />} />
           <Route path="kho-van-ban" element={<KhoVanBan />} />
           <Route path="so-cong-van" element={<SoCongVan />} />
