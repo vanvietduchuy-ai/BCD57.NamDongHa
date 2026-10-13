@@ -1,6 +1,6 @@
 // Sổ công văn đến / đi — tự vào sổ khi đơn vị gửi báo cáo văn bản, khi Cơ quan Thường trực thêm văn bản vào kho.
 import { useMemo, useState } from 'react';
-import { ExternalLink, FilePen, FileSpreadsheet, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { ExternalLink, FilePen, FileSpreadsheet, Layers, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { useAuth, laQuanTri } from '../lib/auth';
@@ -12,6 +12,17 @@ import { moTepDrive } from '../components/TepDrive';
 import FormVanBan from '../components/FormVanBan';
 import { DemTepKem, DsTepKem, type TepKem } from '../components/TepKem';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
+
+// Nhóm loại văn bản -> màu nhãn trong sổ
+const NHOM_LOAI: Record<LoaiVb, string> = {
+  nghi_quyet: 'bg-[#FDF1F0] text-ink', quyet_dinh: 'bg-[#FDF1F0] text-ink', chi_thi: 'bg-[#FDF1F0] text-ink', ket_luan: 'bg-[#FDF1F0] text-ink',
+  ke_hoach: 'bg-cam-nhat text-cam-dam', chuong_trinh: 'bg-cam-nhat text-cam-dam', quy_che: 'bg-cam-nhat text-cam-dam',
+  cong_van: 'bg-xanh-nhat text-xanh', thong_bao: 'bg-xanh-nhat text-xanh', giay_moi: 'bg-xanh-nhat text-xanh',
+  bao_cao: 'bg-[#E3F1E8] text-[#1D5B36]', to_trinh: 'bg-[#E3F1E8] text-[#1D5B36]', bien_ban: 'bg-[#E3F1E8] text-[#1D5B36]',
+  khac: 'bg-nen-3 text-mo-2',
+};
+const THU_TU_LOAI = Object.keys(LOAI_VB) as LoaiVb[];
+const NhanLoai = ({ l }: { l: LoaiVb }) => <span className={cx('inline-flex shrink-0 items-center whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-semibold leading-4', NHOM_LOAI[l] ?? NHOM_LOAI.khac)}>{LOAI_VB[l] ?? 'Khác'}</span>;
 
 type Dong = {
   id: string; don_vi_id: string; don_vi: string; loai_so: 'den' | 'di'; nam: number; so_thu_tu: number; ngay: string;
@@ -29,6 +40,8 @@ export default function SoCongVan() {
   const [so, setSo] = useState<'den' | 'di'>('den');
   const [nam, setNam] = useState(new Date().getFullYear());
   const [tim, setTim] = useState('');
+  const [loai, setLoai] = useState<LoaiVb | ''>('');
+  const [nhom, setNhom] = useState(false);
   const [chon, setChon] = useState<Dong | null>(null);
   const [them, setThem] = useState(false);
 
@@ -40,16 +53,25 @@ export default function SoCongVan() {
     return { dong: (kq(r) ?? []) as Dong[] };
   }, [nam]);
 
-  const ds = useMemo(() => {
+  // Lọc theo sổ + từ khoá (chưa lọc loại) -> đếm số văn bản từng loại
+  const theoSo = useMemo(() => {
     const t = khongDau(tim.trim());
     return (data?.dong ?? []).filter((d) => d.loai_so === so
-      && (!t || khongDau(`${d.so_ky_hieu ?? ''} ${d.trich_yeu} ${d.noi_gui ?? ''} ${d.noi_nhan ?? ''} ${d.nguoi_ky ?? ''} ${d.ky_ten ?? ''} ${(d.tep ?? []).map((f) => f.ten).join(' ')}`).includes(t)));
+      && (!t || khongDau(`${d.so_ky_hieu ?? ''} ${d.trich_yeu} ${d.noi_gui ?? ''} ${d.noi_nhan ?? ''} ${d.nguoi_ky ?? ''} ${d.ky_ten ?? ''} ${LOAI_VB[d.loai] ?? ''} ${(d.tep ?? []).map((f) => f.ten).join(' ')}`).includes(t)));
   }, [data, so, tim]);
+  const demLoai = useMemo(() => {
+    const m = new Map<LoaiVb, number>();
+    theoSo.forEach((d) => m.set(d.loai, (m.get(d.loai) ?? 0) + 1));
+    return THU_TU_LOAI.filter((k) => m.has(k)).map((k) => [k, m.get(k)!] as const);
+  }, [theoSo]);
+  const ds = useMemo(() => theoSo.filter((d) => !loai || d.loai === loai), [theoSo, loai]);
+  const nhomDs = useMemo(() => THU_TU_LOAI.map((k) => [k, ds.filter((d) => d.loai === k)] as const).filter(([, r]) => r.length), [ds]);
   const dem = (l: 'den' | 'di') => (data?.dong ?? []).filter((d) => d.loai_so === l).length;
 
   const xuatExcel = async () => {
     const XLSX = await import('xlsx');
-    const dong = [...ds].reverse().map((d) => ({
+    const thuTu = nhom ? nhomDs.flatMap(([, r]) => [...r].reverse()) : [...ds].reverse();
+    const dong = thuTu.map((d) => ({
       [so === 'den' ? 'Số đến' : 'Số đi']: d.so_thu_tu, [so === 'den' ? 'Ngày đến' : 'Ngày gửi']: ngay(d.ngay),
       'Số, ký hiệu': d.so_ky_hieu ?? '', 'Ngày văn bản': d.ngay_ban_hanh ? ngay(d.ngay_ban_hanh) : '', 'Loại': LOAI_VB[d.loai],
       [so === 'den' ? 'Nơi gửi' : 'Nơi nhận']: (so === 'den' ? d.noi_gui : d.noi_nhan) ?? '', 'Trích yếu': d.trich_yeu,
@@ -61,7 +83,19 @@ export default function SoCongVan() {
     ws['!cols'] = [8, 12, 18, 12, 12, 30, 60, 30, 20, 45, 40].map((w) => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, so === 'den' ? 'Sổ đến' : 'Sổ đi');
-    XLSX.writeFile(wb, `so-cong-van-${so === 'den' ? 'den' : 'di'}-${nam}.xlsx`);
+    // Thống kê số văn bản theo loại (cả sổ đến và sổ đi trong năm)
+    const tat = data?.dong ?? [];
+    const tk = THU_TU_LOAI.map((k) => {
+      const den = tat.filter((d) => d.loai === k && d.loai_so === 'den').length;
+      const di = tat.filter((d) => d.loai === k && d.loai_so === 'di').length;
+      return { 'Loại văn bản': LOAI_VB[k], 'Sổ đến': den, 'Sổ đi': di, 'Cộng': den + di };
+    }).filter((r) => r['Cộng'] > 0);
+    tk.push({ 'Loại văn bản': 'Tổng cộng', 'Sổ đến': dem('den'), 'Sổ đi': dem('di'), 'Cộng': tat.length });
+    const ws2 = XLSX.utils.json_to_sheet(tk);
+    ws2['!cols'] = [22, 10, 10, 10].map((w) => ({ wch: w }));
+    XLSX.utils.book_append_sheet(wb, ws2, 'Theo loại');
+    const duoi = loai ? `-${khongDau(LOAI_VB[loai]).replace(/\s+/g, '-')}` : '';
+    XLSX.writeFile(wb, `so-cong-van-${so === 'den' ? 'den' : 'di'}${duoi}-${nam}.xlsx`);
   };
 
   if (!duocXem) return <><TieuDeTrang ten="Sổ công văn" /><Rong>Sổ công văn đến, đi do Cơ quan Thường trực BCĐ (Tổ Tổng hợp) theo dõi.</Rong></>;
@@ -79,7 +113,7 @@ export default function SoCongVan() {
         <div className="flex gap-2">
           <div role="tablist" className="grid flex-1 grid-cols-2 rounded-xl bg-[#E7E3D9] p-1 sm:flex-none">
             {([['den', 'Sổ đến'], ['di', 'Sổ đi']] as const).map(([k, t]) => (
-              <button key={k} role="tab" aria-selected={so === k} onClick={() => setSo(k)} className={cx('h-10 whitespace-nowrap rounded-lg px-4 text-[0.875rem]', so === k ? 'bg-white font-bold shadow-sm' : 'font-medium text-mo-2')}>{t} <span className="mono text-mo">{dem(k)}</span></button>
+              <button key={k} role="tab" aria-selected={so === k} onClick={() => { setSo(k); setLoai(''); }} className={cx('h-10 whitespace-nowrap rounded-lg px-4 text-[0.875rem]', so === k ? 'bg-white font-bold shadow-sm' : 'font-medium text-mo-2')}>{t} <span className="mono text-mo">{dem(k)}</span></button>
             ))}
           </div>
           <select aria-label="Năm" className={cx(lopO, 'min-h-12 w-[104px] shrink-0 bg-white')} value={nam} onChange={(e) => setNam(Number(e.target.value))}>
@@ -92,59 +126,91 @@ export default function SoCongVan() {
         </label>
       </div>
 
-      {ds.length === 0 ? <Rong>Sổ chưa có văn bản.</Rong> : (
-        <The className="overflow-hidden">
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[900px] border-collapse text-[0.8125rem]">
-              <thead className="bg-nen-2 text-left text-[11px] tracking-wide text-mo">
-                <tr>
-                  <th className="px-4 py-3">{so === 'den' ? 'SỐ ĐẾN' : 'SỐ ĐI'}</th><th className="px-2">{so === 'den' ? 'NGÀY ĐẾN' : 'NGÀY GỬI'}</th>
-                  <th className="px-2">SỐ, KÝ HIỆU · NGÀY</th><th className="px-2">TRÍCH YẾU</th>
-                  <th className="px-2">{so === 'den' ? 'NƠI GỬI' : 'NƠI NHẬN'}</th><th className="px-2">NGƯỜI KÝ</th><th className="px-4">TỆP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ds.map((d) => {
-                  const link = d.drive_url || linkXemDrive(d.drive_file_id);
-                  return (
-                    <tr key={d.id} onClick={() => setChon(d)} className="cursor-pointer border-t border-[#F1EEE7] align-top hover:bg-nen-2">
-                      <td className="so px-4 py-3 text-base font-bold leading-5">{d.so_thu_tu}</td>
-                      <td className="so px-2 py-3">{ngay(d.ngay)}</td>
-                      <td className="px-2 py-3"><div className="so font-semibold">{d.so_ky_hieu ?? '—'}</div><div className="whitespace-nowrap text-xs text-mo">{d.ngay_ban_hanh ? ngay(d.ngay_ban_hanh) : ''} · {LOAI_VB[d.loai]}</div></td>
-                      <td className="max-w-md px-2 py-3">{d.trich_yeu}{d.ky_ten && <div className="mt-0.5 text-xs text-xanh">Báo cáo kỳ: {d.ky_ten}</div>}</td>
-                      <td className="px-2 py-3">{(so === 'den' ? d.noi_gui : d.noi_nhan) ?? '—'}</td>
-                      <td className="px-2 py-3">{d.nguoi_ky ?? '—'}</td>
-                      <td className="px-4 py-3">{link && !String(d.drive_file_id ?? '').startsWith('thu-') ? <button type="button" onClick={(e) => { e.stopPropagation(); void moTepDrive('van_ban', d.van_ban_id, d.ten_tep ?? `${d.so_ky_hieu ?? 'van-ban'}.pdf`, 'xem', d.drive_url); }} aria-label="Mở tệp" className="inline-flex min-h-9 items-center text-[#8E1B22]"><ExternalLink className="h-4 w-4" /></button> : <span className="text-mo">—</span>}{(d.tep?.length ?? 0) > 0 && <span className="ml-2 text-xs" title="Tài liệu kèm theo"><DemTepKem n={d.tep!.length} /></span>}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <ul className="m-0 flex list-none flex-col p-0 md:hidden">
-            {ds.map((d) => (
-              <li key={d.id} className="border-b border-[#F1EEE7] last:border-0">
-                <button onClick={() => setChon(d)} className="flex w-full items-start gap-3 px-4 py-3.5 text-left active:bg-nen-2">
-                  <span className={cx('mono flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl leading-none', so === 'den' ? 'bg-xanh-nhat text-xanh' : 'bg-[#FDF1F0] text-ink')}>
-                    <span className="text-[1.0625rem] font-bold">{d.so_thu_tu}</span><span className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-wide">{so === 'den' ? 'đến' : 'đi'}</span>
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="flex items-center gap-2 text-xs text-mo"><b className="mono truncate text-den">{d.so_ky_hieu ?? '—'}</b><span className="shrink-0">· {ngay(d.ngay)}</span></span>
-                    <span className="line-clamp-3 text-[0.875rem] font-semibold leading-snug">{d.trich_yeu}</span>
-                    <span className="truncate text-xs text-mo">{so === 'den' ? `Từ: ${d.noi_gui ?? '—'}` : `Gửi: ${d.noi_nhan ?? '—'}`}{d.ghi_chu ? ` · ${d.ghi_chu}` : ''}</span>
-                    {(d.ky_ten || (d.tep?.length ?? 0) > 0) && <span className="flex items-center gap-2 text-xs text-mo">{d.ky_ten && <span className="truncate text-xanh">Báo cáo kỳ: {d.ky_ten}</span>}<DemTepKem n={d.tep?.length ?? 0} /></span>}
-                  </span>
-                </button>
-              </li>
+      {demLoai.length > 0 && (
+        <div className="flex items-center gap-2">
+          <div role="group" aria-label="Phân loại văn bản" className="-mx-3.5 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-3.5 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+            {[['', 'Tất cả', theoSo.length] as const, ...demLoai.map(([k, n]) => [k, LOAI_VB[k], n] as const)].map(([k, t, n]) => (
+              <button key={k || 'all'} type="button" onClick={() => setLoai(k)} aria-pressed={loai === k}
+                className={cx('flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 text-[0.8125rem]', loai === k ? 'bg-ink font-semibold text-white' : 'bg-white text-mo-2 hover:bg-nen-3')}>
+                {t}<span className={cx('mono text-[11px]', loai === k ? 'text-white/75' : 'text-mo')}>{n}</span>
+              </button>
             ))}
-          </ul>
-        </The>
+          </div>
+          {!loai && demLoai.length > 1 && (
+            <button type="button" onClick={() => setNhom(!nhom)} aria-pressed={nhom} title="Nhóm sổ theo loại văn bản"
+              className={cx('flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[0.8125rem]', nhom ? 'border-ink bg-[#FDF1F0] font-semibold text-ink' : 'border-vien bg-white text-mo-2')}>
+              <Layers className="h-4 w-4" /><span className="hidden sm:inline">Nhóm theo loại</span><span className="sm:hidden">Nhóm</span>
+            </button>
+          )}
+        </div>
       )}
+
+      {ds.length === 0 ? <Rong>{theoSo.length ? 'Không có văn bản thuộc loại này.' : 'Sổ chưa có văn bản.'}</Rong>
+        : nhom && !loai ? nhomDs.map(([k, r]) => (
+          <section key={k} className="flex flex-col gap-2">
+            <h2 className="m-0 flex items-center gap-2 px-1 text-[0.875rem] font-bold text-den"><NhanLoai l={k} /><span className="mono text-xs font-medium text-mo">{r.length} văn bản</span></h2>
+            <BangSo ds={r} so={so} chon={setChon} anLoai />
+          </section>
+        ))
+        : <BangSo ds={ds} so={so} chon={setChon} anLoai={!!loai} />}
 
       <ChiTietSo d={chon} dong={() => setChon(null)} xong={() => { setChon(null); void taiLai(); }} />
       {quanTri && <FormVanBan mo={them} dong={() => setThem(false)} dau={{ thu_muc: so === 'den' ? 'cap_tren_cong_an_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
         xong={() => { setThem(false); void taiLai(); }} />}
     </>
+  );
+}
+
+function BangSo({ ds, so, chon, anLoai }: { ds: Dong[]; so: 'den' | 'di'; chon: (d: Dong) => void; anLoai?: boolean }) {
+  return (
+    <The className="overflow-hidden">
+      <div className="hidden overflow-x-auto md:block">
+        <table className="w-full min-w-[900px] border-collapse text-[0.8125rem]">
+          <thead className="bg-nen-2 text-left text-[11px] tracking-wide text-mo">
+            <tr>
+              <th className="px-4 py-3">{so === 'den' ? 'SỐ ĐẾN' : 'SỐ ĐI'}</th><th className="px-2">{so === 'den' ? 'NGÀY ĐẾN' : 'NGÀY GỬI'}</th>
+              {!anLoai && <th className="px-2">LOẠI</th>}
+              <th className="px-2">SỐ, KÝ HIỆU · NGÀY</th><th className="px-2">TRÍCH YẾU</th>
+              <th className="px-2">{so === 'den' ? 'NƠI GỬI' : 'NƠI NHẬN'}</th><th className="px-2">NGƯỜI KÝ</th><th className="px-4">TỆP</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ds.map((d) => {
+              const link = d.drive_url || linkXemDrive(d.drive_file_id);
+              return (
+                <tr key={d.id} onClick={() => chon(d)} className="cursor-pointer border-t border-[#F1EEE7] align-top hover:bg-nen-2">
+                  <td className="so px-4 py-3 text-base font-bold leading-5">{d.so_thu_tu}</td>
+                  <td className="so whitespace-nowrap px-2 py-3">{ngay(d.ngay)}</td>
+                  {!anLoai && <td className="px-2 py-3"><NhanLoai l={d.loai} /></td>}
+                  <td className="px-2 py-3"><div className="so font-semibold">{d.so_ky_hieu ?? '—'}</div><div className="whitespace-nowrap text-xs text-mo">{d.ngay_ban_hanh ? ngay(d.ngay_ban_hanh) : ''}</div></td>
+                  <td className="max-w-md px-2 py-3">{d.trich_yeu}{d.ky_ten && <div className="mt-0.5 text-xs text-xanh">Báo cáo kỳ: {d.ky_ten}</div>}</td>
+                  <td className="px-2 py-3">{(so === 'den' ? d.noi_gui : d.noi_nhan) ?? '—'}</td>
+                  <td className="px-2 py-3">{d.nguoi_ky ?? '—'}</td>
+                  <td className="px-4 py-3">{link && !String(d.drive_file_id ?? '').startsWith('thu-') ? <button type="button" onClick={(e) => { e.stopPropagation(); void moTepDrive('van_ban', d.van_ban_id, d.ten_tep ?? `${d.so_ky_hieu ?? 'van-ban'}.pdf`, 'xem', d.drive_url); }} aria-label="Mở tệp" className="inline-flex min-h-9 items-center text-[#8E1B22]"><ExternalLink className="h-4 w-4" /></button> : <span className="text-mo">—</span>}{(d.tep?.length ?? 0) > 0 && <span className="ml-2 text-xs" title="Tài liệu kèm theo"><DemTepKem n={d.tep!.length} /></span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <ul className="m-0 flex list-none flex-col p-0 md:hidden">
+        {ds.map((d) => (
+          <li key={d.id} className="border-b border-[#F1EEE7] last:border-0">
+            <button onClick={() => chon(d)} className="flex w-full items-start gap-3 px-4 py-3.5 text-left active:bg-nen-2">
+              <span className={cx('mono flex h-11 w-11 shrink-0 flex-col items-center justify-center rounded-xl leading-none', so === 'den' ? 'bg-xanh-nhat text-xanh' : 'bg-[#FDF1F0] text-ink')}>
+                <span className="text-[1.0625rem] font-bold">{d.so_thu_tu}</span><span className="mt-0.5 text-[9.5px] font-semibold uppercase tracking-wide">{so === 'den' ? 'đến' : 'đi'}</span>
+              </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-2 text-xs text-mo">{!anLoai && <NhanLoai l={d.loai} />}<b className="mono truncate text-den">{d.so_ky_hieu ?? '—'}</b><span className="shrink-0">· {ngay(d.ngay)}</span></span>
+                <span className="line-clamp-3 text-[0.875rem] font-semibold leading-snug">{d.trich_yeu}</span>
+                <span className="truncate text-xs text-mo">{so === 'den' ? `Từ: ${d.noi_gui ?? '—'}` : `Gửi: ${d.noi_nhan ?? '—'}`}{d.ghi_chu ? ` · ${d.ghi_chu}` : ''}</span>
+                {(d.ky_ten || (d.tep?.length ?? 0) > 0) && <span className="flex items-center gap-2 text-xs text-mo">{d.ky_ten && <span className="truncate text-xanh">Báo cáo kỳ: {d.ky_ten}</span>}<DemTepKem n={d.tep?.length ?? 0} /></span>}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </The>
   );
 }
 
