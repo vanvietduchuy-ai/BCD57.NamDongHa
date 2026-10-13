@@ -1,0 +1,201 @@
+// Danh mục nhiệm vụ dạng bảng A4: cấu hình bảng (lưu ở cau_hinh, khoá 'danh_muc_a4'),
+// tính tình trạng quá hạn / sắp đến hạn, tỉ lệ theo đơn vị, đọc bảng danh mục từ tệp Word (.docx).
+import { khongDau, type NhiemVu } from './nhiemVu';
+import { homNayVN } from './dinhDang';
+
+export const KHOA_CAU_HINH = 'danh_muc_a4';
+
+export type KhoaCot = 'tt' | 'ten' | 'chu_tri' | 'san_pham' | 'han_vb' | 'han' | 'tien_do' | 'ket_qua' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma';
+export type CotA4 = { khoa: KhoaCot; nhan: string; rong: number; hien: boolean };
+export type NhomA4 = { id: string; ky_hieu: string; ten: string };
+// Thông tin riêng của từng dòng trong bảng (không có trong bảng nhiem_vu)
+export type DongA4 = { nhom?: string; thu_tu?: number; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number };
+export type CauHinhA4 = {
+  tieu_de: string; dong_goc: string; dong_phu: string; ghi_chu: string; canh_bao_ngay: number;
+  kho: { huong: 'ngang' | 'doc'; co_chu: number; le: [number, number, number, number] };   // lề trên, phải, dưới, trái (mm)
+  cot: CotA4[]; nhom: NhomA4[]; dong: Record<string, DongA4>;
+};
+
+export const COT_MAC_DINH: CotA4[] = [
+  { khoa: 'tt', nhan: 'TT', rong: 4, hien: true },
+  { khoa: 'ten', nhan: 'Nội dung nhiệm vụ', rong: 19, hien: true },
+  { khoa: 'chu_tri', nhan: 'Cơ quan chủ trì / phối hợp', rong: 11, hien: true },
+  { khoa: 'san_pham', nhan: 'Chỉ tiêu thực hiện / sản phẩm', rong: 12, hien: true },
+  { khoa: 'han_vb', nhan: 'Thời hạn theo văn bản', rong: 8, hien: true },
+  { khoa: 'han', nhan: 'Thời hạn hoàn thành', rong: 8, hien: true },
+  { khoa: 'tien_do', nhan: 'Tiến độ thực hiện', rong: 12, hien: true },
+  { khoa: 'ket_qua', nhan: 'Kết quả thực hiện', rong: 12, hien: true },
+  { khoa: 'minh_chung', nhan: 'Minh chứng', rong: 8, hien: true },
+  { khoa: 'tinh_trang', nhan: 'Tình trạng', rong: 7, hien: true },
+  { khoa: 'lanh_dao', nhan: 'Lãnh đạo phụ trách', rong: 7, hien: false },
+  { khoa: 'ma', nhan: 'Mã', rong: 5, hien: false },
+];
+
+export const CAU_HINH_MAC_DINH: CauHinhA4 = {
+  tieu_de: 'DANH MỤC NHIỆM VỤ CẦN THỰC HIỆN',
+  dong_goc: 'Phụ lục',
+  dong_phu: '(Tính đến ngày {ngay})',
+  ghi_chu: '',
+  canh_bao_ngay: 7,
+  kho: { huong: 'ngang', co_chu: 11, le: [15, 12, 15, 15] },
+  cot: COT_MAC_DINH, nhom: [], dong: {},
+};
+
+// Ghép cấu hình đã lưu với mặc định (thêm cột mới nếu bản lưu cũ chưa có)
+export function ghepCauHinh(luu: Partial<CauHinhA4> | null | undefined): CauHinhA4 {
+  const l = luu ?? {};
+  const cot = COT_MAC_DINH.map((c) => ({ ...c, ...(l.cot ?? []).find((x) => x.khoa === c.khoa) }));
+  if (l.cot?.length) {
+    const thuTu = l.cot.map((c) => c.khoa);
+    cot.sort((a, b) => (thuTu.indexOf(a.khoa) + 100 * +(thuTu.indexOf(a.khoa) < 0)) - (thuTu.indexOf(b.khoa) + 100 * +(thuTu.indexOf(b.khoa) < 0)));
+  }
+  return {
+    ...CAU_HINH_MAC_DINH, ...l,
+    kho: { ...CAU_HINH_MAC_DINH.kho, ...l.kho },
+    cot, nhom: l.nhom ?? [], dong: l.dong ?? {},
+  };
+}
+
+export const kichThuocTrang = (c: CauHinhA4) => (c.kho.huong === 'doc' ? { rong: 210, cao: 297 } : { rong: 297, cao: 210 });
+
+// ---------- Ngày tháng (theo giờ Việt Nam)
+const ngayTu = (s: string) => { const [y, m, d] = s.slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
+export const soNgay = (tu: string, den: string) => Math.round((ngayTu(den) - ngayTu(tu)) / 86400000);
+export const ngayNgan = (s: string | null | undefined) => (s ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : '');
+
+// ---------- Tình trạng một nhiệm vụ
+export type LoaiTT = 'xong' | 'qua_han' | 'sap_han' | 'dang' | 'chua' | 'dung';
+export type TinhTrang = { loai: LoaiTT; nhan: string; tre?: number; con?: number };
+export function tinhTrang(n: NhiemVu, canhBao: number, xongLuc?: string | null): TinhTrang {
+  const hom = homNayVN();
+  const han = n.dinh_ky && n.ky_han && !n.ky_xong ? n.ky_han : n.han;
+  if (n.trang_thai === 'hoan_thanh') {
+    const tre = n.han && xongLuc ? Math.max(0, soNgay(n.han, xongLuc.slice(0, 10))) : 0;
+    return { loai: 'xong', nhan: tre ? `Hoàn thành (trễ ${tre} ngày)` : 'Hoàn thành', tre };
+  }
+  if (n.trang_thai === 'tam_dung') return { loai: 'dung', nhan: 'Tạm dừng' };
+  if (han) {
+    const con = soNgay(hom, han);
+    if (con < 0) return { loai: 'qua_han', nhan: `Quá hạn ${-con} ngày`, tre: -con };
+    if (con <= canhBao) return { loai: 'sap_han', nhan: con === 0 ? 'Đến hạn hôm nay' : `Còn ${con} ngày`, con };
+  }
+  return n.trang_thai === 'chua_trien_khai' ? { loai: 'chua', nhan: 'Chưa triển khai' } : { loai: 'dang', nhan: n.trang_thai === 'trinh_ky' ? 'Đang trình ký' : 'Đang thực hiện' };
+}
+export const MAU_TT: Record<LoaiTT, { chu: string; nen: string; vach: string }> = {
+  xong: { chu: '#166534', nen: '#DCFCE7', vach: '#16A34A' },
+  qua_han: { chu: '#9F1239', nen: '#FCE7EC', vach: '#BE123C' },
+  sap_han: { chu: '#92400E', nen: '#FEF3C7', vach: '#D97706' },
+  dang: { chu: '#1E3A8A', nen: '#DCE8FF', vach: '#1E3A8A' },
+  chua: { chu: '#3D4350', nen: '#EAE6DC', vach: '#9CA3AF' },
+  dung: { chu: '#5B6170', nen: '#EAE6DC', vach: '#9CA3AF' },
+};
+
+// ---------- Đọc tệp Word: lấy bảng đầu tiên, nhận dòng nhóm (A., B., …) và dòng nhiệm vụ
+export type DongNhap = {
+  nhom: { ky_hieu: string; ten: string } | null;
+  stt: string; ten: string; chu_tri_vb: string; san_pham: string; han_vb: string; han_text: string; han: string; tien_do_vb: string; theo_doi: string;
+};
+export type KetQuaDoc = { tieu_de: string; dong_phu: string; ghi_chu: string; dong: DongNhap[]; cot: string[] };
+
+async function docXmlTuDocx(f: File): Promise<string> {
+  const XLSX = await import('xlsx');
+  const buf = new Uint8Array(await f.arrayBuffer());
+  const cfb = XLSX.CFB.read(buf, { type: 'array' });
+  const e = XLSX.CFB.find(cfb, 'word/document.xml') ?? XLSX.CFB.find(cfb, '/word/document.xml');
+  if (!e || !e.content) throw new Error('Không đọc được nội dung tệp Word. Hãy lưu lại tệp dưới dạng .docx.');
+  return new TextDecoder('utf-8').decode(e.content as Uint8Array);
+}
+
+const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+function chuCuaPhanTu(el: Element): string {
+  return Array.from(el.getElementsByTagNameNS(W, 'p')).map((p) => Array.from(p.getElementsByTagNameNS(W, 't')).map((t) => t.textContent ?? '').join('')).join('\n').trim();
+}
+
+// "30/11/2026 (đề xuất)" -> "2026-11-30"; lấy ngày cuối cùng nếu có nhiều mốc ("Xác nhận: 20/10/2026; hoàn thành: 30/11/2026")
+export function layNgay(s: string): string {
+  const all = [...s.matchAll(/(\d{1,2})\/(\d{1,2})\/(\d{4})/g)];
+  if (!all.length) return '';
+  // Ưu tiên mốc "hoàn thành", "duy trì đến", nếu không lấy mốc đầu tiên
+  const uuTien = all.find((m) => /(hoàn thành|duy trì|được cấp)[^0-9]*$/i.test(s.slice(Math.max(0, (m.index ?? 0) - 30), m.index)));
+  const m = uuTien ?? all[0];
+  return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
+export async function docDanhMucWord(f: File): Promise<KetQuaDoc> {
+  const xml = await docXmlTuDocx(f);
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const bodyEl = doc.getElementsByTagNameNS(W, 'body')[0];
+  const bang = bodyEl ? Array.from(bodyEl.children).find((x) => x.localName === 'tbl') : undefined;
+  if (!bang) throw new Error('Không thấy bảng trong tệp Word.');
+  const doan = Array.from(bodyEl.children).filter((x) => x.localName === 'p').map(chuCuaPhanTu).filter(Boolean);
+  const hang = Array.from(bang.children).filter((x) => x.localName === 'tr').map((tr) => Array.from(tr.children).filter((x) => x.localName === 'tc').map(chuCuaPhanTu));
+  if (hang.length < 2) throw new Error('Bảng trong tệp Word không có dòng nhiệm vụ.');
+  const tieuDeCot = hang[0].map((x) => khongDau(x));
+  const tim = (...tu: string[]) => tieuDeCot.findIndex((x) => tu.some((t) => x.includes(t)));
+  const iTen = tim('noi dung', 'nhiem vu'), iChuTri = tim('chu tri', 'co quan'), iSp = tim('chi tieu', 'san pham'),
+    iHanVb = tim('theo van ban'), iHan = tim('hoan thanh'), iTd = tim('tien do'), iTheoDoi = tim('theo doi');
+  if (iTen < 0) throw new Error('Không nhận ra cột "Nội dung nhiệm vụ" trong bảng.');
+  let nhom: DongNhap['nhom'] = null;
+  const dong: DongNhap[] = [];
+  for (const h of hang.slice(1)) {
+    const khac = new Set(h.filter(Boolean));
+    const mNhom = h[0]?.match(/^([A-ZĐ]|[IVX]+)\.\s*(.+)$/s);
+    if (mNhom && (khac.size === 1 || !h[iTen] || h[iTen] === h[0])) { nhom = { ky_hieu: mNhom[1], ten: mNhom[2].trim() }; continue; }
+    const ten = (h[iTen] ?? '').trim();
+    if (!ten) continue;
+    const hanText = iHan >= 0 ? h[iHan] ?? '' : '';
+    const hanVb = iHanVb >= 0 ? h[iHanVb] ?? '' : '';
+    dong.push({
+      nhom, stt: h[0] ?? '', ten, chu_tri_vb: iChuTri >= 0 ? h[iChuTri] ?? '' : '', san_pham: iSp >= 0 ? h[iSp] ?? '' : '',
+      han_vb: hanVb, han_text: hanText, han: layNgay(hanText) || layNgay(hanVb), tien_do_vb: iTd >= 0 ? h[iTd] ?? '' : '', theo_doi: iTheoDoi >= 0 ? h[iTheoDoi] ?? '' : '',
+    });
+  }
+  const tieu = doan.find((x) => /danh m[ụu]c/i.test(x)) ?? '';
+  const phu = doan.find((x) => /^\(t[íi]nh đến/i.test(x)) ?? '';
+  const ghiChu = doan.filter((x) => x.startsWith('(*')).join('\n');
+  return { tieu_de: tieu, dong_phu: phu, ghi_chu: ghiChu, dong, cot: hang[0] };
+}
+
+// Đoán đơn vị chủ trì / phối hợp từ chữ trong cột "Cơ quan chủ trì / phối hợp"
+export type DonViGon = { id: string; ten: string };
+const BI_DANH: [RegExp, RegExp][] = [
+  [/van hoa\s*-?\s*xa hoi|vhxh|vh-xh/, /van hoa/],
+  [/kt-ht-dt|kinh te\s*-?\s*ha tang/, /kinh te/],
+  [/van phong hdnd|vp hdnd/, /van phong hdnd|hdnd/],
+  [/van phong dang uy|vp dang uy/, /van phong dang uy/],
+  [/ban xay dung dang/, /xay dung dang/],
+  [/mttq|mat tran/, /mat tran|mttq/],
+  [/trung tam phuc vu|hanh chinh cong/, /phuc vu hanh chinh|hanh chinh cong/],
+  [/bao hiem xa hoi/, /bao hiem/],
+  [/thue/, /thue/],
+  [/co quan thuong truc/, /tong hop|thuong truc/],
+  [/cong an phuong/, /cong an phuong|tong hop/],
+  [/ubnd phuong|uy ban nhan dan/, /^ubnd|uy ban nhan dan/],
+];
+export function doanDonVi(chu: string, ds: DonViGon[]): { chu_tri: string; phoi_hop: string[] } {
+  const t = khongDau(chu);
+  const [truoc, sau] = t.includes('chu tri') ? [t.split('chu tri')[0], t.split('chu tri').slice(1).join(' ')] : [t, ''];
+  const tim = (doan_: string): string[] => {
+    const kq: string[] = [];
+    for (const [mau, dv] of BI_DANH) {
+      if (!mau.test(doan_)) continue;
+      const d = ds.find((x) => dv.test(khongDau(x.ten)));
+      if (d && !kq.includes(d.id)) kq.push(d.id);
+    }
+    for (const d of ds) { const k = khongDau(d.ten); if (k.length > 6 && doan_.includes(k) && !kq.includes(d.id)) kq.push(d.id); }
+    return kq;
+  };
+  // "UBND phường (Văn phòng HĐND&UBND) chủ trì": ưu tiên đơn vị trong ngoặc
+  const ngoac = truoc.match(/\(([^)]+)\)/)?.[1];
+  const ct = [...new Set((ngoac ? tim(ngoac) : []).concat(tim(truoc)))];
+  const ph = tim(sau).filter((x) => x !== ct[0]);
+  return { chu_tri: ct[0] ?? '', phoi_hop: [...new Set([...ct.slice(1), ...ph])] };
+}
+
+// Trạng thái ban đầu theo cột "Tiến độ" của văn bản
+export function trangThaiTuChu(s: string): 'chua_trien_khai' | 'dang_thuc_hien' | 'hoan_thanh' {
+  const t = khongDau(s);
+  if (/^(da )?hoan thanh/.test(t)) return 'hoan_thanh';
+  if (/^chua (trien khai|co thong tin)/.test(t)) return 'chua_trien_khai';
+  return 'dang_thuc_hien';
+}
