@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Download, Plus, Search, ShieldCheck, SlidersHorizontal, Users } from 'lucide-react';
+import { ArrowRight, Download, Plus, Search, ShieldCheck, SlidersHorizontal, Table2, Users } from 'lucide-react';
 import { useManRong } from '../lib/manHinh';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
@@ -146,6 +146,7 @@ export default function NhiemVuTrang() {
       <TieuDeTrang tren={donVi ? hoSo?.don_vi?.ten : 'Nhiệm vụ BCĐ · NQ 57, chuyển đổi số, Đề án 06'}
         ten={donVi ? 'Nhiệm vụ được giao' : 'Nhiệm vụ Ban Chỉ đạo'}
         phai={<>
+          <Nut icon={<Table2 className="h-4 w-4" />} onClick={() => nav('/nhiem-vu/danh-muc')} ngan="Bảng A4">Danh mục dạng bảng A4</Nut>
           {!donVi && <Nut icon={<Download className="h-4 w-4" />} onClick={xuatExcel}>Xuất danh mục nhiệm vụ</Nut>}
           {quanTri && <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setMoForm(true)} ngan="Giao việc">Tham mưu giao nhiệm vụ</Nut>}
           {lanhDao && <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setMoForm(true)} ngan="Giao việc">Giao nhiệm vụ</Nut>}
