@@ -40,7 +40,7 @@ function CacTrang() {
           <Route path="ky-bao-cao" element={<Chan cho={cqtt} hoac={laDauMoi(hoSo)}><KyBaoCao /></Chan>} />
           <Route path="ky-bao-cao/:id" element={<Chan cho={cqtt} hoac={laDauMoi(hoSo)}><KyBaoCaoChiTiet /></Chan>} />
           <Route path="ky-bao-cao/:id/bao-cao-chung" element={<Chan cho={cqtt}><SoanBaoCaoChung /></Chan>} />
-          <Route path="theo-doi" element={<Chan cho={[]} hoac={laDauMoi(hoSo)}><TongQuan chuTri={hoSo.don_vi_id} /></Chan>} />
+          <Route path="theo-doi" element={<Navigate to="/" replace />} />
           <Route path="viec-can-nop" element={<ViecCanNop />} />
           <Route path="viec-can-nop/:id" element={<NopBaoCao />} />
           <Route path="nhiem-vu" element={<DanhMucNhiemVu />} />
