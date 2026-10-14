@@ -121,7 +121,8 @@ function tyLeQuy(dong: Dong[], nam: number, quy: number) {
 }
 const LA_MA = ['', 'I', 'II', 'III', 'IV'];
 
-export default function TongQuan({ chuTri = null }: { chuTri?: string | null }) {
+// nhung: hiển thị lồng trong trang chủ đơn vị đầu mối (phần theo dõi các đơn vị), không có đầu trang riêng
+export default function TongQuan({ chuTri = null, nhung = false }: { chuTri?: string | null; nhung?: boolean }) {
   const { hoSo } = useAuth();
   const quanTri = laQuanTri(hoSo);
   const nhacDuoc = quanTri || !!chuTri;
@@ -155,17 +156,18 @@ export default function TongQuan({ chuTri = null }: { chuTri?: string | null }) 
 
   return (
     <>
-      <header className="flex flex-wrap items-center gap-3">
+      <header className={cx('flex flex-wrap items-center gap-3', nhung && 'mt-3 border-t border-vien pt-5')}>
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-[0.8125rem] text-mo">{thuNgay()}</span>
-          <h1 className="m-0 text-[1.375rem] font-extrabold tracking-tight md:text-[1.625rem]">{chuTri ? 'Theo dõi đơn vị' : 'Tổng quan điều hành'}</h1>
+          <span className="text-[0.8125rem] text-mo">{nhung ? 'Lĩnh vực đơn vị làm đầu mối' : thuNgay()}</span>
+          {nhung ? <h2 className="m-0 text-[1.25rem] font-extrabold tracking-tight">Theo dõi các đơn vị</h2>
+            : <h1 className="m-0 text-[1.375rem] font-extrabold tracking-tight md:text-[1.625rem]">{chuTri ? 'Theo dõi đơn vị' : 'Tổng quan điều hành'}</h1>}
         </div>
-        <form onSubmit={timKiem} className="relative hidden w-[300px] xl:block" role="search">
+        {!nhung && <form onSubmit={timKiem} className="relative hidden w-[300px] xl:block" role="search">
           <Search className="pointer-events-none absolute left-3.5 top-3 h-[18px] w-[18px] text-mo" />
           <input value={tim} onChange={(e) => setTim(e.target.value)} placeholder="Tìm nhiệm vụ, đơn vị, văn bản…" aria-label="Tìm kiếm"
             className="h-11 w-full rounded-xl border border-vien bg-white pl-10 pr-3 text-sm outline-none focus:border-xanh" />
-        </form>
-        <div className="hidden lg:block"><Chuong /></div>
+        </form>}
+        {!nhung && <div className="hidden lg:block"><Chuong /></div>}
         {nhacDuoc && <Link to="/ky-bao-cao?tao=1" className="inline-flex min-h-10 shrink-0 items-center gap-1.5 rounded-xl bg-do px-3.5 text-sm font-semibold text-white hover:bg-do-2 sm:min-h-11 sm:gap-2 sm:px-4"><Plus className="h-4 w-4" /><span className="sm:hidden">Đột xuất</span><span className="hidden sm:inline">Tạo kỳ báo cáo đột xuất</span></Link>}
       </header>
       {tb && <div role="status" className="rounded-xl bg-xanh-nhat px-4 py-3 text-sm text-xanh">{tb}</div>}

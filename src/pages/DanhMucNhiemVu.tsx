@@ -13,6 +13,7 @@ import {
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
+import { BCT_MAC_DINH, boTienTo, KHOA_BCT, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
@@ -23,7 +24,8 @@ type DonVi = { id: string; ten: string; loai: string | null };
 type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
 type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null };
 // cha / con: nhiệm vụ lớn gồm các nhiệm vụ con (vd: 15. Nhóm nhiệm vụ ĐA06 -> 15.1 … 15.10); nhiệm vụ lớn tự tổng hợp tiến độ từ nhiệm vụ con
-type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4; vb: VbCanCu | null };
+// tuanCn: các lần báo cáo tuần này (tiền tố "Báo cáo tuần NN/YYYY:"); canBct: nhiệm vụ phải báo cáo tuần
+type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4; vb: VbCanCu | null };
 // Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …")
 function soLieuCua(x: Dong): { tu: number; mau: number } | null {
   const c = x.cn.find((y) => /Kết quả: (?:hoàn thành )?[\d.,]+\/[\d.,]+/.test(y.noi_dung));
@@ -34,7 +36,7 @@ function soLieuCua(x: Dong): { tu: number; mau: number } | null {
   return tuCn && Number.isFinite(tuCn.tu) && Number.isFinite(tuCn.mau) ? tuCn : null;
 }
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
-type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet';
+type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
 
 const KHOA_RIENG = 'bcd57-danh-muc-a4';
@@ -52,13 +54,14 @@ export default function DanhMucNhiemVu() {
   const donVi = hoSo?.vai_tro === 'don_vi';
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
-    const [a, b, c, d, e, f, g] = await Promise.all([
+    const [a, b, c, d, e, f, h, g] = await Promise.all([
       supabase.from('v_nhiem_vu').select(COT_NV).order('han', { ascending: true, nullsFirst: false }),
       supabase.from('don_vi').select('id, ten, loai').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, phan_tram, trang_thai_moi, luc, boi_ten').order('luc', { ascending: false }).limit(5000),
       supabase.from('v_minh_chung_nhiem_vu').select('nhiem_vu_id, so_ky_hieu, trich_yeu, ten_tep'),
       supabase.from('tep').select('nhiem_vu_id, ten').not('nhiem_vu_id', 'is', null),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
+      supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_BCT).maybeSingle(),
       supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, drive_url, ten_tep').neq('trang_thai', 'du_thao').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(1000),
     ]);
     const cn = new Map<string, CapNhat[]>();
@@ -70,6 +73,7 @@ export default function DanhMucNhiemVu() {
     return {
       nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc, vb: (g.data ?? []) as VbCanCu[],
       ch: ghepCauHinh((f.data as { gia_tri?: Partial<CauHinhA4> } | null)?.gia_tri),
+      bct: { ...BCT_MAC_DINH, ...((h.data as { gia_tri?: Partial<CauHinhBCT> } | null)?.gia_tri) },
     };
   }, []);
 
@@ -78,7 +82,7 @@ export default function DanhMucNhiemVu() {
   // Liên kết từ Tổng quan: ?tab=qua_han|cho_duyet|hoan_thanh, ?q=từ khoá
   const [thamSo] = useSearchParams();
   const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
-  const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
+  const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
   const [locDv, setLocDv] = useState('');
   const [xemNhu, setXemNhu] = useState('');
   const [chon, setChon] = useState<string | null>(null);
@@ -104,6 +108,8 @@ export default function DanhMucNhiemVu() {
   const nhomDs = ch.nhom.length ? ch.nhom : nhomMacDinh();
   const nhomCua = (n: NhiemVu) => { const g = ch.dong[n.id]?.nhom; return g && nhomDs.some((x) => x.id === g) ? g : ch.nhom.length ? '_khac' : `nv_${n.nhom}`; };
 
+  // Tuần hiện tại (báo cáo tuần nhập ngay trên bảng A4)
+  const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH), [data]);
   const tatCa: Dong[] = useMemo(() => {
     if (!data) return [];
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
@@ -112,7 +118,8 @@ export default function DanhMucNhiemVu() {
       const xongLuc = cn.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null;
       const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
       const tt = tinhTrang(n, ch.canh_bao_ngay, xongLuc);
-      return { n, tt, ttTD: tt, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
+      const tuanCn = cn.filter((y) => y.luc >= tuan.batDau.toISOString() && y.noi_dung.startsWith(tuan.tienTo));
+      return { n, tt, ttTD: tt, tuanCn, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     const theoId = new Map(ds.map((x) => [x.n.id, x]));
     // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
@@ -135,9 +142,10 @@ export default function DanhMucNhiemVu() {
       }
     }
     // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay
-    kq.forEach((x, i) => { x.stt = i + 1; x.ttTD = x.tt; if (x.d.tt_tay) x.tt = x.d.tt_tay; });
+    kq.forEach((x, i) => { x.stt = i + 1; x.ttTD = x.tt; if (x.d.tt_tay) x.tt = x.d.tt_tay;
+      x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || !['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai)); });
     return kq;
-  }, [data, ch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phạm vi xem: đơn vị chỉ thấy nhiệm vụ mình chủ trì (đã duyệt giao); Thường trực có thể "xem như" một đơn vị
   const dvXem = donVi ? hoSo?.don_vi_id ?? '__' : xemNhu;
@@ -150,6 +158,7 @@ export default function DanhMucNhiemVu() {
     if (locTT === 'sap_han' && k !== 'sap_han') return false;
     if (locTT === 'chua_xong' && k === 'xong') return false;
     if (locTT === 'xong' && k !== 'xong') return false;
+    if (locTT === 'chua_bct' && !(x.canBct && !x.tuanCn.length)) return false;
     const t = khongDau(tim.trim());
     if (t && !khongDau(`${x.n.ma ?? ''} ${x.n.ten} ${x.n.chu_tri_ten ?? ''} ${x.d.chu_tri_vb ?? ''} ${x.n.san_pham ?? ''} ${x.cn[0]?.noi_dung ?? ''}`).includes(t)) return false;
     return true;
@@ -166,6 +175,8 @@ export default function DanhMucNhiemVu() {
   if (!data) return null;
 
   const suaDuocBang = quanTri && !xemNhu;
+  const tuanNgan = tuan.ten.split(' (')[0];
+  const chHien: CauHinhA4 = ch;
   const dongChon = tatCa.find((x) => x.n.id === chon) ?? null;
   const tenDv = (id: string | null) => data.dv.find((d) => d.id === id)?.ten ?? '';
 
@@ -180,8 +191,8 @@ export default function DanhMucNhiemVu() {
       <TieuDeTrang tren={donVi ? hoSo?.don_vi?.ten : 'Danh mục nhiệm vụ · bảng A4'}
         ten={donVi ? 'Nhiệm vụ' : 'Nhiệm vụ Ban Chỉ đạo'}
         phai={<>
-          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatWord(ch, hien).catch((e) => setThongBao({ loi: loiDe(e) }))} ngan="Word">Xuất Word</Nut>
-          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatExcel(ch, hien, phamVi, data.dv)} ngan="Excel">Xuất Excel</Nut>
+          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatWord(chHien, hien).catch((e) => setThongBao({ loi: loiDe(e) }))} ngan="Word">Xuất Word</Nut>
+          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatExcel(chHien, hien, phamVi, data.dv)} ngan="Excel">Xuất Excel</Nut>
           {suaDuocBang && <Nut icon={<FileUp className="h-4 w-4" />} onClick={() => setMoNhap(true)} ngan="Nhập">Nhập từ Word</Nut>}
           {suaDuocBang && <Nut icon={<Settings2 className="h-4 w-4" />} onClick={() => setMoCaiDat(true)} ngan="Thiết lập">Thiết lập bảng</Nut>}
           {suaDuocBang && <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setMoThem(true)} ngan="Thêm">Thêm nhiệm vụ</Nut>}
@@ -216,12 +227,12 @@ export default function DanhMucNhiemVu() {
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <BangA4 ch={ch} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
+          <BangA4 ch={chHien} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={(id) => { setOSua(null); setChon((c) => (c === id ? null : id)); }} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
-            oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null}
+            oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()}
             moO={(x, khoa, o) => {
               const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
-              const duoc = khoa === 'tien_do' ? !x.con.length && (baoCao || suaDuocBang) : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
+              const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && (baoCao || suaDuocBang) : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
               if (!duoc) return false;
               setOSua({ id: x.n.id, khoa, o }); return true;
             }}
@@ -273,7 +284,7 @@ export default function DanhMucNhiemVu() {
         const x = tatCa.find((y) => y.n.id === oSua.id); if (!x) return null;
         const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
         return (
-          <HopSuaO x={x} khoa={oSua.khoa} o={oSua.o} nhan={ch.cot.find((c) => c.khoa === oSua.khoa)?.nhan ?? ''} dong={() => setOSua(null)}
+          <HopSuaO x={x} khoa={oSua.khoa} o={oSua.o} nhan={chHien.cot.find((c) => c.khoa === oSua.khoa)?.nhan ?? ''} dong={() => setOSua(null)}
             luu={async (v) => { setOSua(null); await luuOSua(x, oSua.khoa, v, capNhatNv, suaDong); }}
             noiDungO={oSua.khoa === 'tien_do'
               ? <>
@@ -282,6 +293,9 @@ export default function DanhMucNhiemVu() {
                   {baoCao && <CapNhatNhanh x={x} moSan laChuTri={quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id} quanTri={suaDuocBang} luuDong={(pp) => suaDong(x.n.id, pp)}
                     huy={() => setOSua(null)} xong={() => { setOSua(null); setThongBao({ ok: 'Đã cập nhật kết quả thực hiện.' }); void taiLai(); }} />}
                 </>
+              : oSua.khoa === 'ket_qua_tuan'
+                ? <CapNhatNhanh x={x} moSan tienTo={tuan.tienTo} laChuTri={quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id} quanTri={suaDuocBang} luuDong={(pp) => suaDong(x.n.id, pp)}
+                    huy={() => setOSua(null)} xong={() => { setOSua(null); setThongBao({ ok: `Đã báo cáo kết quả ${tuanNgan.toLowerCase()}.` }); void taiLai(); }} />
               : oSua.khoa === 'tinh_trang'
                 ? <ChonTinhTrang x={x} luu={(v) => { suaDong(x.n.id, { tt_tay: v }); setOSua(null); }} />
               : oSua.khoa === 'nguon_vb'
@@ -382,7 +396,7 @@ type BangProps = {
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
-  moO: (x: Dong, khoa: KhoaCot, o: DOMRect) => boolean; oDangMo: string | null;
+  moO: (x: Dong, khoa: KhoaCot, o: DOMRect) => boolean; oDangMo: string | null; hanTuan: number;
 };
 const O_SUA: Partial<Record<KhoaCot, 'nv' | 'dong'>> = { ten: 'nv', san_pham: 'nv', han: 'nv', lanh_dao: 'nv', ma: 'nv', nguon_vb: 'dong', chu_tri: 'dong', tien_do: 'dong' };
 const giaTriSua = (x: Dong, k: KhoaCot): string =>
@@ -406,8 +420,12 @@ function HopSuaO({ x, khoa, o, nhan, dong, luu, noiDungO }: { x: Dong; khoa: Kho
   const rong = khoa === 'tien_do' ? 420 : khoa === 'nguon_vb' ? 400 : Math.max(320, Math.min(460, o.width + 120));
   const hep = window.innerWidth < 640;
   const trai = Math.max(12, Math.min(o.left, window.innerWidth - rong - 12));
-  const duoi = window.innerHeight - o.bottom > 320 || o.top < 320;
-  const viTri: React.CSSProperties = hep ? { left: 8, right: 8, bottom: 8 } : duoi ? { left: trai, top: Math.min(o.bottom + 6, window.innerHeight - 200), width: rong } : { left: trai, bottom: window.innerHeight - o.top + 6, width: rong };
+  // Đặt hộp dưới ô nếu đủ chỗ, không thì trên ô; luôn nằm gọn trong màn hình
+  const caoToiDa = Math.min(560, window.innerHeight * 0.7);
+  const duoi = window.innerHeight - o.bottom - 12 >= caoToiDa || o.top < window.innerHeight - o.bottom;
+  const viTri: React.CSSProperties = hep ? { left: 8, right: 8, bottom: 8 }
+    : duoi ? { left: trai, top: Math.max(12, Math.min(o.bottom + 6, window.innerHeight - caoToiDa - 12)), width: rong }
+    : { left: trai, bottom: Math.max(12, window.innerHeight - o.top + 6), width: rong };
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={dong} />
@@ -450,7 +468,7 @@ function HopSuaO({ x, khoa, o, nhan, dong, luu, noiDungO }: { x: Dong; khoa: Kho
   );
 }
 
-function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, hanTuan, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -549,13 +567,27 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
           title="Mở văn bản đính kèm" className="mt-0.5 block text-left font-sans text-[7.5pt] text-[#1E4F86] hover:underline">📎 {x.vb.so_ky_hieu || x.vb.trich_yeu || 'Văn bản đính kèm'}</button>}
         {!x.d.nguon_vb && !x.vb && suaDuoc && chon === x.n.id && <span className="font-sans text-[7.5pt] italic text-[#8D8486]">Bấm để ghi tên văn bản…</span>}
       </>;
-      case 'han': return <><b>{x.n.dinh_ky ? (x.n.ky_han ? ngayNgan(x.n.ky_han) : 'Định kỳ') : ngayNgan(x.n.han) || '—'}</b>{x.n.dinh_ky && <span className="block text-[0.9em] italic">(định kỳ)</span>}</>;
+      case 'han': return <><b className="whitespace-nowrap text-[0.95em]">{x.n.dinh_ky ? (x.n.ky_han ? ngayNgan(x.n.ky_han) : 'Định kỳ') : ngayNgan(x.n.han) || '—'}</b>{x.n.dinh_ky && <span className="block text-[0.9em] italic">(định kỳ)</span>}</>;
       case 'tien_do': {
         if (x.con.length) return <span className="font-sans text-[8pt] font-semibold">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành · {x.pt}%</span>;
         const sl = soLieuCua(x); const dg = x.d.danh_gia ?? goiYDanhGia(x.n);
         return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.n.trang_thai].nhan} · {x.n.phan_tram}%</span>
         {sl && dg.kieu !== 'tien_do' && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(sl.tu)}/{soVN(sl.mau)}{dg.kieu === 'ty_le' && sl.mau ? ` (${soVN((sl.tu / sl.mau) * 100, 2)}%${dg.chi_tieu ? `; CT ${soVN(dg.chi_tieu, 2)}%` : ''})` : ''}</span>}
         {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>;
+      }
+      case 'ket_qua_tuan': {
+        if (x.con.length) { const can = x.con.filter((c) => c.canBct); return can.length ? <span className="font-sans text-[8pt] font-semibold">{can.filter((c) => c.tuanCn.length).length}/{can.length} nhiệm vụ con đã báo cáo</span> : null; }
+        // Kết quả thực hiện = báo cáo tuần mới nhất (tự điền khi đơn vị gửi báo cáo tuần)
+        const cuoi = x.tuanCn[0] ?? x.cn.find((c) => /^Báo cáo tuần \d+\/\d+:/.test(c.noi_dung)) ?? null;
+        const tuanCuoi = cuoi?.noi_dung.match(/^Báo cáo tuần (\d+\/\d+):/)?.[1];
+        return <>
+          {cuoi && <span className="block whitespace-pre-wrap">{boTienTo(cuoi.noi_dung)}</span>}
+          {cuoi && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#6B6B6B]">Tuần {tuanCuoi} · {cuoi.boi_ten ?? ''} · {ngayGioDu(cuoi.luc)}</span>}
+          {x.canBct && (x.tuanCn.length
+            ? <span className="mt-0.5 block font-sans text-[7.5pt] font-semibold text-[#166534]">✓ Đã báo cáo tuần này</span>
+            : <span className={cx('mt-0.5 block font-sans text-[7.5pt] italic', Date.now() > hanTuan ? 'font-semibold text-[#BE123C]' : 'text-[#8D8486]')}>{Date.now() > hanTuan ? 'Quá hạn chưa báo cáo tuần này' : 'Chưa báo cáo tuần này — bấm để nhập'}</span>)}
+          {!cuoi && !x.canBct && <span className="text-[#8D8486]">—</span>}
+        </>;
       }
       case 'minh_chung': return x.mc.length
         ? <span className="flex flex-col gap-0.5">{x.mc.map((t, i) => <span key={i} className="text-[#1E4F86]">▸ {t}</span>)}</span>
@@ -602,7 +634,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
                             // Bấm ô: mở hộp sửa đúng ô đó (nếu được sửa); ô không sửa được (TT, tình trạng…) mở khung chi tiết
                             onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('button')) return; if (!moO(x, c.khoa, (e.currentTarget as HTMLElement).getBoundingClientRect())) mo(x.n.id); }}
                             className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-middle [overflow-wrap:anywhere]', ['tt', 'han', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative',
-                              (suaDuoc && O_SUA[c.khoa]) || c.khoa === 'tien_do' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
+                              (suaDuoc && O_SUA[c.khoa]) || c.khoa === 'tien_do' || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
                             style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>{o(x, c)}</td>
                         );
                       })}
@@ -870,7 +902,7 @@ function ChonTinhTrang({ x, luu }: { x: Dong; luu: (v: { loai: LoaiTT; nhan: str
 // Cập nhật kết quả ngay trong khung bên — ô nhập đổi theo cách đánh giá của nhiệm vụ:
 //   Tỷ lệ: nhập Đạt / Tổng -> % so với chỉ tiêu; Số lượng: số sản phẩm đã xong / yêu cầu; Tiến độ: chọn %; Định kỳ: xác nhận xong kỳ.
 const TEN_DG: Record<KieuDG, string> = { ty_le: 'Tỷ lệ %', so_luong: 'Số lượng', tien_do: 'Tiến độ', ky: 'Theo kỳ' };
-function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy }: { x: Dong; laChuTri: boolean; quanTri: boolean; luuDong: (p: Partial<DongA4>) => void; xong: () => void; moSan?: boolean; huy?: () => void }) {
+function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy, tienTo }: { x: Dong; laChuTri: boolean; quanTri: boolean; luuDong: (p: Partial<DongA4>) => void; xong: () => void; moSan?: boolean; huy?: () => void; tienTo?: string }) {
   const { n } = x;
   const goiY = goiYDanhGia(n);
   const [dg, setDg] = useState<DanhGia>(x.d.danh_gia ?? goiY);
@@ -906,14 +938,14 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy 
     const dongSo = kq ? (dg.kieu === 'ty_le'
       ? `Kết quả: ${soVN(soTu)}/${soVN(soMau)} (${soVN(kq.tyLe, 2)}%)${dg.chi_tieu ? ` — ${kq.dat ? 'đạt' : 'chưa đạt'} chỉ tiêu ${soVN(dg.chi_tieu, 2)}%` : ''}.`
       : `Kết quả: hoàn thành ${soVN(soTu)}/${soVN(soMau)}.`) : '';
-    const nd = [dongSo, noiDung.trim()].filter(Boolean).join('\n');
+    const nd = [dongSo, noiDung.trim()].filter(Boolean).join(tienTo ? ' ' : '\n');
     if ((dg.kieu === 'ty_le' || dg.kieu === 'so_luong') && !kq) { setLoi('Nhiệm vụ có số liệu: nhập số đạt và tổng số để làm minh chứng — hệ thống tự tính tỷ lệ.'); return; }
     if (!nd) { setLoi('Nhập kết quả đã thực hiện'); return; }
     setDang(true); setLoi(null);
     const tt: TrangThaiNv = xongNv && dg.kieu !== 'ky' ? 'hoan_thanh' : ptMoi > 0 || nd ? 'dang_thuc_hien' : n.trang_thai;
     const ptGhi = xongNv && dg.kieu !== 'ky' ? 100 : ptMoi;
     const { error } = await supabase.from('nhiem_vu_cap_nhat').insert({
-      nhiem_vu_id: n.id, noi_dung: nd,
+      nhiem_vu_id: n.id, noi_dung: tienTo ? `${tienTo} ${nd}` : nd,
       phan_tram: laChuTri && dg.kieu !== 'ky' && ptGhi !== n.phan_tram ? ptGhi : null, trang_thai_moi: laChuTri && tt !== n.trang_thai ? tt : null,
     });
     if (!error && dg.kieu === 'ky' && xongNv) {
@@ -999,6 +1031,7 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
     ['tat_ca', 'Tất cả', ds.length, '#6A0F14'], ['qua_han', 'Quá hạn', dem('qua_han'), '#BE123C'], ['sap_han', 'Sắp đến hạn', dem('sap_han'), '#D97706'],
     ['chua_xong', 'Đang thực hiện', ds.length - xong, '#1E3A8A'], ['xong', 'Hoàn thành', xong, '#16A34A'],
     ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, '#92400E'] as [LocTT, string, number, string]] : []),
+    ['chua_bct', 'Chưa báo cáo tuần', ds.filter((x) => x.canBct && !x.tuanCn.length).length, '#7C3AED'],
   ];
   const r = 15, cv = 2 * Math.PI * r;
   return (
@@ -1224,6 +1257,8 @@ function oChu(c: KhoaCot, x: Dong): string {
       const sl = soLieuCua(x);
       return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     }
+    case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
+      const cuoi = x.tuanCn[0] ?? x.cn.find((c) => /^Báo cáo tuần \d+\/\d+:/.test(c.noi_dung)); return cuoi ? boTienTo(cuoi.noi_dung) : ''; }
     case 'minh_chung': return x.mc.join('\n');
     case 'tinh_trang': return x.tt.nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';

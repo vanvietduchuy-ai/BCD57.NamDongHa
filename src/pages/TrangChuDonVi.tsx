@@ -2,13 +2,14 @@ import { Link } from 'react-router-dom';
 import { ArrowUp, ChevronRight, FileText, Mail, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { kq, useBayGio, useDuLieu } from '../lib/useDuLieu';
-import { useAuth } from '../lib/auth';
+import { laDauMoi, useAuth } from '../lib/auth';
 import { conLai, hai, ngay, ngayGio, tenNgan } from '../lib/dinhDang';
 import { TT_NOP } from './KyBaoCaoChiTiet';
 import { DINH_KY, type DinhKy, type TrangThaiNv } from '../lib/nhiemVu';
 import { Chip, DangTai, HopLoi, Rong, The, TieuDeThe, cx } from '../components/ui';
 import { Chuong } from '../components/KhungTrang';
 import { TheBaoCaoTuan } from './BaoCaoTuan';
+import TongQuan from './TongQuan';
 
 export type Viec = { nop_id: string; don_vi_id: string; trang_thai: string; ky_id: string; ten: string; loai: string; han_nop: string; qua_han: boolean; cap?: string; don_vi_giao?: string | null };
 // Nhãn loại việc kèm đơn vị giao (Thường trực BCĐ / đầu mối)
@@ -111,6 +112,8 @@ export default function TrangChuDonVi() {
           )}
         </div>
       </div>
+      {/* Đơn vị làm đầu mối lĩnh vực: phần theo dõi các đơn vị gộp vào trang chủ */}
+      {laDauMoi(hoSo) && hoSo?.don_vi_id && <TongQuan chuTri={hoSo.don_vi_id} nhung />}
     </>
   );
 }

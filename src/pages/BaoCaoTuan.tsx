@@ -2,7 +2,7 @@
 // Cơ quan Thường trực, Lãnh đạo BCĐ xem tình hình gửi theo tuần, nhắc đơn vị chưa gửi, nhập thay khi cần.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bell, CalendarClock, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, PenLine, Send, Settings2 } from 'lucide-react';
+import { Bell, CalendarClock, Table2, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, PenLine, Send, Settings2 } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useBayGio, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
@@ -73,6 +73,9 @@ export default function BaoCaoTuan() {
       <TieuDeTrang tren={donVi ? hoSo?.don_vi?.ten : 'Đơn vị chủ trì báo cáo kết quả nhiệm vụ hằng tuần'} ten="Báo cáo tuần"
         phai={quanTri && <Nut icon={<Settings2 className="h-4 w-4" />} onClick={() => setMoCaiDat(true)} ngan="Hạn">Hạn nộp: {TEN_THU[data.bct.thu]}, {data.bct.gio}h</Nut>} />
       {thongBao && <div role="status" className="rounded-xl bg-[#DCFCE7] px-4 py-2.5 text-sm text-[#166534]">{thongBao}</div>}
+
+      <Link to="/nhiem-vu?tab=chua_bct" className="flex items-center gap-2 self-start rounded-xl border border-vien bg-white px-3 py-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-nen-2">
+        <Table2 className="h-4 w-4" />Nhập báo cáo tuần ngay trên bảng A4 nhiệm vụ</Link>
 
       {/* Chọn tuần */}
       <div className="flex items-center gap-2 rounded-2xl border border-vien bg-white px-2 py-1.5">
