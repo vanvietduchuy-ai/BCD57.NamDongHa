@@ -9,7 +9,11 @@ export type KhoaCot = 'tt' | 'ten' | 'nguon_vb' | 'chu_tri' | 'san_pham' | 'han'
 export type CotA4 = { khoa: KhoaCot; nhan: string; rong: number; hien: boolean };
 export type NhomA4 = { id: string; ky_hieu: string; ten: string };
 // Thông tin riêng của từng dòng trong bảng (không có trong bảng nhiem_vu)
-export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number };
+// Cách đánh giá kết quả từng nhiệm vụ: tỷ lệ (đạt/tổng so với chỉ tiêu %), số lượng sản phẩm, % tiến độ, theo kỳ
+export type KieuDG = 'ty_le' | 'so_luong' | 'tien_do' | 'ky';
+export type DanhGia = { kieu: KieuDG; chi_tieu?: number; tong?: number };
+export type SoLieuDG = { tu: number; mau: number; luc: string };
+export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number; danh_gia?: DanhGia; so_lieu?: SoLieuDG };
 export type CauHinhA4 = {
   tieu_de: string; dong_goc: string; dong_phu: string; ghi_chu: string; canh_bao_ngay: number;
   kho: { huong: 'ngang' | 'doc'; co_chu: number; le: [number, number, number, number] };   // lề trên, phải, dưới, trái (mm)
@@ -204,3 +208,27 @@ export function trangThaiTuChu(s: string): 'chua_trien_khai' | 'dang_thuc_hien' 
   if (/^chua (trien khai|co thong tin)/.test(t)) return 'chua_trien_khai';
   return 'dang_thuc_hien';
 }
+
+// ---------- Đánh giá kết quả: tự nhận cách đánh giá từ "Chỉ tiêu / sản phẩm"
+// "37.070" (dấu chấm phân nghìn) -> 37070; "92,3" -> 92.3
+export const docSo = (t: string) => { const x = /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t.replace(',', '.'); const v = Number(x); return Number.isFinite(v) ? v : NaN; };
+export function goiYDanhGia(n: Pick<NhiemVu, 'san_pham' | 'dinh_ky'>): DanhGia {
+  if (n.dinh_ky) return { kieu: 'ky' };
+  const sp = n.san_pham ?? '';
+  const pt = sp.match(/(\d+(?:[.,]\d+)?)\s*%/);
+  const tongSo = sp.match(/tổng\s*(?:số)?\s*([\d.]+)/i);
+  if (pt || tongSo) return { kieu: 'ty_le', chi_tieu: pt ? docSo(pt[1]) : undefined, tong: tongSo ? docSo(tongSo[1]) : undefined };
+  const phan = sp.match(/(\d+)\s*\/\s*(\d+)/) ?? null;
+  if (phan) return { kieu: 'so_luong', tong: Number(phan[2]) };
+  const toiThieu = sp.match(/(?:tối thiểu|ít nhất|đạt)\s*(\d+)/i);
+  if (toiThieu) return { kieu: 'so_luong', tong: Number(toiThieu[1]) };
+  return { kieu: 'tien_do' };
+}
+// % hoàn thành nhiệm vụ từ số liệu: tỷ lệ so với chỉ tiêu (đạt chỉ tiêu = 100%)
+export function tinhDanhGia(dg: DanhGia, tu: number, mau: number) {
+  const tyLe = mau > 0 ? (tu / mau) * 100 : 0;
+  const muc = dg.kieu === 'ty_le' && dg.chi_tieu ? dg.chi_tieu : 100;
+  const phanTram = Math.max(0, Math.min(100, Math.round((tyLe / muc) * 100)));
+  return { tyLe, phanTram, dat: tyLe >= muc - 1e-9 };
+}
+export const soVN = (x: number, le = 0) => x.toLocaleString('vi-VN', { maximumFractionDigits: le });
