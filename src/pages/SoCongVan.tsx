@@ -1,6 +1,6 @@
 // Sổ công văn đến / đi — tự vào sổ khi đơn vị gửi báo cáo văn bản, khi Cơ quan Thường trực thêm văn bản vào kho.
 import { useMemo, useState } from 'react';
-import { ExternalLink, FilePen, FileSpreadsheet, Layers, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { BookPlus, ExternalLink, FilePen, FileSpreadsheet, Layers, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { useAuth, laQuanTri } from '../lib/auth';
@@ -44,14 +44,18 @@ export default function SoCongVan() {
   const [nhom, setNhom] = useState(false);
   const [chon, setChon] = useState<Dong | null>(null);
   const [them, setThem] = useState(false);
+  // Hai sổ: sổ của Ban Chỉ đạo (văn bản đến BCĐ, văn bản BCĐ ban hành) và sổ của Cơ quan Thường trực; nhớ lựa chọn theo máy
+  const [cuaSo, setCuaSoS] = useState<'bcd' | 'cqtt'>(() => { try { return localStorage.getItem('bcd57-so-cua') === 'cqtt' ? 'cqtt' : 'bcd'; } catch { return 'bcd'; } });
+  const setCuaSo = (v: 'bcd' | 'cqtt') => { setCuaSoS(v); setLoai(''); try { localStorage.setItem('bcd57-so-cua', v); } catch { /* bỏ qua */ } };
 
   const { data, loi, dangTai, taiLai } = useDuLieu(async () => {
-    if (!duocXem) return { dong: [] as Dong[] };
-    const tt = await supabase.rpc('don_vi_thuong_truc');
-    const chu = (tt.data as string | null) ?? '';
-    const r = await supabase.from('v_so_van_ban').select('*').eq('don_vi_id', chu).eq('nam', nam).order('so_thu_tu', { ascending: false });
-    return { dong: (kq(r) ?? []) as Dong[] };
-  }, [nam]);
+    if (!duocXem) return { dong: [] as Dong[], chuSo: '' };
+    const chuSo = cuaSo === 'bcd'
+      ? ((await supabase.from('don_vi').select('id').eq('loai', 'lanh_dao_bcd').limit(1).maybeSingle()).data?.id as string | undefined) ?? ''
+      : ((await supabase.rpc('don_vi_thuong_truc')).data as string | null) ?? '';
+    const r = await supabase.from('v_so_van_ban').select('*').eq('don_vi_id', chuSo).eq('nam', nam).order('so_thu_tu', { ascending: false });
+    return { dong: (kq(r) ?? []) as Dong[], chuSo };
+  }, [nam, cuaSo]);
 
   // Lọc theo sổ + từ khoá (chưa lọc loại) -> đếm số văn bản từng loại
   const theoSo = useMemo(() => {
@@ -104,11 +108,17 @@ export default function SoCongVan() {
 
   return (
     <>
-      <TieuDeTrang tren="Cơ quan Thường trực BCĐ 57 · Tổ Tổng hợp theo dõi" ten="Sổ công văn"
+      <TieuDeTrang tren={cuaSo === 'bcd' ? 'Ban Chỉ đạo 57 phường · Cơ quan Thường trực quản lý' : 'Cơ quan Thường trực BCĐ 57 · Tổ Tổng hợp theo dõi'} ten="Sổ công văn"
         phai={<>
           <Nut icon={<FileSpreadsheet className="h-4 w-4" />} onClick={xuatExcel}>Xuất Excel</Nut>
           {quanTri && <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setThem(true)}>Vào sổ văn bản</Nut>}
         </>} />
+      <div role="tablist" aria-label="Sổ của" className="flex gap-1 self-start rounded-xl border border-vien bg-white p-1">
+        {([['bcd', 'Sổ của Ban Chỉ đạo'], ['cqtt', 'Sổ của Cơ quan Thường trực']] as const).map(([k, t]) => (
+          <button key={k} role="tab" aria-selected={cuaSo === k} onClick={() => setCuaSo(k)}
+            className={cx('h-9 whitespace-nowrap rounded-lg px-3.5 text-[0.8125rem]', cuaSo === k ? 'bg-ink font-semibold text-white' : 'text-mo-2 hover:bg-nen-2')}>{t}</button>
+        ))}
+      </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="flex gap-2">
           <div role="tablist" className="grid flex-1 grid-cols-2 rounded-xl bg-[#E7E3D9] p-1 sm:flex-none">
@@ -154,8 +164,9 @@ export default function SoCongVan() {
         ))
         : <BangSo ds={ds} so={so} chon={setChon} anLoai={!!loai} />}
 
-      <ChiTietSo d={chon} dong={() => setChon(null)} xong={() => { setChon(null); void taiLai(); }} />
-      {quanTri && <FormVanBan mo={them} dong={() => setThem(false)} dau={{ thu_muc: so === 'den' ? 'cap_tren_cong_an_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
+      <ChiTietSo d={chon} cuaSo={cuaSo} dong={() => setChon(null)} xong={() => { setChon(null); void taiLai(); }} />
+      {quanTri && cuaSo === 'bcd' && them && <HopVaoSoBcd so={so} chuSo={data?.chuSo ?? ''} dong={() => setThem(false)} xong={() => { setThem(false); void taiLai(); }} />}
+      {quanTri && cuaSo === 'cqtt' && <FormVanBan mo={them} dong={() => setThem(false)} dau={{ thu_muc: so === 'den' ? 'cap_tren_cong_an_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
         xong={() => { setThem(false); void taiLai(); }} />}
     </>
   );
@@ -214,7 +225,7 @@ function BangSo({ ds, so, chon, anLoai }: { ds: Dong[]; so: 'den' | 'di'; chon: 
   );
 }
 
-function ChiTietSo({ d, dong, xong }: { d: Dong | null; dong: () => void; xong: () => void }) {
+function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'cqtt'; dong: () => void; xong: () => void }) {
   const { hoSo } = useAuth();
   const quanTri = laQuanTri(hoSo);
   const [sua, setSua] = useState(false);
@@ -254,6 +265,15 @@ function ChiTietSo({ d, dong, xong }: { d: Dong | null; dong: () => void; xong: 
     setDang(false);
     if (error) setLoi(loiDe(error)); else xong();
   };
+  // Chép dòng sổ Thường trực sang sổ của Ban Chỉ đạo (số đến / đi do hệ thống tự cấp tiếp theo)
+  const vaoSoBcd = async () => {
+    setDang(true); setLoi(null);
+    const bcd = (await supabase.from('don_vi').select('id').eq('loai', 'lanh_dao_bcd').limit(1).maybeSingle()).data?.id as string | undefined;
+    if (!bcd) { setDang(false); setLoi('Chưa có đơn vị "Lãnh đạo Ban Chỉ đạo" để làm sổ của Ban Chỉ đạo.'); return; }
+    const { error } = await supabase.from('so_van_ban').insert({ don_vi_id: bcd, loai_so: d.loai_so, nam: d.nam, ngay: d.ngay, van_ban_id: d.van_ban_id, noi_gui: d.noi_gui, noi_nhan: d.noi_nhan, ghi_chu: d.ghi_chu });
+    setDang(false);
+    if (error) setLoi(/duplicate|unique/i.test(error.message) ? 'Văn bản đã có trong sổ của Ban Chỉ đạo.' : loiDe(error)); else xong();
+  };
   const moSuaVb = async () => {
     setLoi(null);
     const { data, error } = await supabase.from('van_ban').select(COT_VB).eq('id', d.van_ban_id).maybeSingle();
@@ -288,6 +308,7 @@ function ChiTietSo({ d, dong, xong }: { d: Dong | null; dong: () => void; xong: 
             {quanTri && !sua && <>
               <Nut icon={<Pencil className="h-4 w-4" />} onClick={() => setSua(true)}>Sửa sổ</Nut>
               <Nut icon={<FilePen className="h-4 w-4" />} onClick={() => void moSuaVb()}>Sửa văn bản</Nut>
+              {cuaSo === 'cqtt' && <Nut icon={<BookPlus className="h-4 w-4" />} dangChay={dang} onClick={() => void vaoSoBcd()}>Vào sổ Ban Chỉ đạo</Nut>}
               <Nut kieu="nguy" icon={<Trash2 className="h-4 w-4" />} dangChay={dang} onClick={() => void xoaKhoiSo()}>Xoá khỏi sổ</Nut>
             </>}
             <span className="hidden flex-1 sm:block" />
@@ -297,6 +318,79 @@ function ChiTietSo({ d, dong, xong }: { d: Dong | null; dong: () => void; xong: 
         </div>
       </HopThoai>
       {vbSua && <FormVanBan mo vb={vbSua} dong={() => setVbSua(null)} xong={() => { setVbSua(null); xong(); }} daXoa={() => { setVbSua(null); xong(); }} />}
+    </>
+  );
+}
+
+// Vào sổ của Ban Chỉ đạo: chọn văn bản trong kho (hoặc tải văn bản mới), số đến / đi hệ thống tự cấp nếu để trống
+type VbChon = { id: string; so_ky_hieu: string | null; trich_yeu: string; co_quan_ban_hanh: string; ngay_ban_hanh: string | null };
+function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: string; dong: () => void; xong: () => void }) {
+  const den = so === 'den';
+  const homNay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
+  const [tim, setTim] = useState('');
+  const [vb, setVb] = useState<VbChon | null>(null);
+  const [g, setG] = useState({ so: '', ngay: homNay, noi: '', ghi_chu: '' });
+  const [taiMoi, setTaiMoi] = useState(false);
+  const [dang, setDang] = useState(false);
+  const [loi, setLoi] = useState<string | null>(null);
+  const ds = useDuLieu(async () => (kq(await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(500)) ?? []) as VbChon[], []);
+  const loc = useMemo(() => { const t = khongDau(tim.trim()); return (ds.data ?? []).filter((v) => !t || khongDau(`${v.so_ky_hieu ?? ''} ${v.trich_yeu} ${v.co_quan_ban_hanh}`).includes(t)).slice(0, 40); }, [ds.data, tim]);
+  const chonVb = (v: VbChon) => { setVb(v); if (den && !g.noi) setG((x) => ({ ...x, noi: v.co_quan_ban_hanh })); };
+  const luu = async () => {
+    if (!vb) { setLoi('Chọn văn bản cần vào sổ'); return; }
+    if (!chuSo) { setLoi('Chưa có đơn vị "Lãnh đạo Ban Chỉ đạo" để làm sổ của Ban Chỉ đạo.'); return; }
+    const soTT = g.so ? Number(g.so) : null;
+    if (g.so && (!Number.isInteger(soTT) || soTT! < 1)) { setLoi(`${den ? 'Số đến' : 'Số đi'} phải là số nguyên dương`); return; }
+    setDang(true); setLoi(null);
+    const { error } = await supabase.from('so_van_ban').insert({
+      don_vi_id: chuSo, loai_so: so, nam: Number(g.ngay.slice(0, 4)), ngay: g.ngay, van_ban_id: vb.id,
+      [den ? 'noi_gui' : 'noi_nhan']: g.noi.trim() || null, ghi_chu: g.ghi_chu.trim() || null, ...(soTT ? { so_thu_tu: soTT } : {}),
+    });
+    setDang(false);
+    if (error) setLoi(/duplicate|unique/i.test(error.message) ? 'Số này hoặc văn bản này đã có trong sổ — kiểm tra lại.' : loiDe(error)); else xong();
+  };
+  return (
+    <>
+      <HopThoai mo dong={dong} tieuDe={`Vào ${den ? 'sổ đến' : 'sổ đi'} của Ban Chỉ đạo`} rong="max-w-2xl">
+        <div className="flex flex-col gap-3.5">
+          {vb ? (
+            <div className="flex items-start gap-3 rounded-xl border border-vien bg-nen-2 p-3">
+              <div className="flex min-w-0 flex-1 flex-col"><b className="so text-[0.875rem]">{vb.so_ky_hieu ?? '—'}</b><span className="text-[0.875rem] leading-snug">{vb.trich_yeu}</span><span className="text-xs text-mo">{vb.co_quan_ban_hanh}</span></div>
+              <Nut onClick={() => setVb(null)}>Đổi</Nut>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <label className="relative flex-1"><Search className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-mo" />
+                  <input autoFocus className={cx(lopO, 'w-full pl-10')} placeholder="Tìm văn bản trong kho: số, ký hiệu, trích yếu" value={tim} onChange={(e) => setTim(e.target.value)} /></label>
+                <Nut icon={<Plus className="h-4 w-4" />} onClick={() => setTaiMoi(true)} ngan="Tải lên">Tải văn bản mới</Nut>
+              </div>
+              <ul className="m-0 flex max-h-72 list-none flex-col overflow-y-auto rounded-xl border border-vien p-0">
+                {ds.dangTai && <li className="p-3 text-sm text-mo">Đang tải…</li>}
+                {!ds.dangTai && loc.length === 0 && <li className="p-3 text-sm text-mo">Không thấy văn bản. Bấm “Tải văn bản mới”.</li>}
+                {loc.map((v) => (
+                  <li key={v.id} className="border-b border-[#F1EEE7] last:border-0"><button onClick={() => chonVb(v)} className="flex w-full flex-col px-3 py-2 text-left hover:bg-nen-2">
+                    <span className="text-[0.8125rem]"><b className="so">{v.so_ky_hieu ?? '—'}</b> · {v.trich_yeu}</span><span className="text-xs text-mo">{v.co_quan_ban_hanh}</span></button></li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <O nhan={den ? 'Số đến' : 'Số đi'} goiY="Để trống: hệ thống tự cấp số tiếp theo"><input inputMode="numeric" className={lopO} value={g.so} onChange={(e) => setG({ ...g, so: e.target.value.replace(/\D/g, '') })} /></O>
+            <O nhan={den ? 'Ngày đến' : 'Ngày gửi'}><input type="date" className={lopO} value={g.ngay} onChange={(e) => setG({ ...g, ngay: e.target.value })} /></O>
+          </div>
+          <O nhan={den ? 'Nơi gửi' : 'Nơi nhận'}><input className={lopO} value={g.noi} onChange={(e) => setG({ ...g, noi: e.target.value })} /></O>
+          <O nhan="Ghi chú (xử lý, chuyển…)"><input className={lopO} value={g.ghi_chu} onChange={(e) => setG({ ...g, ghi_chu: e.target.value })} /></O>
+          {loi && <HopLoi loi={loi} />}
+          <div className="flex justify-end gap-2"><Nut onClick={dong}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void luu()}>Vào sổ</Nut></div>
+        </div>
+      </HopThoai>
+      {taiMoi && <FormVanBan mo dong={() => setTaiMoi(false)} dau={{ thu_muc: den ? 'cap_tren_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
+        xong={async (id) => {
+          setTaiMoi(false);
+          const r = await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh').eq('id', id).maybeSingle();
+          if (r.data) chonVb(r.data as VbChon); void ds.taiLai();
+        }} />}
     </>
   );
 }

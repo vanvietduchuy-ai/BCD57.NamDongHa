@@ -7,9 +7,9 @@ import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
-import { COT_NV, khongDau, NHOM_NV, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
+import { COT_NV, khongDau, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
-  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, trangThaiTuChu,
+  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, docSo, goiYDanhGia, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
@@ -22,7 +22,7 @@ const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
 type DonVi = { id: string; ten: string; loai: string | null };
 type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
 type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null };
-type Dong = { n: NhiemVu; tt: TinhTrang; stt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4; vb: VbCanCu | null };
+type Dong = { n: NhiemVu; tt: TinhTrang; stt: number; so: string; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4; vb: VbCanCu | null };
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
@@ -99,11 +99,18 @@ export default function DanhMucNhiemVu() {
       const cn = data.cn.get(n.id) ?? [];
       const xongLuc = cn.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null;
       const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
-      return { n, tt: tinhTrang(n, ch.canh_bao_ngay, xongLuc), stt: 0, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
+      return { n, tt: tinhTrang(n, ch.canh_bao_ngay, xongLuc), stt: 0, so: '', nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     ds.sort((a, b) => ((thuTuNhom.get(a.nhom) ?? 99) - (thuTuNhom.get(b.nhom) ?? 99))
-      || ((a.d.thu_tu ?? 1e6) - (b.d.thu_tu ?? 1e6)) || (a.n.han ?? '9').localeCompare(b.n.han ?? '9') || (a.n.ma ?? '').localeCompare(b.n.ma ?? ''));
-    ds.forEach((x, i) => { x.stt = i + 1; });
+      || ((a.d.thu_tu ?? 1e6) - (b.d.thu_tu ?? 1e6)) || a.n.tao_luc.localeCompare(b.n.tao_luc) || (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }));
+    ds.forEach((x, i) => { x.stt = i + 1; x.so = String(i + 1); });
+    // Giữ số thứ tự theo văn bản gốc khi mã có dạng "QIV-15.1" và các số tăng dần trong nhóm (vd: 1…14, 15.1…15.10, 16, 17)
+    const theoNhom = new Map<string, Dong[]>(); ds.forEach((x) => { if (!theoNhom.has(x.nhom)) theoNhom.set(x.nhom, []); theoNhom.get(x.nhom)!.push(x); });
+    for (const arr of theoNhom.values()) {
+      const so = arr.map((x) => x.n.ma?.match(/-(\d+(?:\.\d+)*)$/)?.[1] ?? null);
+      const tang = so.every((v, i) => v && (i === 0 || so[i - 1]!.localeCompare(v, 'vi', { numeric: true }) < 0));
+      if (tang) arr.forEach((x, i) => { x.so = so[i]!.split('.').map(Number).join('.'); });
+    }
     return ds;
   }, [data, ch]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -151,32 +158,29 @@ export default function DanhMucNhiemVu() {
       {thongBao && <div className={cx('flex items-start gap-2 rounded-xl px-4 py-2.5 text-sm', thongBao.loi ? 'bg-nguy-nhat text-nguy' : 'bg-[#DCFCE7] text-[#166534]')}>
         <span className="flex-1">{thongBao.loi ?? thongBao.ok}</span><button aria-label="Đóng" onClick={() => setThongBao(null)}><X className="h-4 w-4" /></button></div>}
 
-      {/* Thanh tình trạng: đếm + lọc nhanh */}
-      <ThanhTinhTrang ds={phamVi} loc={locTT} datLoc={setLocTT} choDuyet={donVi ? null : phamVi.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
-        moTk={moTk} datMoTk={setMoTk} />
+      {/* Thanh lọc gọn: tình trạng (đếm) + tìm, đơn vị, xem như, thu phóng */}
+      <ThanhLoc ds={phamVi} loc={locTT} datLoc={setLocTT} choDuyet={donVi ? null : phamVi.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
+        moTk={moTk} datMoTk={setMoTk} soHien={hien.length}
+        congCu={<>
+          <label className="relative min-w-[200px] flex-1 sm:max-w-[340px]">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-mo" />
+            <input className="h-9 w-full rounded-lg border border-vien bg-nen-2 pl-8 pr-2 text-[0.8125rem] outline-none focus:border-xanh focus:bg-white" placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
+          </label>
+          {!donVi && !xemNhu && (
+            <select className="h-9 max-w-[220px] rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem]" value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
+              <option value="">Mọi đơn vị chủ trì</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}
+            </select>
+          )}
+          {quanTri && (
+            <select className="h-9 max-w-[220px] rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem]" value={xemNhu} onChange={(e) => { setXemNhu(e.target.value); setLocDv(''); }} aria-label="Xem như đơn vị">
+              <option value="">Xem: toàn bộ</option>{data.dv.map((d) => <option key={d.id} value={d.id}>Xem như: {tenNgan(d.ten)}</option>)}
+            </select>
+          )}
+          {(tim || locDv || locTT !== 'tat_ca') && <button className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
+          <span className="flex-1" />
+          <Zoom z={rieng.zoom ?? 'vua'} dat={(z) => setRieng({ ...rieng, zoom: z })} />
+        </>} />
       {moTk && <ThongKe ds={phamVi} tatCa={tatCa} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
-
-      {/* Công cụ */}
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-[220px] flex-1 sm:max-w-[420px]">
-          <Search className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-mo" />
-          <input className={cx(lopO, 'w-full bg-white pl-10')} placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
-        </label>
-        {!donVi && !xemNhu && (
-          <select className={cx(lopO, 'bg-white')} value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
-            <option value="">Mọi đơn vị chủ trì</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}
-          </select>
-        )}
-        {quanTri && (
-          <select className={cx(lopO, 'bg-white')} value={xemNhu} onChange={(e) => { setXemNhu(e.target.value); setLocDv(''); }} aria-label="Xem như đơn vị">
-            <option value="">Xem: toàn bộ (Thường trực)</option>{data.dv.map((d) => <option key={d.id} value={d.id}>Xem như: {tenNgan(d.ten)}</option>)}
-          </select>
-        )}
-        {(tim || locDv || locTT !== 'tat_ca') && <Nut kieu="nhe" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</Nut>}
-        <span className="flex-1" />
-        <span className="text-[0.8125rem] text-mo">{hien.length}/{phamVi.length} nhiệm vụ</span>
-        <Zoom z={rieng.zoom ?? 'vua'} dat={(z) => setRieng({ ...rieng, zoom: z })} />
-      </div>
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
       <div className="flex items-start gap-4">
@@ -203,7 +207,7 @@ export default function DanhMucNhiemVu() {
             laChuTri={quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id}
             daGui={() => { setThongBao({ ok: 'Đã cập nhật kết quả thực hiện.' }); void taiLai(); }}
             sua={() => setSua(dongChon.n)}
-            dsVb={data.vb} ganVb={(id) => void capNhatNv(dongChon.n.id, { can_cu_van_ban_id: id })} luuTenNguon={(t) => suaDong(dongChon.n.id, { nguon_vb: t })}
+            dsVb={data.vb} ganVb={(id) => void capNhatNv(dongChon.n.id, { can_cu_van_ban_id: id })} luuTenNguon={(t) => suaDong(dongChon.n.id, { nguon_vb: t })} luuDong={(pp) => suaDong(dongChon.n.id, pp)}
             duyet={() => void capNhatNv(dongChon.n.id, { trang_thai_giao: 'da_duyet' })}
             xoa={async () => {
               if (!window.confirm(`Xoá nhiệm vụ "${dongChon.n.ten}" cùng toàn bộ lịch sử cập nhật?`)) return;
@@ -290,11 +294,11 @@ function Zoom({ z, dat }: { z: number | 'vua'; dat: (z: number | 'vua') => void 
   useEffect(() => { const f = (e: Event) => setHien(Math.round((e as CustomEvent<number>).detail * 100)); window.addEventListener('a4-ti-le', f); return () => window.removeEventListener('a4-ti-le', f); }, []);
   const so = typeof z === 'number' ? z : hien / 100;
   return (
-    <div className="flex items-center gap-1 rounded-xl border border-vien-2 bg-white px-1">
-      <button className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen" aria-label="Thu nhỏ" onClick={() => dat(Math.max(0.3, Math.round((so - 0.1) * 10) / 10))}><Minus className="h-4 w-4" /></button>
+    <div className="flex h-9 items-center gap-0.5 rounded-lg border border-vien bg-nen-2 px-0.5">
+      <button className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-white" aria-label="Thu nhỏ" onClick={() => dat(Math.max(0.3, Math.round((so - 0.1) * 10) / 10))}><Minus className="h-4 w-4" /></button>
       <span className="mono w-11 text-center text-xs">{typeof z === 'number' ? Math.round(z * 100) : hien}%</span>
-      <button className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen" aria-label="Phóng to" onClick={() => dat(Math.min(2, Math.round((so + 0.1) * 10) / 10))}><Plus className="h-4 w-4" /></button>
-      <button className={cx('h-9 rounded-lg px-2 text-xs font-semibold hover:bg-nen', z === 'vua' && 'text-do')} onClick={() => dat('vua')}>Vừa khung</button>
+      <button className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-white" aria-label="Phóng to" onClick={() => dat(Math.min(2, Math.round((so + 0.1) * 10) / 10))}><Plus className="h-4 w-4" /></button>
+      <button className={cx('h-8 rounded-md px-2 text-xs font-semibold hover:bg-white', z === 'vua' && 'text-do')} onClick={() => dat('vua')}>Vừa khung</button>
     </div>
   );
 }
@@ -415,8 +419,8 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
       : <OSuaChu dau={giaTriSua(x, c.khoa)} luu={(v) => void luuO(x, c.khoa, v)} huy={() => setDangSua(null)} />;
     switch (c.khoa) {
       case 'tt': return <>{suaDuoc
-        ? <span onPointerDown={(e) => batDauKeo(e, x)} title="Kéo để đưa nhiệm vụ lên, xuống" className="inline-flex cursor-grab touch-none select-none items-center gap-0.5 active:cursor-grabbing"><GripVertical className="-ml-1 h-[1em] w-[1em] text-[#B9A9AC]" />{x.stt}</span>
-        : x.stt}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
+        ? <span onPointerDown={(e) => batDauKeo(e, x)} title="Kéo để đưa nhiệm vụ lên, xuống" className="inline-flex cursor-grab touch-none select-none items-center gap-0.5 active:cursor-grabbing"><GripVertical className="-ml-1 h-[1em] w-[1em] text-[#B9A9AC]" />{x.so}</span>
+        : x.so}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
         className="absolute -bottom-1 left-0 z-10 h-2 w-[4000px] cursor-row-resize hover:bg-do/20" /></>;
       case 'ten': return <span className="whitespace-pre-wrap">{x.n.ten}{x.n.trang_thai_giao === 'de_xuat' && <span className="ml-1 rounded bg-[#FEF3C7] px-1 font-sans text-[7.5pt] font-semibold text-[#92400E]">Chờ duyệt giao</span>}</span>;
       case 'chu_tri': return <><span className="whitespace-pre-wrap">{x.d.chu_tri_vb || chuTriMacDinh(x)}</span>
@@ -430,6 +434,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
       </>;
       case 'han': return <><b>{x.n.dinh_ky ? (x.n.ky_han ? ngayNgan(x.n.ky_han) : 'Định kỳ') : ngayNgan(x.n.han) || '—'}</b>{x.n.dinh_ky && <span className="block text-[0.9em] italic">(định kỳ)</span>}</>;
       case 'tien_do': return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.n.trang_thai].nhan} · {x.n.phan_tram}%</span>
+        {x.d.so_lieu && x.d.danh_gia?.kieu !== 'tien_do' && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(x.d.so_lieu.tu)}/{soVN(x.d.so_lieu.mau)}{x.d.danh_gia?.kieu === 'ty_le' ? ` (${soVN((x.d.so_lieu.tu / x.d.so_lieu.mau) * 100, 2)}%${x.d.danh_gia.chi_tieu ? `; CT ${soVN(x.d.danh_gia.chi_tieu, 2)}%` : ''})` : ''}</span>}
         {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>;
       case 'minh_chung': return x.mc.length
         ? <span className="flex flex-col gap-0.5">{x.mc.map((t, i) => <span key={i} className="text-[#1E4F86]">▸ {t}</span>)}</span>
@@ -511,9 +516,9 @@ function OSuaChu({ dau, luu, huy }: { dau: string; luu: (v: string) => void; huy
 }
 
 // ---------- Dạng thẻ (điện thoại)
-function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon }: {
+function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong }: {
   x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
-  dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void;
+  dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void; luuDong: (p: Partial<DongA4>) => void;
   duocBaoCao: boolean; laChuTri: boolean; daGui: () => void; sua: () => void;
   duyet: () => void; xoa: () => void; moTrang: () => void;
 }) {
@@ -558,7 +563,7 @@ function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri,
         className="truot-len fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-3xl border border-vien bg-white shadow-xl lg:sticky lg:inset-auto lg:top-4 lg:z-auto lg:max-h-[calc(100vh-32px)] lg:w-[360px] lg:shrink-0 lg:animate-none lg:rounded-2xl lg:shadow-[0_8px_28px_-12px_rgba(60,10,12,.25)] xl:w-[390px]">
         {/* Đầu khung */}
         <div className="flex items-center gap-1 border-b border-vien px-3 py-2">
-          <span className="mono rounded-md bg-nen px-1.5 py-0.5 text-xs font-bold text-mo-2">#{x.stt}</span>
+          <span className="mono rounded-md bg-nen px-1.5 py-0.5 text-xs font-bold text-mo-2">#{x.so}</span>
           {n.ma && <span className="mono truncate text-xs text-mo">{n.ma}</span>}
           <span className="flex-1" />
           <button disabled={!truoc} onClick={() => truoc && chon(truoc.n.id)} title="Nhiệm vụ trước (↑)" aria-label="Nhiệm vụ trước" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
@@ -587,7 +592,7 @@ function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri,
             </ul>
           )}
 
-          {duocBaoCao && <CapNhatNhanh n={n} laChuTri={laChuTri} xong={daGui} />}
+          {duocBaoCao && <CapNhatNhanh x={x} laChuTri={laChuTri} quanTri={quanTri} luuDong={luuDong} xong={daGui} />}
 
           <NguonVanBan x={x} quanTri={quanTri} dsVb={dsVb} gan={ganVb} luuTen={luuTenNguon} />
 
@@ -675,70 +680,167 @@ function NguonVanBan({ x, quanTri, dsVb, gan, luuTen }: { x: Dong; quanTri: bool
   );
 }
 
-// Cập nhật nhanh kết quả ngay trong khung bên: nội dung + mức hoàn thành
-function CapNhatNhanh({ n, laChuTri, xong }: { n: NhiemVu; laChuTri: boolean; xong: () => void }) {
+// Cập nhật kết quả ngay trong khung bên — ô nhập đổi theo cách đánh giá của nhiệm vụ:
+//   Tỷ lệ: nhập Đạt / Tổng -> % so với chỉ tiêu; Số lượng: số sản phẩm đã xong / yêu cầu; Tiến độ: chọn %; Định kỳ: xác nhận xong kỳ.
+const TEN_DG: Record<KieuDG, string> = { ty_le: 'Tỷ lệ %', so_luong: 'Số lượng', tien_do: 'Tiến độ', ky: 'Theo kỳ' };
+function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong }: { x: Dong; laChuTri: boolean; quanTri: boolean; luuDong: (p: Partial<DongA4>) => void; xong: () => void }) {
+  const { n } = x;
+  const goiY = goiYDanhGia(n);
+  const [dg, setDg] = useState<DanhGia>(x.d.danh_gia ?? goiY);
   const [mo, setMo] = useState(false);
   const [noiDung, setNoiDung] = useState('');
+  const [tu, setTu] = useState(x.d.so_lieu ? String(x.d.so_lieu.tu) : '');
+  const [mau, setMau] = useState(x.d.so_lieu ? String(x.d.so_lieu.mau) : dg.tong ? String(dg.tong) : '');
   const [p, setP] = useState(n.phan_tram);
+  const [xongNv, setXongNv] = useState(false);
   const [dang, setDang] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
-  if (!mo) return <button onClick={() => setMo(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-vien-2 px-3 text-left text-[0.8125rem] text-mo hover:border-[#8E1B22] hover:text-[#8E1B22]"><Plus className="h-4 w-4" />Cập nhật kết quả, tiến độ…</button>;
-  const gui = async () => {
-    if (!noiDung.trim()) { setLoi('Nhập kết quả đã thực hiện'); return; }
-    setDang(true); setLoi(null);
-    const tt: TrangThaiNv = p >= 100 ? 'hoan_thanh' : p > 0 ? 'dang_thuc_hien' : n.trang_thai;
-    const { error } = await supabase.from('nhiem_vu_cap_nhat').insert({
-      nhiem_vu_id: n.id, noi_dung: noiDung.trim(),
-      phan_tram: laChuTri && p !== n.phan_tram ? p : null, trang_thai_moi: laChuTri && tt !== n.trang_thai ? tt : null,
-    });
-    setDang(false);
-    if (error) setLoi(loiDe(error)); else { setMo(false); setNoiDung(''); xong(); }
+  const doiKieu = (k: KieuDG) => {
+    const moi: DanhGia = k === goiY.kieu ? goiY : { kieu: k };
+    setDg(moi); if (!mau && moi.tong) setMau(String(moi.tong));
+    if (quanTri) luuDong({ danh_gia: moi });
   };
+  const soTu = docSo(tu.trim()), soMau = docSo(mau.trim());
+  const coSo = (dg.kieu === 'ty_le' || dg.kieu === 'so_luong') && Number.isFinite(soTu) && Number.isFinite(soMau) && soMau > 0;
+  const kq = coSo ? tinhDanhGia(dg, soTu, soMau) : null;
+  const ptMoi = kq ? kq.phanTram : p;
+  // Gợi ý ghi nhận hoàn thành khi đạt chỉ tiêu / đủ số lượng / 100%
+  const datMuc = kq ? kq.dat : ptMoi >= 100;
+
+  if (!mo) return (
+    <button onClick={() => { setMo(true); setXongNv(false); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-vien-2 px-3 text-left text-[0.8125rem] text-mo hover:border-[#8E1B22] hover:text-[#8E1B22]">
+      <Plus className="h-4 w-4" /><span className="flex-1">{dg.kieu === 'ky' ? 'Báo cáo kết quả kỳ này…' : dg.kieu === 'tien_do' ? 'Cập nhật kết quả, tiến độ…' : 'Cập nhật số liệu kết quả…'}</span>
+      {x.d.so_lieu && dg.kieu !== 'tien_do' && <span className="mono text-xs">{soVN(x.d.so_lieu.tu)}/{soVN(x.d.so_lieu.mau)}</span>}
+    </button>
+  );
+
+  const gui = async () => {
+    const dongSo = kq ? (dg.kieu === 'ty_le'
+      ? `Kết quả: ${soVN(soTu)}/${soVN(soMau)} (${soVN(kq.tyLe, 2)}%)${dg.chi_tieu ? ` — ${kq.dat ? 'đạt' : 'chưa đạt'} chỉ tiêu ${soVN(dg.chi_tieu, 2)}%` : ''}.`
+      : `Kết quả: hoàn thành ${soVN(soTu)}/${soVN(soMau)}.`) : '';
+    const nd = [dongSo, noiDung.trim()].filter(Boolean).join('\n');
+    if (!nd) { setLoi(dg.kieu === 'ty_le' || dg.kieu === 'so_luong' ? 'Nhập số liệu hoặc nội dung kết quả' : 'Nhập kết quả đã thực hiện'); return; }
+    setDang(true); setLoi(null);
+    const tt: TrangThaiNv = xongNv && dg.kieu !== 'ky' ? 'hoan_thanh' : ptMoi > 0 || nd ? 'dang_thuc_hien' : n.trang_thai;
+    const ptGhi = xongNv && dg.kieu !== 'ky' ? 100 : ptMoi;
+    const { error } = await supabase.from('nhiem_vu_cap_nhat').insert({
+      nhiem_vu_id: n.id, noi_dung: nd,
+      phan_tram: laChuTri && dg.kieu !== 'ky' && ptGhi !== n.phan_tram ? ptGhi : null, trang_thai_moi: laChuTri && tt !== n.trang_thai ? tt : null,
+    });
+    if (!error && dg.kieu === 'ky' && xongNv) {
+      const r = await supabase.rpc('nhiem_vu_xac_nhan_ky', { p_nv: n.id, p_xong: true, p_ghi_chu: noiDung.trim() || null, p_ma_ky: null });
+      if (r.error) { setDang(false); setLoi(loiDe(r.error)); return; }
+    }
+    setDang(false);
+    if (error) { setLoi(loiDe(error)); return; }
+    if (kq && quanTri) luuDong({ so_lieu: { tu: soTu, mau: soMau, luc: new Date().toISOString() }, ...(x.d.danh_gia ? {} : { danh_gia: dg }) });
+    setMo(false); setNoiDung(''); xong();
+  };
+  const oSo = (nhan: string, v: string, dat: (v: string) => void, goi?: string) => (
+    <label className="flex min-w-0 flex-1 flex-col gap-1"><span className="text-[11px] font-semibold text-mo-2">{nhan}</span>
+      <input inputMode="decimal" className={cx(lopO, 'mono min-h-10 bg-white text-[0.9375rem]')} placeholder={goi} value={v} onChange={(e) => dat(e.target.value.replace(/[^\d.,]/g, ''))} /></label>
+  );
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-vien bg-nen-2 p-3">
-      <textarea autoFocus className={cx(lopO, 'min-h-20 bg-white py-2 text-[0.875rem]')} placeholder="Kết quả đã thực hiện, vướng mắc (nếu có)" value={noiDung} onChange={(e) => setNoiDung(e.target.value)}
-        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void gui(); if (e.key === 'Escape') setMo(false); }} />
-      {laChuTri && (
-        <div className="flex items-center gap-1.5">
-          <span className="mr-1 text-xs text-mo">Hoàn thành</span>
+    <div className="flex flex-col gap-2.5 rounded-xl border border-vien bg-nen-2 p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold text-mo-2">Đánh giá theo</span>
+        <div role="group" className="flex flex-1 gap-0.5 rounded-lg bg-white p-0.5">
+          {(['ty_le', 'so_luong', 'tien_do', 'ky'] as KieuDG[]).filter((k) => k !== 'ky' || n.dinh_ky).map((k) => (
+            <button key={k} onClick={() => doiKieu(k)} aria-pressed={dg.kieu === k}
+              className={cx('h-7 flex-1 whitespace-nowrap rounded-md px-1.5 text-[11.5px]', dg.kieu === k ? 'bg-ink font-semibold text-white' : 'text-mo-2 hover:bg-nen')}>{TEN_DG[k]}</button>
+          ))}
+        </div>
+      </div>
+
+      {dg.kieu === 'ty_le' && <>
+        <div className="flex items-end gap-2">
+          {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo('Tổng số', mau, setMau, 'vd: 37.070')}
+          <label className="flex w-[74px] shrink-0 flex-col gap-1"><span className="text-[11px] font-semibold text-mo-2">Chỉ tiêu</span>
+            <input inputMode="decimal" className={cx(lopO, 'mono min-h-10 bg-white text-[0.9375rem]')} placeholder="%" value={dg.chi_tieu ?? ''}
+              onChange={(e) => { const v = docSo(e.target.value); setDg({ ...dg, chi_tieu: Number.isFinite(v) && e.target.value ? v : undefined }); }}
+              onBlur={() => quanTri && luuDong({ danh_gia: dg })} /></label>
+        </div>
+        {kq && <div className={cx('flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[0.8125rem]', kq.dat ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-white text-den')}>
+          <b className="mono">{soVN(kq.tyLe, 2)}%</b>
+          <span>{dg.chi_tieu ? (kq.dat ? `đạt chỉ tiêu ${soVN(dg.chi_tieu, 2)}%` : `còn thiếu ${soVN(dg.chi_tieu - kq.tyLe, 2)} điểm % so với chỉ tiêu ${soVN(dg.chi_tieu, 2)}%`) : 'tỷ lệ đạt'}</span>
+          <span className="flex-1" /><span className="mono text-xs text-mo">→ {kq.phanTram}%</span>
+        </div>}
+      </>}
+
+      {dg.kieu === 'so_luong' && <>
+        <div className="flex items-end gap-2">{oSo('Đã hoàn thành', tu, setTu, '0')}<span className="pb-2.5 text-mo">/</span>{oSo('Yêu cầu', mau, setMau, 'số lượng')}</div>
+        {kq && <div className="flex items-center gap-2 text-[0.8125rem]">
+          <div className="h-1.5 flex-1 rounded-full bg-white"><div className="h-1.5 rounded-full bg-[#16A34A]" style={{ width: `${kq.phanTram}%` }} /></div>
+          <span className="mono text-xs font-bold">{kq.phanTram}%</span></div>}
+      </>}
+
+      {dg.kieu === 'tien_do' && laChuTri && (
+        <div className="flex items-center gap-1">
           {[0, 25, 50, 75, 100].map((v) => (
-            <button key={v} onClick={() => setP(v)} className={cx('mono h-8 flex-1 rounded-lg border text-xs font-semibold', p === v ? 'border-ink bg-ink text-white' : 'border-vien-2 bg-white text-mo-2 hover:bg-nen')}>{v}%</button>
+            <button key={v} onClick={() => { setP(v); setXongNv(v === 100); }} className={cx('mono h-8 flex-1 rounded-lg border text-xs font-semibold', p === v ? 'border-ink bg-ink text-white' : 'border-vien-2 bg-white text-mo-2 hover:bg-nen')}>{v}%</button>
           ))}
         </div>
       )}
-      {p >= 100 && <span className="text-xs text-[#166534]">Ghi nhận hoàn thành — nhớ đính kèm minh chứng.</span>}
+
+      {dg.kieu === 'ky' && <span className="text-[0.8125rem] text-mo-2">Kỳ {tenKyNv(n.ky_ma)}{n.ky_xong ? ' — đã xác nhận hoàn thành.' : n.ky_han ? ` · hạn ${ngayNgan(n.ky_han)}` : ''}</span>}
+
+      <textarea className={cx(lopO, 'min-h-16 bg-white py-2 text-[0.8125rem]')} placeholder={dg.kieu === 'tien_do' ? 'Kết quả đã thực hiện, vướng mắc' : 'Ghi chú, vướng mắc (không bắt buộc)'}
+        value={noiDung} onChange={(e) => setNoiDung(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void gui(); if (e.key === 'Escape') setMo(false); }} />
+
+      {laChuTri && !(dg.kieu === 'ky' && n.ky_xong) && (
+        <label className={cx('flex items-center gap-2 text-[0.8125rem]', datMuc && !xongNv && 'text-[#166534]')}>
+          <input type="checkbox" className="h-4 w-4 accent-[#16A34A]" checked={xongNv} onChange={(e) => setXongNv(e.target.checked)} />
+          {dg.kieu === 'ky' ? `Xác nhận hoàn thành kỳ ${tenKyNv(n.ky_ma)}` : 'Ghi nhận hoàn thành nhiệm vụ'}
+          {datMuc && !xongNv && dg.kieu !== 'ky' && <span className="text-xs">(đã đạt mức yêu cầu)</span>}
+        </label>
+      )}
       {loi && <span className="text-xs text-nguy">{loi}</span>}
       <div className="flex justify-end gap-2"><Nut onClick={() => setMo(false)}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void gui()}>Gửi</Nut></div>
     </div>
   );
 }
 
-// ---------- Thanh tình trạng: số nhiệm vụ theo tình trạng, bấm để lọc
-function ThanhTinhTrang({ ds, loc, datLoc, choDuyet, moTk, datMoTk }: { ds: Dong[]; loc: LocTT; datLoc: (l: LocTT) => void; choDuyet: number | null; moTk: boolean; datMoTk: (v: boolean) => void }) {
+// ---------- Thanh lọc: một khối gọn — hàng 1 lọc theo tình trạng (có số đếm) + vòng tỉ lệ hoàn thành; hàng 2 công cụ
+function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: {
+  ds: Dong[]; loc: LocTT; datLoc: (l: LocTT) => void; choDuyet: number | null; moTk: boolean; datMoTk: (v: boolean) => void; soHien: number; congCu: ReactNode;
+}) {
   const dem = (k: LoaiTT) => ds.filter((x) => x.tt.loai === k).length;
   const xong = dem('xong'), tl = phanTram(xong, ds.length);
   const o: [LocTT, string, number, string][] = [
-    ['tat_ca', 'Tất cả', ds.length, 'text-den'], ['qua_han', 'Quá hạn', dem('qua_han'), 'text-nguy'], ['sap_han', 'Sắp đến hạn', dem('sap_han'), 'text-cam'],
-    ['chua_xong', 'Chưa xong', ds.length - xong, 'text-xanh'], ['xong', 'Hoàn thành', xong, 'text-[#166534]'],
-    ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, 'text-cam-dam'] as [LocTT, string, number, string]] : []),
+    ['tat_ca', 'Tất cả', ds.length, '#6A0F14'], ['qua_han', 'Quá hạn', dem('qua_han'), '#BE123C'], ['sap_han', 'Sắp đến hạn', dem('sap_han'), '#D97706'],
+    ['chua_xong', 'Đang thực hiện', ds.length - xong, '#1E3A8A'], ['xong', 'Hoàn thành', xong, '#16A34A'],
+    ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, '#92400E'] as [LocTT, string, number, string]] : []),
   ];
+  const r = 15, cv = 2 * Math.PI * r;
   return (
-    <div className="flex flex-wrap items-stretch gap-2">
-      <div role="group" aria-label="Lọc theo tình trạng" className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
-        {o.map(([k, nhan, so, mau]) => (
-          <button key={k} onClick={() => datLoc(loc === k && k !== 'tat_ca' ? 'tat_ca' : k)} aria-pressed={loc === k}
-            className={cx('flex min-w-[104px] shrink-0 flex-col items-start rounded-xl border bg-white px-3 py-2 text-left transition', loc === k ? 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]' : 'border-vien hover:border-vien-2')}>
-            <span className={cx('mono text-[1.25rem] font-bold leading-tight', so === 0 && k !== 'tat_ca' ? 'text-mo' : mau)}>{so}</span>
-            <span className="whitespace-nowrap text-[0.75rem] text-mo-2">{nhan}</span>
-          </button>
-        ))}
+    <div className="flex flex-col rounded-2xl border border-vien bg-white shadow-[0_1px_2px_rgba(40,10,15,.04)]">
+      <div className="flex items-center gap-2 border-b border-[#F1EEE7] px-2 py-1.5">
+        <div role="group" aria-label="Lọc theo tình trạng" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
+          {o.map(([k, nhan, so, mau]) => {
+            const chon = loc === k;
+            return (
+              <button key={k} onClick={() => datLoc(chon && k !== 'tat_ca' ? 'tat_ca' : k)} aria-pressed={chon}
+                className={cx('relative flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[0.8125rem] transition', chon ? 'bg-nen font-semibold text-den' : 'text-mo-2 hover:bg-nen-2', so === 0 && k !== 'tat_ca' && !chon && 'opacity-55')}>
+                <span className="h-2 w-2 rounded-full" style={{ background: mau }} />
+                <span className="whitespace-nowrap">{nhan}</span>
+                <span className="mono rounded-md px-1.5 text-[0.75rem] font-bold" style={{ color: mau, background: chon ? 'white' : 'transparent' }}>{so}</span>
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={() => datMoTk(!moTk)} aria-pressed={moTk} title="Xem tỉ lệ hoàn thành theo đơn vị chủ trì"
+          className={cx('flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-left hover:bg-nen-2', moTk && 'bg-nen')}>
+          <svg width="32" height="32" viewBox="0 0 40 40" aria-hidden className="-rotate-90">
+            <circle cx="20" cy="20" r={r} fill="none" stroke="#EAE6DC" strokeWidth="5" />
+            <circle cx="20" cy="20" r={r} fill="none" stroke="#16A34A" strokeWidth="5" strokeLinecap="round" strokeDasharray={`${(cv * tl) / 100} ${cv}`} />
+          </svg>
+          <span className="hidden flex-col leading-tight sm:flex"><b className="mono text-[0.875rem]">{pt(tl)}</b><span className="whitespace-nowrap text-[11px] text-mo">hoàn thành {moTk ? '▴' : '▾'}</span></span>
+        </button>
       </div>
-      <button onClick={() => datMoTk(!moTk)} aria-pressed={moTk} title="Tỉ lệ hoàn thành theo đơn vị chủ trì"
-        className={cx('flex min-w-[180px] flex-col justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-left', moTk ? 'border-ink' : 'border-vien hover:border-vien-2')}>
-        <span className="flex items-center justify-between text-[0.75rem] text-mo-2">Tỉ lệ hoàn thành <b className="mono text-den">{pt(tl)}</b></span>
-        <span className="h-1.5 rounded-full bg-nen-3"><span className="block h-1.5 rounded-full bg-[#16A34A]" style={{ width: `${tl}%` }} /></span>
-        <span className="text-[11px] font-semibold text-[#8E1B22]">{moTk ? 'Ẩn thống kê đơn vị' : 'Xem theo đơn vị →'}</span>
-      </button>
+      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+        {congCu}
+        <span className="mono text-[0.75rem] text-mo" title="Đang hiện / tổng số">{soHien}/{ds.length}</span>
+      </div>
     </div>
   );
 }
@@ -922,13 +1024,13 @@ function HopNhapWord({ dv, ch, daCo, dong, luuCH, xong }: { dv: DonVi[]; ch: Cau
 // ---------- Xuất tệp
 function oChu(c: KhoaCot, x: Dong): string {
   switch (c) {
-    case 'tt': return String(x.stt);
+    case 'tt': return x.so;
     case 'ten': return x.n.ten;
     case 'chu_tri': return x.d.chu_tri_vb || chuTriMacDinh(x);
     case 'san_pham': return x.n.san_pham ?? '';
     case 'nguon_vb': return [x.d.nguon_vb, x.vb ? tenVb(x.vb) : ''].filter(Boolean).join('\n');
     case 'han': return ngayNgan(x.n.han);
-    case 'tien_do': return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
+    case 'tien_do': return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${x.d.so_lieu && x.d.danh_gia?.kieu !== 'tien_do' ? `\nĐạt ${soVN(x.d.so_lieu.tu)}/${soVN(x.d.so_lieu.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     case 'minh_chung': return x.mc.join('\n');
     case 'tinh_trang': return x.tt.nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';
