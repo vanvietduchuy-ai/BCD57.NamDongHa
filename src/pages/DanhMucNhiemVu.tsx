@@ -2,16 +2,18 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Download, FileUp, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
-import { COT_NV, khongDau, NHOM_NV, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
+import { COT_NV, khongDau, NHOM_NV, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
-  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, tinhTrang, trangThaiTuChu,
+  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
+import { moTepDrive } from '../components/TepDrive';
+import FormVanBan from '../components/FormVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
 
@@ -19,7 +21,9 @@ const MM = 96 / 25.4;
 const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
 type DonVi = { id: string; ten: string; loai: string | null };
 type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
-type Dong = { n: NhiemVu; tt: TinhTrang; stt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4 };
+type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null };
+type Dong = { n: NhiemVu; tt: TinhTrang; stt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4; vb: VbCanCu | null };
+const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
 
@@ -38,13 +42,14 @@ export default function DanhMucNhiemVu() {
   const donVi = hoSo?.vai_tro === 'don_vi';
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
-    const [a, b, c, d, e, f] = await Promise.all([
+    const [a, b, c, d, e, f, g] = await Promise.all([
       supabase.from('v_nhiem_vu').select(COT_NV).order('han', { ascending: true, nullsFirst: false }),
       supabase.from('don_vi').select('id, ten, loai').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, phan_tram, trang_thai_moi, luc, boi_ten').order('luc', { ascending: false }).limit(5000),
       supabase.from('v_minh_chung_nhiem_vu').select('nhiem_vu_id, so_ky_hieu, trich_yeu, ten_tep'),
       supabase.from('tep').select('nhiem_vu_id, ten').not('nhiem_vu_id', 'is', null),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
+      supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, drive_url, ten_tep').neq('trang_thai', 'du_thao').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(1000),
     ]);
     const cn = new Map<string, CapNhat[]>();
     for (const x of (c.data ?? []) as CapNhat[]) { if (!cn.has(x.nhiem_vu_id)) cn.set(x.nhiem_vu_id, []); cn.get(x.nhiem_vu_id)!.push(x); }
@@ -53,7 +58,7 @@ export default function DanhMucNhiemVu() {
     for (const x of (d.data ?? []) as { nhiem_vu_id: string; so_ky_hieu: string | null; trich_yeu: string; ten_tep: string | null }[]) them(x.nhiem_vu_id, x.so_ky_hieu ? `${x.so_ky_hieu} – ${x.trich_yeu}` : x.ten_tep ?? x.trich_yeu);
     for (const x of (e.data ?? []) as { nhiem_vu_id: string; ten: string }[]) them(x.nhiem_vu_id, x.ten);
     return {
-      nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc,
+      nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc, vb: (g.data ?? []) as VbCanCu[],
       ch: ghepCauHinh((f.data as { gia_tri?: Partial<CauHinhA4> } | null)?.gia_tri),
     };
   }, []);
@@ -70,7 +75,7 @@ export default function DanhMucNhiemVu() {
   const [moCaiDat, setMoCaiDat] = useState(false);
   const [moNhap, setMoNhap] = useState(false);
   const [moThem, setMoThem] = useState(false);
-  const [baoCao, setBaoCao] = useState<NhiemVu | null>(null);
+  const [moTk, setMoTk] = useState(false);
   const [sua, setSua] = useState<NhiemVu | null>(null);
   const [thongBao, setThongBao] = useState<{ loi?: string; ok?: string } | null>(null);
 
@@ -93,7 +98,8 @@ export default function DanhMucNhiemVu() {
     const ds = data.nv.map((n) => {
       const cn = data.cn.get(n.id) ?? [];
       const xongLuc = cn.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null;
-      return { n, tt: tinhTrang(n, ch.canh_bao_ngay, xongLuc), stt: 0, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {} };
+      const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
+      return { n, tt: tinhTrang(n, ch.canh_bao_ngay, xongLuc), stt: 0, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     ds.sort((a, b) => ((thuTuNhom.get(a.nhom) ?? 99) - (thuTuNhom.get(b.nhom) ?? 99))
       || ((a.d.thu_tu ?? 1e6) - (b.d.thu_tu ?? 1e6)) || (a.n.han ?? '9').localeCompare(b.n.han ?? '9') || (a.n.ma ?? '').localeCompare(b.n.ma ?? ''));
@@ -145,21 +151,17 @@ export default function DanhMucNhiemVu() {
       {thongBao && <div className={cx('flex items-start gap-2 rounded-xl px-4 py-2.5 text-sm', thongBao.loi ? 'bg-nguy-nhat text-nguy' : 'bg-[#DCFCE7] text-[#166534]')}>
         <span className="flex-1">{thongBao.loi ?? thongBao.ok}</span><button aria-label="Đóng" onClick={() => setThongBao(null)}><X className="h-4 w-4" /></button></div>}
 
-      <CanhBao ds={phamVi} canhBao={ch.canh_bao_ngay} mo={(id) => setChon(id)} loc={setLocTT} />
-      <ThongKe ds={phamVi} tatCa={tatCa} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />
+      {/* Thanh tình trạng: đếm + lọc nhanh */}
+      <ThanhTinhTrang ds={phamVi} loc={locTT} datLoc={setLocTT} choDuyet={donVi ? null : phamVi.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
+        moTk={moTk} datMoTk={setMoTk} />
+      {moTk && <ThongKe ds={phamVi} tatCa={tatCa} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {/* Công cụ */}
       <div className="flex flex-wrap items-center gap-2">
-        <label className="relative min-w-[200px] flex-1">
+        <label className="relative min-w-[220px] flex-1 sm:max-w-[420px]">
           <Search className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-mo" />
           <input className={cx(lopO, 'w-full bg-white pl-10')} placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
         </label>
-        <div className="flex flex-wrap overflow-hidden rounded-xl border border-vien-2 bg-white" role="group" aria-label="Lọc theo tình trạng">
-          {([['tat_ca', 'Tất cả'], ['qua_han', 'Quá hạn'], ['sap_han', 'Sắp đến hạn'], ['chua_xong', 'Chưa xong'], ['xong', 'Hoàn thành'], ...(donVi ? [] : [['cho_duyet', `Chờ duyệt giao${phamVi.some((x) => x.n.trang_thai_giao === 'de_xuat') ? ` (${phamVi.filter((x) => x.n.trang_thai_giao === 'de_xuat').length})` : ''}`]])] as [LocTT, string][]).map(([k, t]) => (
-            <button key={k} aria-pressed={locTT === k} onClick={() => setLocTT(k)}
-              className={cx('min-h-10 border-r border-vien px-3 text-[0.8125rem] font-semibold last:border-0', locTT === k ? 'bg-ink text-white' : 'text-mo-2 hover:bg-nen-2')}>{t}</button>
-          ))}
-        </div>
         {!donVi && !xemNhu && (
           <select className={cx(lopO, 'bg-white')} value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
             <option value="">Mọi đơn vị chủ trì</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}
@@ -170,39 +172,49 @@ export default function DanhMucNhiemVu() {
             <option value="">Xem: toàn bộ (Thường trực)</option>{data.dv.map((d) => <option key={d.id} value={d.id}>Xem như: {tenNgan(d.ten)}</option>)}
           </select>
         )}
+        {(tim || locDv || locTT !== 'tat_ca') && <Nut kieu="nhe" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</Nut>}
         <span className="flex-1" />
+        <span className="text-[0.8125rem] text-mo">{hien.length}/{phamVi.length} nhiệm vụ</span>
         <Zoom z={rieng.zoom ?? 'vua'} dat={(z) => setRieng({ ...rieng, zoom: z })} />
       </div>
 
-      <BangA4 ch={ch} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
-            mo={setChon} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
-            baoCao={(n) => setBaoCao(n)} duocBaoCao={(n) => n.trang_thai_giao === 'da_duyet' && (quanTri || n.chu_tri_don_vi_id === hoSo?.don_vi_id)}
+      {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
+      <div className="flex items-start gap-4">
+        <div className="min-w-0 flex-1">
+          <BangA4 ch={ch} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
+            mo={(id) => setChon((c) => (c === id ? null : id))} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
+            keoTha={(idKeo, dich) => {
+              // Kéo thả: đặt nhiệm vụ trước/sau hàng đích (đổi nhóm nếu thả sang nhóm khác)
+              const keo = tatCa.find((x) => x.n.id === idKeo); if (!keo) return;
+              const nhomDich = dich.nhom ?? tatCa.find((x) => x.n.id === dich.id)?.nhom; if (!nhomDich) return;
+              const cung = tatCa.filter((x) => x.nhom === nhomDich && x.n.id !== idKeo);
+              let vi = dich.id ? cung.findIndex((x) => x.n.id === dich.id) : 0;
+              if (vi < 0) vi = cung.length; else if (dich.id && !dich.truoc) vi += 1;
+              cung.splice(vi, 0, keo);
+              const dong = { ...ch.dong };
+              cung.forEach((x, k) => { dong[x.n.id] = { ...dong[x.n.id], thu_tu: k + 1, ...(x.n.id === idKeo ? { nhom: nhomDich } : {}) }; });
+              void luuCH({ ...ch, dong });
+            }}
             rong={phamVi.length > 0} />
+        </div>
+        {dongChon && (
+          <KhungChiTiet key={dongChon.n.id} x={dongChon} ds={hien} chon={setChon} dong={() => setChon(null)} quanTri={suaDuocBang} tenDv={tenDv}
+            duocBaoCao={dongChon.n.trang_thai_giao === 'da_duyet' && (quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id)}
+            laChuTri={quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id}
+            daGui={() => { setThongBao({ ok: 'Đã cập nhật kết quả thực hiện.' }); void taiLai(); }}
+            sua={() => setSua(dongChon.n)}
+            dsVb={data.vb} ganVb={(id) => void capNhatNv(dongChon.n.id, { can_cu_van_ban_id: id })} luuTenNguon={(t) => suaDong(dongChon.n.id, { nguon_vb: t })}
+            duyet={() => void capNhatNv(dongChon.n.id, { trang_thai_giao: 'da_duyet' })}
+            xoa={async () => {
+              if (!window.confirm(`Xoá nhiệm vụ "${dongChon.n.ten}" cùng toàn bộ lịch sử cập nhật?`)) return;
+              const { error } = await supabase.from('nhiem_vu').delete().eq('id', dongChon.n.id);
+              if (error) { setThongBao({ loi: loiDe(error) }); return; }
+              setChon(null); void taiLai();
+            }}
+            moTrang={() => nav(`/nhiem-vu/${dongChon.n.id}#tep`)} />
+        )}
+      </div>
 
-      {dongChon && (
-        <KhungChiTiet x={dongChon} dong={() => setChon(null)} quanTri={suaDuocBang} nhomDs={nhomDs} tenDv={tenDv}
-          duocBaoCao={dongChon.n.trang_thai_giao === 'da_duyet' && (quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id)}
-          baoCao={() => setBaoCao(dongChon.n)} sua={() => setSua(dongChon.n)}
-          doiNhom={(g) => suaDong(dongChon.n.id, { nhom: g, thu_tu: Date.now() })}
-          diChuyen={(huong) => {
-            const cung = tatCa.filter((x) => x.nhom === dongChon.nhom);
-            const i = cung.findIndex((x) => x.n.id === dongChon.n.id), j = i + huong;
-            if (j < 0 || j >= cung.length) return;
-            const dong = { ...ch.dong };
-            cung.forEach((x, k) => { dong[x.n.id] = { ...dong[x.n.id], thu_tu: (k === i ? j : k === j ? i : k) + 1 }; });
-            void luuCH({ ...ch, dong });
-          }}
-          duyet={() => void capNhatNv(dongChon.n.id, { trang_thai_giao: 'da_duyet' })}
-          xoa={async () => {
-            if (!window.confirm(`Xoá nhiệm vụ "${dongChon.n.ten}" cùng toàn bộ lịch sử cập nhật?`)) return;
-            const { error } = await supabase.from('nhiem_vu').delete().eq('id', dongChon.n.id);
-            if (error) { setThongBao({ loi: loiDe(error) }); return; }
-            setChon(null); void taiLai();
-          }}
-          moTrang={() => nav(`/nhiem-vu/${dongChon.n.id}#tep`)} />
-      )}
-
-      <HopBaoCao n={baoCao} dong={() => setBaoCao(null)} laChuTri xong={() => { setBaoCao(null); setThongBao({ ok: 'Đã gửi kết quả thực hiện.' }); void taiLai(); }} />
       {suaDuocBang && <FormNhiemVu mo={moThem} dong={() => setMoThem(false)} xong={(id) => { setMoThem(false); setChon(id); void taiLai(); }} />}
       {sua && <FormNhiemVu mo dong={() => setSua(null)} id={sua.id} dau={tuNhiemVu(sua)} xong={() => { setSua(null); void taiLai(); }} />}
       {moCaiDat && <HopCaiDat ch={ch} dong={() => setMoCaiDat(false)} luu={async (c) => { await luuCH(c); setMoCaiDat(false); }} soNv={(g) => tatCa.filter((x) => x.nhom === g).length} />}
@@ -210,27 +222,6 @@ export default function DanhMucNhiemVu() {
         xong={(so) => { setMoNhap(false); setThongBao({ ok: `Đã nhập ${so} nhiệm vụ vào danh mục.` }); void taiLai(); }} />}
     </>
   );
-}
-
-// ---------- Cảnh báo quá hạn / sắp đến hạn
-function CanhBao({ ds, canhBao, mo, loc }: { ds: Dong[]; canhBao: number; mo: (id: string) => void; loc: (l: LocTT) => void }) {
-  const qh = ds.filter((x) => x.tt.loai === 'qua_han').sort((a, b) => (b.tt.tre ?? 0) - (a.tt.tre ?? 0));
-  const sh = ds.filter((x) => x.tt.loai === 'sap_han').sort((a, b) => (a.tt.con ?? 0) - (b.tt.con ?? 0));
-  if (!qh.length && !sh.length) return null;
-  const khoi = (arr: Dong[], tieuDe: string, l: LocTT, nen: string, chu: string) => arr.length > 0 && (
-    <div className={cx('flex min-w-0 flex-col gap-1.5 rounded-2xl px-4 py-3', nen)}>
-      <div className={cx('flex flex-wrap items-center gap-2 text-sm font-bold', chu)}>{tieuDe}: {arr.length} nhiệm vụ
-        <button className="rounded-lg border border-current px-2 py-0.5 text-xs font-semibold" onClick={() => loc(l)}>Lọc</button></div>
-      <ul className="m-0 flex list-none flex-col gap-1 p-0">
-        {arr.slice(0, 5).map((x) => (
-          <li key={x.n.id}><button onClick={() => mo(x.n.id)} className="flex w-full min-w-0 items-baseline gap-2 text-left text-[0.8125rem] hover:underline">
-            <span className={cx('mono shrink-0 font-bold', chu)}>{x.tt.nhan}</span><span className="truncate text-den">{x.stt}. {x.n.ten}</span></button></li>
-        ))}
-        {arr.length > 5 && <li className="text-xs text-mo">… và {arr.length - 5} nhiệm vụ khác</li>}
-      </ul>
-    </div>
-  );
-  return <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">{khoi(qh, 'Quá hạn', 'qua_han', 'bg-nguy-nhat', 'text-nguy')}{khoi(sh, `Sắp đến hạn (trong ${canhBao} ngày)`, 'sap_han', 'bg-cam-nhat', 'text-cam-dam')}</div>;
 }
 
 // ---------- Thống kê: số giao, hoàn thành, tỉ lệ theo đơn vị chủ trì
@@ -312,11 +303,12 @@ function Zoom({ z, dat }: { z: number | 'vua'; dat: (z: number | 'vua') => void 
 type BangProps = {
   ch: CauHinhA4; ds: Dong[]; nhomDs: NhomA4[]; rieng: Rieng; setRieng: (r: Rieng) => void; suaDuoc: boolean; chon: string | null; rong: boolean;
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
-  capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>; baoCao: (n: NhiemVu) => void; duocBaoCao: (n: NhiemVu) => boolean;
+  capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
+  keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
 };
-const O_SUA: Partial<Record<KhoaCot, 'nv' | 'dong'>> = { ten: 'nv', san_pham: 'nv', chu_tri: 'dong', han_vb: 'dong', tien_do: 'dong' };
+const O_SUA: Partial<Record<KhoaCot, 'nv' | 'dong'>> = { ten: 'nv', san_pham: 'nv', han: 'nv', lanh_dao: 'nv', ma: 'nv', nguon_vb: 'dong', chu_tri: 'dong', tien_do: 'dong' };
 
-function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, capNhatNv, baoCao, duocBaoCao, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, capNhatNv, keoTha, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -375,33 +367,70 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
   };
   const veLaiCao = (x: Dong) => { if (suaDuoc) suaDong(x.n.id, { cao: 0 }); else { const c = { ...rieng.cao }; delete c[x.n.id]; setRieng({ ...rieng, cao: c }); } };
 
+  // Kéo thả hàng: giữ biểu tượng ở ô TT, kéo tới hàng khác (hoặc tiêu đề nhóm) rồi thả
+  const [keo, setKeo] = useState<{ id: string; dich?: { id?: string; nhom?: string; truoc: boolean } } | null>(null);
+  const vuaKeo = useRef(false);
+  const batDauKeo = (e: PE, x: Dong) => {
+    if (e.button !== 0) return;
+    e.preventDefault(); e.stopPropagation(); window.clearTimeout(hen.current);
+    const el = e.currentTarget as HTMLElement; el.setPointerCapture(e.pointerId);
+    const y0 = e.clientY; let dich: { id?: string; nhom?: string; truoc: boolean } | undefined; let dangKeo = false;
+    const mv = (ev: PointerEvent) => {
+      if (!dangKeo && Math.abs(ev.clientY - y0) < 5) return;
+      dangKeo = true;
+      const tr = document.elementFromPoint(ev.clientX, ev.clientY)?.closest('tr') as HTMLTableRowElement | null;
+      if (tr?.dataset.id && tr.dataset.id !== x.n.id) { const r = tr.getBoundingClientRect(); dich = { id: tr.dataset.id, truoc: ev.clientY < r.top + r.height / 2 }; }
+      else if (tr?.dataset.nhom) dich = { nhom: tr.dataset.nhom, truoc: true };
+      else if (!tr || tr.dataset.id === x.n.id) dich = undefined;
+      setKeo({ id: x.n.id, dich });
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', mv);
+      if (dangKeo) { vuaKeo.current = true; window.setTimeout(() => { vuaKeo.current = false; }, 50); if (dich) keoTha(x.n.id, dich); }
+      setKeo(null);
+    };
+    el.addEventListener('pointermove', mv); el.addEventListener('pointerup', up, { once: true }); el.addEventListener('pointercancel', up, { once: true });
+  };
+
   const bam = (id: string) => { window.clearTimeout(hen.current); hen.current = window.setTimeout(() => mo(id), 230); };
   const giaTriSua = (x: Dong, k: KhoaCot): string =>
-    k === 'ten' ? x.n.ten : k === 'san_pham' ? x.n.san_pham ?? '' : k === 'chu_tri' ? x.d.chu_tri_vb ?? chuTriMacDinh(x) : k === 'han_vb' ? x.d.han_vb ?? '' : x.d.tien_do_vb ?? '';
+    k === 'ten' ? x.n.ten : k === 'san_pham' ? x.n.san_pham ?? '' : k === 'han' ? x.n.han ?? '' : k === 'lanh_dao' ? x.n.lanh_dao_phu_trach ?? '' : k === 'ma' ? x.n.ma ?? ''
+      : k === 'chu_tri' ? x.d.chu_tri_vb ?? chuTriMacDinh(x) : k === 'nguon_vb' ? x.d.nguon_vb ?? '' : x.d.tien_do_vb ?? '';
   const luuO = async (x: Dong, k: KhoaCot, v: string) => {
     setDangSua(null);
     if (v === giaTriSua(x, k)) return;
-    if (O_SUA[k] === 'nv') { if (k === 'ten' && !v.trim()) return; await capNhatNv(x.n.id, k === 'ten' ? { ten: v.trim() } : { san_pham: v.trim() || null }); }
-    else suaDong(x.n.id, k === 'chu_tri' ? { chu_tri_vb: v } : k === 'han_vb' ? { han_vb: v } : { tien_do_vb: v });
+    if (O_SUA[k] === 'nv') {
+      if (k === 'ten' && !v.trim()) return;
+      await capNhatNv(x.n.id, k === 'ten' ? { ten: v.trim() } : k === 'han' ? { han: v || null } : k === 'lanh_dao' ? { lanh_dao_phu_trach: v.trim() || null } : k === 'ma' ? { ma: v.trim() || null } : { san_pham: v.trim() || null });
+    }
+    else suaDong(x.n.id, k === 'chu_tri' ? { chu_tri_vb: v } : k === 'nguon_vb' ? { nguon_vb: v } : { tien_do_vb: v });
   };
 
   const o = (x: Dong, c: CotA4): ReactNode => {
     const khoa = `${x.n.id}:${c.khoa}`;
-    if (dangSua === khoa) return <OSuaChu dau={giaTriSua(x, c.khoa)} luu={(v) => void luuO(x, c.khoa, v)} huy={() => setDangSua(null)} />;
+    if (dangSua === khoa) return c.khoa === 'han'
+      ? <input type="date" autoFocus defaultValue={giaTriSua(x, c.khoa)} onClick={(e) => e.stopPropagation()} onBlur={(e) => void luuO(x, c.khoa, e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setDangSua(null); }}
+          className="w-full bg-[#FFFDF3] p-0 text-center outline outline-2 outline-[#C99A2E]" style={{ font: 'inherit' }} />
+      : <OSuaChu dau={giaTriSua(x, c.khoa)} luu={(v) => void luuO(x, c.khoa, v)} huy={() => setDangSua(null)} />;
     switch (c.khoa) {
-      case 'tt': return <>{x.stt}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
+      case 'tt': return <>{suaDuoc
+        ? <span onPointerDown={(e) => batDauKeo(e, x)} title="Kéo để đưa nhiệm vụ lên, xuống" className="inline-flex cursor-grab touch-none select-none items-center gap-0.5 active:cursor-grabbing"><GripVertical className="-ml-1 h-[1em] w-[1em] text-[#B9A9AC]" />{x.stt}</span>
+        : x.stt}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
         className="absolute -bottom-1 left-0 z-10 h-2 w-[4000px] cursor-row-resize hover:bg-do/20" /></>;
       case 'ten': return <span className="whitespace-pre-wrap">{x.n.ten}{x.n.trang_thai_giao === 'de_xuat' && <span className="ml-1 rounded bg-[#FEF3C7] px-1 font-sans text-[7.5pt] font-semibold text-[#92400E]">Chờ duyệt giao</span>}</span>;
       case 'chu_tri': return <><span className="whitespace-pre-wrap">{x.d.chu_tri_vb || chuTriMacDinh(x)}</span>
         {x.n.chu_tri_ten && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#7A1A27]" title="Đơn vị được giao chủ trì trên hệ thống">▸ {tenNgan(x.n.chu_tri_ten)}</span>}</>;
       case 'san_pham': return <span className="whitespace-pre-wrap">{x.n.san_pham}</span>;
-      case 'han_vb': return <span className="whitespace-pre-wrap">{x.d.han_vb}</span>;
+      case 'nguon_vb': return <>
+        {x.d.nguon_vb && <span className="block whitespace-pre-wrap">{x.d.nguon_vb}</span>}
+        {x.vb && <button type="button" onClick={(e) => { e.stopPropagation(); void moTepDrive('van_ban', x.vb!.id, x.vb!.ten_tep ?? `${x.vb!.so_ky_hieu ?? 'van-ban'}.pdf`, 'xem', x.vb!.drive_url); }}
+          title="Mở văn bản đính kèm" className="mt-0.5 block text-left font-sans text-[7.5pt] text-[#1E4F86] hover:underline">📎 {x.vb.so_ky_hieu || x.vb.trich_yeu || 'Văn bản đính kèm'}</button>}
+        {!x.d.nguon_vb && !x.vb && suaDuoc && chon === x.n.id && <span className="font-sans text-[7.5pt] italic text-[#8D8486]">Bấm để ghi tên văn bản…</span>}
+      </>;
       case 'han': return <><b>{x.n.dinh_ky ? (x.n.ky_han ? ngayNgan(x.n.ky_han) : 'Định kỳ') : ngayNgan(x.n.han) || '—'}</b>{x.n.dinh_ky && <span className="block text-[0.9em] italic">(định kỳ)</span>}</>;
       case 'tien_do': return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.n.trang_thai].nhan} · {x.n.phan_tram}%</span>
         {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>;
-      case 'ket_qua': return x.cn[0]
-        ? <><span className="whitespace-pre-wrap">{x.cn[0].noi_dung}</span><span className="mt-0.5 block font-sans text-[7.5pt] text-[#6B6B6B]">{x.cn[0].boi_ten ?? ''} · {ngayGioDu(x.cn[0].luc)}</span></>
-        : duocBaoCao(x.n) ? <span className="italic text-[#8D8486]">Bấm đúp để nhập kết quả…</span> : null;
       case 'minh_chung': return x.mc.length
         ? <span className="flex flex-col gap-0.5">{x.mc.map((t, i) => <span key={i} className="text-[#1E4F86]">▸ {t}</span>)}</span>
         : <span className="text-[#8D8486]">—</span>;
@@ -433,19 +462,20 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
               {!ds.length && <tr><td colSpan={cot.length} className="border border-[#2B2B2B] py-8 text-center font-sans text-sm text-[#8D8486]">
                 {coDuLieu ? 'Không có nhiệm vụ khớp bộ lọc.' : suaDuoc ? 'Chưa có nhiệm vụ. Bấm “Nhập từ Word” để nạp danh mục, hoặc “Thêm nhiệm vụ”.' : 'Đơn vị chưa được giao chủ trì nhiệm vụ nào.'}</td></tr>}
               {nhomCo.map(([g, arr]) => [
-                <tr key={g.id}><td colSpan={cot.length} className="border border-[#2B2B2B] bg-[#F1ECEC] px-[4pt] py-[3pt] font-bold">{g.ky_hieu ? `${g.ky_hieu}. ` : ''}{g.ten}</td></tr>,
+                <tr key={g.id} data-nhom={g.id}><td colSpan={cot.length} className={cx('border border-[#2B2B2B] bg-[#F1ECEC] px-[4pt] py-[3pt] font-bold', keo?.dich?.nhom === g.id && 'shadow-[inset_0_-3px_0_#C99A2E]')}>{g.ky_hieu ? `${g.ky_hieu}. ` : ''}{g.ten}</td></tr>,
                 ...arr.map((x) => {
                   const m = MAU_TT[x.tt.loai]; const cao = caoDong(x);
                   return (
-                    <tr key={x.n.id} onClick={(e) => { if (!(e.target as HTMLElement).closest('textarea')) bam(x.n.id); }}
-                      className={cx('cursor-pointer', chon === x.n.id ? 'bg-[#FFF3D6]' : x.tt.loai === 'qua_han' ? 'bg-[#FFF6F5] hover:bg-[#FDECEA]' : 'hover:bg-[#FBF8F8]')}
-                      style={cao ? { height: cao } : undefined}>
+                    <tr key={x.n.id} data-id={x.n.id} onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('textarea, input')) return; bam(x.n.id); }}
+                      className={cx('cursor-pointer', keo?.id === x.n.id ? 'opacity-40' : chon === x.n.id ? 'bg-[#FFF3D6]' : x.tt.loai === 'qua_han' ? 'bg-[#FFF6F5] hover:bg-[#FDECEA]' : 'hover:bg-[#FBF8F8]')}
+                      style={{ ...(cao ? { height: cao } : {}), ...(keo?.dich?.id === x.n.id ? { boxShadow: keo.dich.truoc ? 'inset 0 3px 0 #C99A2E' : 'inset 0 -3px 0 #C99A2E' } : {}) }}>
                       {cot.map((c, i) => {
-                        const suaO = (suaDuoc && O_SUA[c.khoa]) || (c.khoa === 'ket_qua' && duocBaoCao(x.n));
+                        const suaO = suaDuoc && !!O_SUA[c.khoa];
                         return (
                           <td key={c.khoa}
-                            onDoubleClick={suaO ? (e) => { e.stopPropagation(); window.clearTimeout(hen.current); if (c.khoa === 'ket_qua') baoCao(x.n); else setDangSua(`${x.n.id}:${c.khoa}`); } : undefined}
-                            className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-top [overflow-wrap:anywhere]', ['tt', 'han', 'han_vb', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative', suaO && 'hover:outline hover:outline-1 hover:outline-[#C99A2E]')}
+                            onClick={suaO && chon === x.n.id && dangSua !== `${x.n.id}:${c.khoa}` ? (e) => { e.stopPropagation(); window.clearTimeout(hen.current); setDangSua(`${x.n.id}:${c.khoa}`); } : undefined}
+                            onDoubleClick={suaO ? (e) => { e.stopPropagation(); window.clearTimeout(hen.current); setDangSua(`${x.n.id}:${c.khoa}`); } : undefined}
+                            className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-top [overflow-wrap:anywhere]', ['tt', 'han', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative', suaO && 'hover:outline hover:outline-1 hover:outline-[#C99A2E]')}
                             style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>{o(x, c)}</td>
                         );
                       })}
@@ -463,7 +493,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
         </div>
       </div>
       <p className="m-0 mt-3 px-4 text-center text-xs text-mo">
-        {suaDuoc ? 'Bấm một hàng để xem chi tiết. Bấm đúp vào ô để sửa. Kéo mép tiêu đề cột hoặc đáy ô TT để đổi độ rộng, chiều cao.' : 'Bấm một hàng để xem chi tiết. Bấm đúp ô “Kết quả thực hiện” để báo cáo kết quả.'}
+        {suaDuoc ? 'Bấm một hàng để mở khung chi tiết; bấm tiếp vào ô của hàng đang chọn (hoặc bấm đúp) để sửa ngay trên bảng. Kéo biểu tượng ⋮ ở ô TT để đưa nhiệm vụ lên, xuống hoặc sang nhóm khác.' : 'Bấm một hàng để xem chi tiết và cập nhật kết quả ở khung bên phải.'}
       </p>
     </div>
   );
@@ -481,110 +511,235 @@ function OSuaChu({ dau, luu, huy }: { dau: string; luu: (v: string) => void; huy
 }
 
 // ---------- Dạng thẻ (điện thoại)
-function KhungChiTiet({ x, dong, quanTri, nhomDs, tenDv, duocBaoCao, baoCao, sua, doiNhom, diChuyen, duyet, xoa, moTrang }: {
-  x: Dong; dong: () => void; quanTri: boolean; nhomDs: NhomA4[]; tenDv: (id: string | null) => string; duocBaoCao: boolean;
-  baoCao: () => void; sua: () => void; doiNhom: (g: string) => void; diChuyen: (h: number) => void; duyet: () => void; xoa: () => void; moTrang: () => void;
+function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon }: {
+  x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
+  dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void;
+  duocBaoCao: boolean; laChuTri: boolean; daGui: () => void; sua: () => void;
+  duyet: () => void; xoa: () => void; moTrang: () => void;
 }) {
-  useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') dong(); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [dong]);
   const { n } = x; const m = MAU_TT[x.tt.loai];
-  const hang = (nhan: string, gt: ReactNode) => <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-3 border-b border-[#F1EEE7] py-2 text-sm last:border-0"><dt className="text-mo">{nhan}</dt><dd className="m-0 whitespace-pre-wrap">{gt || <i className="text-mo">—</i>}</dd></div>;
+  const vt = ds.findIndex((y) => y.n.id === n.id);
+  const truoc = vt > 0 ? ds[vt - 1] : null, sau = vt >= 0 && vt < ds.length - 1 ? ds[vt + 1] : null;
+  // Phím tắt: Esc đóng, ↑ ↓ chuyển nhiệm vụ (khi không gõ chữ)
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => {
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test((e.target as HTMLElement).tagName)) return;
+      if (e.key === 'Escape') dong();
+      if (e.key === 'ArrowUp' && truoc) { e.preventDefault(); chon(truoc.n.id); }
+      if (e.key === 'ArrowDown' && sau) { e.preventDefault(); chon(sau.n.id); }
+    };
+    window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f);
+  }, [dong, chon, truoc, sau]);
+
+  // Gợi ý thông minh: việc cần làm tiếp với nhiệm vụ này
+  const hom = homNayVN();
+  const lanCuoi = x.cn[0]?.luc ?? null;
+  const ngayIm = lanCuoi ? soNgay(lanCuoi.slice(0, 10), hom) : null;
+  const thieu = thieu6Ro(n);
+  const goiY: { muc: 'nguy' | 'cam' | 'xanh'; chu: string; nut?: ReactNode }[] = [];
+  if (n.trang_thai_giao === 'de_xuat') goiY.push({ muc: 'cam', chu: 'Chờ Trưởng ban duyệt giao — đơn vị chưa thấy nhiệm vụ.', nut: quanTri && <button className="font-bold underline" onClick={duyet}>Duyệt giao</button> });
+  if (x.tt.loai === 'qua_han') goiY.push({ muc: 'nguy', chu: `Quá hạn ${x.tt.tre} ngày — cần đôn đốc ${n.chu_tri_ten ?? 'đơn vị chủ trì'}.` });
+  if (x.tt.loai === 'sap_han') goiY.push({ muc: 'cam', chu: `${x.tt.nhan} đến hạn.` });
+  if (x.tt.loai !== 'xong' && n.trang_thai_giao === 'da_duyet' && (ngayIm == null || ngayIm > 14)) goiY.push({ muc: 'cam', chu: ngayIm == null ? 'Chưa có báo cáo kết quả nào.' : `${ngayIm} ngày chưa cập nhật kết quả.` });
+  if (quanTri && thieu.length) goiY.push({ muc: 'xanh', chu: `Chưa đủ 6 rõ: thiếu ${thieu.join(', ')}.`, nut: <button className="font-bold underline" onClick={sua}>Bổ sung</button> });
+  if (x.tt.loai === 'xong' && !x.mc.length) goiY.push({ muc: 'xanh', chu: 'Đã hoàn thành nhưng chưa có minh chứng.', nut: <button className="font-bold underline" onClick={moTrang}>Đính kèm</button> });
+  const mauGy = { nguy: 'bg-nguy-nhat text-nguy', cam: 'bg-cam-nhat text-cam-dam', xanh: 'bg-xanh-nhat text-xanh' };
+
+  const [xemHet, setXemHet] = useState(false);
+  const han = n.dinh_ky ? n.ky_han : n.han;
+  const conNgay = han && x.tt.loai !== 'xong' ? soNgay(hom, han) : null;
+  const dongTT = (nhan: string, gt: ReactNode) => gt ? <div className="flex gap-3 py-1.5 text-[0.8125rem]"><dt className="w-[92px] shrink-0 text-mo">{nhan}</dt><dd className="m-0 min-w-0 flex-1 whitespace-pre-wrap leading-snug">{gt}</dd></div> : null;
+
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-ink/30" onClick={dong} />
-      <aside role="dialog" aria-label="Chi tiết nhiệm vụ" className="fixed inset-y-0 right-0 z-50 flex w-full max-w-[480px] flex-col bg-white shadow-xl">
-        <div className="flex items-center gap-2 border-b border-vien px-4 py-3">
-          <h2 className="m-0 flex-1 text-base font-bold">Nhiệm vụ số {x.stt}{n.ma ? <span className="mono ml-2 text-xs text-mo">{n.ma}</span> : null}</h2>
-          <span className="rounded-md px-2 py-0.5 text-xs font-bold" style={{ color: m.chu, background: m.nen }}>{x.tt.nhan}</span>
-          <button onClick={dong} aria-label="Đóng" className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-nen"><X className="h-5 w-5" /></button>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-          <p className="m-0 text-[1.0625rem] font-bold leading-snug">{n.ten}</p>
-          {n.trang_thai_giao === 'de_xuat' && <div className="rounded-xl bg-cam-nhat px-3 py-2 text-[0.8125rem] text-cam-dam">Nhiệm vụ đang chờ Trưởng ban duyệt giao. Đơn vị chưa thấy nhiệm vụ này.</div>}
-          <dl className="m-0 flex flex-col">
-            {hang('Đơn vị chủ trì', n.chu_tri_ten)}
-            {hang('Phối hợp', (n.phoi_hop_ids ?? []).map(tenDv).filter(Boolean).join('; '))}
-            {x.d.chu_tri_vb && hang('Ghi theo văn bản', x.d.chu_tri_vb)}
-            {hang('Chỉ tiêu, sản phẩm', n.san_pham)}
-            {hang('Hạn theo văn bản', x.d.han_vb)}
-            {hang('Hạn hoàn thành', n.han ? ngayNgan(n.han) : '')}
-            {hang('Tiến độ', `${TT_NV[n.trang_thai].nhan} · ${n.phan_tram}%${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`)}
-            {hang('Lãnh đạo phụ trách', n.lanh_dao_phu_trach)}
-          </dl>
-          <div className="flex flex-col gap-2">
-            <span className="text-sm font-bold">Kết quả thực hiện</span>
-            {x.cn.length ? x.cn.slice(0, 4).map((c, i) => (
-              <div key={i} className="flex flex-col gap-0.5 rounded-xl bg-nen px-3 py-2 text-[0.8125rem]">
-                <span className="whitespace-pre-wrap leading-snug">{c.noi_dung}</span>
-                <span className="text-[11.5px] text-mo">{c.boi_ten ?? ''} · {ngayGioDu(c.luc)}{c.phan_tram != null ? ` · ${c.phan_tram}%` : ''}{c.trang_thai_moi ? ` · ${TT_NV[c.trang_thai_moi].nhan}` : ''}</span>
-              </div>
-            )) : <span className="text-[0.8125rem] text-mo">Chưa có kết quả.</span>}
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm font-bold">Minh chứng</span>
-            {x.mc.length ? x.mc.map((t, i) => <span key={i} className="flex items-start gap-2 text-[0.8125rem]"><Paperclip className="mt-0.5 h-3.5 w-3.5 shrink-0 text-mo" />{t}</span>) : <span className="text-[0.8125rem] text-mo">Chưa có minh chứng.</span>}
-          </div>
-          {quanTri && (
-            <div className="flex flex-col gap-2 rounded-xl border border-vien p-3">
-              <O nhan="Nhóm trong danh mục">
-                <select className={cx(lopO, 'w-full')} value={x.nhom} onChange={(e) => doiNhom(e.target.value)}>
-                  {nhomDs.map((g) => <option key={g.id} value={g.id}>{g.ky_hieu}. {g.ten}</option>)}
-                </select>
-              </O>
-              <div className="flex flex-wrap gap-2">
-                <Nut icon={<ArrowUp className="h-4 w-4" />} onClick={() => diChuyen(-1)}>Lên</Nut>
-                <Nut icon={<ArrowDown className="h-4 w-4" />} onClick={() => diChuyen(1)}>Xuống</Nut>
-                <Nut icon={<Pencil className="h-4 w-4" />} onClick={sua}>Sửa nhiệm vụ</Nut>
-                {n.trang_thai_giao === 'de_xuat' && <Nut icon={<ShieldCheck className="h-4 w-4" />} onClick={duyet}>Ghi nhận đã duyệt giao</Nut>}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2 border-t border-vien p-3">
-          {duocBaoCao && <Nut kieu="chinh" onClick={baoCao}>Báo cáo kết quả</Nut>}
-          <Nut icon={<Paperclip className="h-4 w-4" />} onClick={moTrang}>Đính kèm minh chứng</Nut>
+      {/* Điện thoại / máy hẹp: lớp nền mờ; máy tính: khung đứng cạnh bảng */}
+      <div className="fixed inset-0 z-40 bg-ink/30 lg:hidden" onClick={dong} />
+      <aside aria-label="Chi tiết nhiệm vụ"
+        className="truot-len fixed inset-x-0 bottom-0 z-50 flex max-h-[88vh] flex-col overflow-hidden rounded-t-3xl border border-vien bg-white shadow-xl lg:sticky lg:inset-auto lg:top-4 lg:z-auto lg:max-h-[calc(100vh-32px)] lg:w-[360px] lg:shrink-0 lg:animate-none lg:rounded-2xl lg:shadow-[0_8px_28px_-12px_rgba(60,10,12,.25)] xl:w-[390px]">
+        {/* Đầu khung */}
+        <div className="flex items-center gap-1 border-b border-vien px-3 py-2">
+          <span className="mono rounded-md bg-nen px-1.5 py-0.5 text-xs font-bold text-mo-2">#{x.stt}</span>
+          {n.ma && <span className="mono truncate text-xs text-mo">{n.ma}</span>}
           <span className="flex-1" />
-          {quanTri && <Nut kieu="nguy" icon={<Trash2 className="h-4 w-4" />} onClick={xoa}>Xoá</Nut>}
+          <button disabled={!truoc} onClick={() => truoc && chon(truoc.n.id)} title="Nhiệm vụ trước (↑)" aria-label="Nhiệm vụ trước" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
+          <button disabled={!sau} onClick={() => sau && chon(sau.n.id)} title="Nhiệm vụ sau (↓)" aria-label="Nhiệm vụ sau" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button>
+          <button onClick={moTrang} title="Mở trang đầy đủ" aria-label="Mở trang đầy đủ" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen"><Maximize2 className="h-4 w-4" /></button>
+          <button onClick={dong} title="Đóng (Esc)" aria-label="Đóng" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen"><X className="h-5 w-5" /></button>
         </div>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
+          <div className="flex flex-col gap-2">
+            <p className="m-0 text-[0.9688rem] font-bold leading-snug">{n.ten}</p>
+            <div className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
+              <span className="rounded-md px-2 py-0.5 text-xs font-bold" style={{ color: m.chu, background: m.nen }}>{x.tt.nhan}</span>
+              {han && <span className="text-mo">Hạn <b className="mono text-den">{ngayNgan(han)}</b>{conNgay != null && conNgay >= 0 && x.tt.loai !== 'sap_han' ? ` · còn ${conNgay} ngày` : ''}</span>}
+              {n.dinh_ky && <span className="text-mo">· định kỳ</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 flex-1 rounded-full bg-nen-3"><div className="h-1.5 rounded-full transition-[width]" style={{ width: `${n.phan_tram}%`, background: m.vach }} /></div>
+              <span className="mono w-10 text-right text-xs font-bold">{n.phan_tram}%</span>
+            </div>
+          </div>
+
+          {goiY.length > 0 && (
+            <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
+              {goiY.map((g, i) => <li key={i} className={cx('flex items-start gap-2 rounded-xl px-3 py-2 text-[0.8125rem] leading-snug', mauGy[g.muc])}><span className="flex-1">{g.chu}</span>{g.nut}</li>)}
+            </ul>
+          )}
+
+          {duocBaoCao && <CapNhatNhanh n={n} laChuTri={laChuTri} xong={daGui} />}
+
+          <NguonVanBan x={x} quanTri={quanTri} dsVb={dsVb} gan={ganVb} luuTen={luuTenNguon} />
+
+          <dl className="m-0 flex flex-col divide-y divide-[#F1EEE7]">
+            {dongTT('Chủ trì', n.chu_tri_ten ?? <i className="text-mo">Chưa giao</i>)}
+            {dongTT('Phối hợp', (n.phoi_hop_ids ?? []).map(tenDv).filter(Boolean).join('; '))}
+            {dongTT('Sản phẩm', n.san_pham)}
+            {dongTT('Phụ trách', n.lanh_dao_phu_trach)}
+            {dongTT('Ghi chú', n.mo_ta)}
+          </dl>
+
+          <section className="flex flex-col gap-1.5">
+            <h3 className="m-0 flex items-center text-[0.8125rem] font-bold">Kết quả thực hiện <span className="ml-1.5 font-normal text-mo">{x.cn.length || ''}</span></h3>
+            {x.cn.length ? (xemHet ? x.cn : x.cn.slice(0, 2)).map((c, i) => (
+              <div key={i} className="border-l-2 border-vien-2 pl-3 text-[0.8125rem]">
+                <p className="m-0 whitespace-pre-wrap leading-snug">{c.noi_dung}</p>
+                <span className="text-[11px] text-mo">{c.boi_ten ?? ''} · {ngayGioDu(c.luc)}{c.phan_tram != null ? ` · ${c.phan_tram}%` : ''}</span>
+              </div>
+            )) : <span className="text-[0.8125rem] text-mo">Chưa có.</span>}
+            {x.cn.length > 2 && <button className="self-start text-xs font-semibold text-[#8E1B22]" onClick={() => setXemHet(!xemHet)}>{xemHet ? 'Thu gọn' : `Xem cả ${x.cn.length} lần cập nhật`}</button>}
+          </section>
+
+          <section className="flex flex-col gap-1">
+            <h3 className="m-0 flex items-center text-[0.8125rem] font-bold">Minh chứng <span className="flex-1" />
+              <button className="flex items-center gap-1 text-xs font-semibold text-[#8E1B22]" onClick={moTrang}><Paperclip className="h-3.5 w-3.5" />Đính kèm</button></h3>
+            {x.mc.length ? x.mc.map((t, i) => <span key={i} className="truncate text-[0.8125rem] text-[#1E4F86]" title={t}>▸ {t}</span>) : <span className="text-[0.8125rem] text-mo">Chưa có.</span>}
+          </section>
+        </div>
+
+        {quanTri && (
+          <div className="flex items-center gap-2 border-t border-vien px-3 py-2.5">
+            <Nut icon={<Pencil className="h-4 w-4" />} onClick={sua}>Sửa</Nut>
+            {n.trang_thai_giao === 'de_xuat' && <Nut icon={<ShieldCheck className="h-4 w-4" />} onClick={duyet}>Duyệt giao</Nut>}
+            <span className="flex-1" />
+            <button onClick={xoa} title="Xoá nhiệm vụ" aria-label="Xoá nhiệm vụ" className="flex h-10 w-10 items-center justify-center rounded-xl text-nguy hover:bg-nguy-nhat"><Trash2 className="h-4 w-4" /></button>
+          </div>
+        )}
       </aside>
     </>
   );
 }
 
-// ---------- Báo cáo kết quả (ghi vào lịch sử cập nhật của nhiệm vụ)
-function HopBaoCao({ n, dong, laChuTri, xong }: { n: NhiemVu | null; dong: () => void; laChuTri: boolean; xong: () => void }) {
+// Nguồn văn bản giao: ghi tên văn bản + đính kèm (chọn trong kho hoặc tải lên)
+function NguonVanBan({ x, quanTri, dsVb, gan, luuTen }: { x: Dong; quanTri: boolean; dsVb: VbCanCu[]; gan: (id: string | null) => void; luuTen: (t: string) => void }) {
+  const [ten, setTen] = useState(x.d.nguon_vb ?? '');
+  const [chonKho, setChonKho] = useState(false);
+  const [taiLen, setTaiLen] = useState(false);
+  const [tim, setTim] = useState('');
+  const loc = useMemo(() => { const t = khongDau(tim.trim()); return dsVb.filter((v) => !t || khongDau(tenVb(v)).includes(t)).slice(0, 30); }, [dsVb, tim]);
+  if (!quanTri && !x.d.nguon_vb && !x.vb) return null;
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="m-0 text-[0.8125rem] font-bold">Nguồn văn bản giao</h3>
+      {quanTri
+        ? <input className={cx(lopO, 'min-h-10 text-[0.8125rem]')} placeholder="Tên văn bản giao (vd: Kế hoạch 32/KH-BCĐ ngày 25/7/2026)" value={ten}
+            onChange={(e) => setTen(e.target.value)} onBlur={() => { if (ten !== (x.d.nguon_vb ?? '')) luuTen(ten.trim()); }} onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }} />
+        : x.d.nguon_vb && <p className="m-0 text-[0.8125rem]">{x.d.nguon_vb}</p>}
+      {x.vb ? (
+        <div className="flex items-center gap-2 rounded-xl bg-nen px-3 py-2 text-[0.8125rem]">
+          <Paperclip className="h-4 w-4 shrink-0 text-mo" />
+          <button className="min-w-0 flex-1 truncate text-left text-[#1E4F86] hover:underline" title={tenVb(x.vb)}
+            onClick={() => void moTepDrive('van_ban', x.vb!.id, x.vb!.ten_tep ?? `${x.vb!.so_ky_hieu ?? 'van-ban'}.pdf`, 'xem', x.vb!.drive_url)}>{tenVb(x.vb) || 'Văn bản đính kèm'}</button>
+          {quanTri && <button onClick={() => gan(null)} title="Bỏ đính kèm" aria-label="Bỏ đính kèm" className="flex h-7 w-7 items-center justify-center rounded-lg text-mo hover:bg-white"><X className="h-4 w-4" /></button>}
+        </div>
+      ) : quanTri && !chonKho && (
+        <div className="flex gap-2">
+          <button onClick={() => setChonKho(true)} className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-vien-2 text-xs font-semibold text-mo-2 hover:border-[#8E1B22] hover:text-[#8E1B22]"><Search className="h-3.5 w-3.5" />Chọn trong kho</button>
+          <button onClick={() => setTaiLen(true)} className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-dashed border-vien-2 text-xs font-semibold text-mo-2 hover:border-[#8E1B22] hover:text-[#8E1B22]"><FileUp className="h-3.5 w-3.5" />Tải văn bản lên</button>
+        </div>
+      )}
+      {chonKho && !x.vb && (
+        <div className="flex flex-col gap-1.5 rounded-xl border border-vien p-2">
+          <input autoFocus className={cx(lopO, 'min-h-9 text-[0.8125rem]')} placeholder="Tìm số, ký hiệu, trích yếu" value={tim} onChange={(e) => setTim(e.target.value)} />
+          <ul className="m-0 flex max-h-56 list-none flex-col overflow-y-auto p-0">
+            {loc.length === 0 && <li className="px-2 py-2 text-xs text-mo">Không thấy văn bản. Bấm “Tải văn bản lên”.</li>}
+            {loc.map((v) => <li key={v.id}><button onClick={() => { gan(v.id); setChonKho(false); if (!ten) { setTen(tenVb(v)); luuTen(tenVb(v)); } }}
+              className="w-full rounded-lg px-2 py-1.5 text-left text-[0.8125rem] leading-snug hover:bg-nen"><b className="mono">{v.so_ky_hieu ?? ''}</b> {v.trich_yeu}</button></li>)}
+          </ul>
+          <button onClick={() => setChonKho(false)} className="self-end text-xs font-semibold text-mo">Đóng</button>
+        </div>
+      )}
+      {taiLen && <FormVanBan mo dong={() => setTaiLen(false)} dau={{ thu_muc: 'cap_tren_tinh', loai: 'ke_hoach' }}
+        xong={(id) => { setTaiLen(false); gan(id); }} />}
+    </section>
+  );
+}
+
+// Cập nhật nhanh kết quả ngay trong khung bên: nội dung + mức hoàn thành
+function CapNhatNhanh({ n, laChuTri, xong }: { n: NhiemVu; laChuTri: boolean; xong: () => void }) {
+  const [mo, setMo] = useState(false);
   const [noiDung, setNoiDung] = useState('');
-  const [p, setP] = useState(0);
-  const [tt, setTt] = useState<TrangThaiNv>('dang_thuc_hien');
-  const [dangChay, setDangChay] = useState(false);
+  const [p, setP] = useState(n.phan_tram);
+  const [dang, setDang] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
-  useEffect(() => { if (n) { setNoiDung(''); setP(n.phan_tram); setTt(n.trang_thai); setLoi(null); } }, [n]);
-  if (!n) return null;
+  if (!mo) return <button onClick={() => setMo(true)} className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-vien-2 px-3 text-left text-[0.8125rem] text-mo hover:border-[#8E1B22] hover:text-[#8E1B22]"><Plus className="h-4 w-4" />Cập nhật kết quả, tiến độ…</button>;
   const gui = async () => {
     if (!noiDung.trim()) { setLoi('Nhập kết quả đã thực hiện'); return; }
-    setDangChay(true); setLoi(null);
+    setDang(true); setLoi(null);
+    const tt: TrangThaiNv = p >= 100 ? 'hoan_thanh' : p > 0 ? 'dang_thuc_hien' : n.trang_thai;
     const { error } = await supabase.from('nhiem_vu_cap_nhat').insert({
       nhiem_vu_id: n.id, noi_dung: noiDung.trim(),
       phan_tram: laChuTri && p !== n.phan_tram ? p : null, trang_thai_moi: laChuTri && tt !== n.trang_thai ? tt : null,
     });
-    setDangChay(false);
-    if (error) setLoi(loiDe(error)); else xong();
+    setDang(false);
+    if (error) setLoi(loiDe(error)); else { setMo(false); setNoiDung(''); xong(); }
   };
   return (
-    <HopThoai mo dong={dong} tieuDe="Báo cáo kết quả thực hiện" rong="max-w-xl">
-      <div className="flex flex-col gap-3.5">
-        <p className="m-0 text-sm font-semibold leading-snug">{n.ten}</p>
-        <O nhan="Kết quả đã thực hiện, vướng mắc (nếu có)"><textarea className={cx(lopO, 'min-h-28 py-2')} value={noiDung} onChange={(e) => setNoiDung(e.target.value)} autoFocus /></O>
-        <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
-          <O nhan={`Tỷ lệ hoàn thành: ${p}%`}><input type="range" min={0} max={100} step={5} value={p} className="h-11 accent-[#A4161A]"
-            onChange={(e) => { const v = Number(e.target.value); setP(v); if (v === 100) setTt('hoan_thanh'); else if (tt === 'hoan_thanh') setTt('dang_thuc_hien'); }} /></O>
-          <O nhan="Tình trạng"><select className={cx(lopO, 'w-full')} value={tt} onChange={(e) => { const v = e.target.value as TrangThaiNv; setTt(v); if (v === 'hoan_thanh') setP(100); }}>
-            {(Object.keys(TT_NV) as TrangThaiNv[]).filter((k) => k !== 'tam_dung').map((k) => <option key={k} value={k}>{TT_NV[k].nhan}</option>)}</select></O>
+    <div className="flex flex-col gap-2 rounded-xl border border-vien bg-nen-2 p-3">
+      <textarea autoFocus className={cx(lopO, 'min-h-20 bg-white py-2 text-[0.875rem]')} placeholder="Kết quả đã thực hiện, vướng mắc (nếu có)" value={noiDung} onChange={(e) => setNoiDung(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void gui(); if (e.key === 'Escape') setMo(false); }} />
+      {laChuTri && (
+        <div className="flex items-center gap-1.5">
+          <span className="mr-1 text-xs text-mo">Hoàn thành</span>
+          {[0, 25, 50, 75, 100].map((v) => (
+            <button key={v} onClick={() => setP(v)} className={cx('mono h-8 flex-1 rounded-lg border text-xs font-semibold', p === v ? 'border-ink bg-ink text-white' : 'border-vien-2 bg-white text-mo-2 hover:bg-nen')}>{v}%</button>
+          ))}
         </div>
-        {tt === 'hoan_thanh' && <div className="rounded-xl bg-[#DCFCE7] px-3 py-2 text-[0.8125rem] text-[#166534]">Sau khi gửi, bấm “Đính kèm minh chứng” để tải văn bản PDF đã ký (hoặc ảnh, tệp) làm minh chứng.</div>}
-        {loi && <HopLoi loi={loi} />}
-        <div className="flex justify-end gap-2"><Nut onClick={dong}>Huỷ</Nut><Nut kieu="chinh" dangChay={dangChay} onClick={gui}>Gửi kết quả</Nut></div>
+      )}
+      {p >= 100 && <span className="text-xs text-[#166534]">Ghi nhận hoàn thành — nhớ đính kèm minh chứng.</span>}
+      {loi && <span className="text-xs text-nguy">{loi}</span>}
+      <div className="flex justify-end gap-2"><Nut onClick={() => setMo(false)}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void gui()}>Gửi</Nut></div>
+    </div>
+  );
+}
+
+// ---------- Thanh tình trạng: số nhiệm vụ theo tình trạng, bấm để lọc
+function ThanhTinhTrang({ ds, loc, datLoc, choDuyet, moTk, datMoTk }: { ds: Dong[]; loc: LocTT; datLoc: (l: LocTT) => void; choDuyet: number | null; moTk: boolean; datMoTk: (v: boolean) => void }) {
+  const dem = (k: LoaiTT) => ds.filter((x) => x.tt.loai === k).length;
+  const xong = dem('xong'), tl = phanTram(xong, ds.length);
+  const o: [LocTT, string, number, string][] = [
+    ['tat_ca', 'Tất cả', ds.length, 'text-den'], ['qua_han', 'Quá hạn', dem('qua_han'), 'text-nguy'], ['sap_han', 'Sắp đến hạn', dem('sap_han'), 'text-cam'],
+    ['chua_xong', 'Chưa xong', ds.length - xong, 'text-xanh'], ['xong', 'Hoàn thành', xong, 'text-[#166534]'],
+    ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, 'text-cam-dam'] as [LocTT, string, number, string]] : []),
+  ];
+  return (
+    <div className="flex flex-wrap items-stretch gap-2">
+      <div role="group" aria-label="Lọc theo tình trạng" className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5">
+        {o.map(([k, nhan, so, mau]) => (
+          <button key={k} onClick={() => datLoc(loc === k && k !== 'tat_ca' ? 'tat_ca' : k)} aria-pressed={loc === k}
+            className={cx('flex min-w-[104px] shrink-0 flex-col items-start rounded-xl border bg-white px-3 py-2 text-left transition', loc === k ? 'border-ink shadow-[inset_0_0_0_1px_var(--color-ink)]' : 'border-vien hover:border-vien-2')}>
+            <span className={cx('mono text-[1.25rem] font-bold leading-tight', so === 0 && k !== 'tat_ca' ? 'text-mo' : mau)}>{so}</span>
+            <span className="whitespace-nowrap text-[0.75rem] text-mo-2">{nhan}</span>
+          </button>
+        ))}
       </div>
-    </HopThoai>
+      <button onClick={() => datMoTk(!moTk)} aria-pressed={moTk} title="Tỉ lệ hoàn thành theo đơn vị chủ trì"
+        className={cx('flex min-w-[180px] flex-col justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-left', moTk ? 'border-ink' : 'border-vien hover:border-vien-2')}>
+        <span className="flex items-center justify-between text-[0.75rem] text-mo-2">Tỉ lệ hoàn thành <b className="mono text-den">{pt(tl)}</b></span>
+        <span className="h-1.5 rounded-full bg-nen-3"><span className="block h-1.5 rounded-full bg-[#16A34A]" style={{ width: `${tl}%` }} /></span>
+        <span className="text-[11px] font-semibold text-[#8E1B22]">{moTk ? 'Ẩn thống kê đơn vị' : 'Xem theo đơn vị →'}</span>
+      </button>
+    </div>
   );
 }
 
@@ -771,10 +926,9 @@ function oChu(c: KhoaCot, x: Dong): string {
     case 'ten': return x.n.ten;
     case 'chu_tri': return x.d.chu_tri_vb || chuTriMacDinh(x);
     case 'san_pham': return x.n.san_pham ?? '';
-    case 'han_vb': return x.d.han_vb ?? '';
+    case 'nguon_vb': return [x.d.nguon_vb, x.vb ? tenVb(x.vb) : ''].filter(Boolean).join('\n');
     case 'han': return ngayNgan(x.n.han);
     case 'tien_do': return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
-    case 'ket_qua': return x.cn[0] ? `${x.cn[0].noi_dung}\n(${x.cn[0].boi_ten ?? ''}, ${ngayGioDu(x.cn[0].luc)})` : '';
     case 'minh_chung': return x.mc.join('\n');
     case 'tinh_trang': return x.tt.nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';
@@ -799,7 +953,7 @@ async function xuatWord(ch: CauHinhA4, ds: Dong[]) {
       children: [new TextRun({ text: dong, bold: o.dam, italics: o.nghieng, font: 'Times New Roman', size: o.co ?? sz })] }));
   const o = (t: string, w: number, o2: Parameters<typeof doan>[1] & { gop?: number } = {}) => new TableCell({ borders, width: { size: w, type: WidthType.DXA }, columnSpan: o2.gop,
     verticalAlign: VerticalAlign.TOP, margins: { top: 40, bottom: 40, left: 70, right: 70 }, children: doan(t, o2) });
-  const giua = ['tt', 'han', 'han_vb', 'tinh_trang'];
+  const giua = ['tt', 'han', 'tinh_trang'];
   const hang: InstanceType<typeof TableRow>[] = [new TableRow({ tableHeader: true, children: cot.map((c, i) => o(c.nhan, rong[i], { dam: true, can: AlignmentType.CENTER })) })];
   for (const [g, arr] of nhomTheoThuTu(ch, ds)) {
     hang.push(new TableRow({ children: [o(`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`, rongNd, { dam: true, gop: cot.length })] }));
