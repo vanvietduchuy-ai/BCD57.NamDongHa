@@ -5,11 +5,11 @@ import { homNayVN } from './dinhDang';
 
 export const KHOA_CAU_HINH = 'danh_muc_a4';
 
-export type KhoaCot = 'tt' | 'ten' | 'chu_tri' | 'san_pham' | 'han_vb' | 'han' | 'tien_do' | 'ket_qua' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma';
+export type KhoaCot = 'tt' | 'ten' | 'nguon_vb' | 'chu_tri' | 'san_pham' | 'han' | 'tien_do' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma';
 export type CotA4 = { khoa: KhoaCot; nhan: string; rong: number; hien: boolean };
 export type NhomA4 = { id: string; ky_hieu: string; ten: string };
 // Thông tin riêng của từng dòng trong bảng (không có trong bảng nhiem_vu)
-export type DongA4 = { nhom?: string; thu_tu?: number; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number };
+export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number };
 export type CauHinhA4 = {
   tieu_de: string; dong_goc: string; dong_phu: string; ghi_chu: string; canh_bao_ngay: number;
   kho: { huong: 'ngang' | 'doc'; co_chu: number; le: [number, number, number, number] };   // lề trên, phải, dưới, trái (mm)
@@ -18,13 +18,12 @@ export type CauHinhA4 = {
 
 export const COT_MAC_DINH: CotA4[] = [
   { khoa: 'tt', nhan: 'TT', rong: 4, hien: true },
-  { khoa: 'ten', nhan: 'Nội dung nhiệm vụ', rong: 19, hien: true },
+  { khoa: 'ten', nhan: 'Nội dung nhiệm vụ', rong: 21, hien: true },
+  { khoa: 'nguon_vb', nhan: 'Nguồn văn bản giao', rong: 12, hien: true },
   { khoa: 'chu_tri', nhan: 'Cơ quan chủ trì / phối hợp', rong: 11, hien: true },
-  { khoa: 'san_pham', nhan: 'Chỉ tiêu thực hiện / sản phẩm', rong: 12, hien: true },
-  { khoa: 'han_vb', nhan: 'Thời hạn theo văn bản', rong: 8, hien: true },
+  { khoa: 'san_pham', nhan: 'Chỉ tiêu thực hiện / sản phẩm', rong: 13, hien: true },
   { khoa: 'han', nhan: 'Thời hạn hoàn thành', rong: 8, hien: true },
-  { khoa: 'tien_do', nhan: 'Tiến độ thực hiện', rong: 12, hien: true },
-  { khoa: 'ket_qua', nhan: 'Kết quả thực hiện', rong: 12, hien: true },
+  { khoa: 'tien_do', nhan: 'Tiến độ thực hiện', rong: 14, hien: true },
   { khoa: 'minh_chung', nhan: 'Minh chứng', rong: 8, hien: true },
   { khoa: 'tinh_trang', nhan: 'Tình trạng', rong: 7, hien: true },
   { khoa: 'lanh_dao', nhan: 'Lãnh đạo phụ trách', rong: 7, hien: false },
@@ -46,8 +45,14 @@ export function ghepCauHinh(luu: Partial<CauHinhA4> | null | undefined): CauHinh
   const l = luu ?? {};
   const cot = COT_MAC_DINH.map((c) => ({ ...c, ...(l.cot ?? []).find((x) => x.khoa === c.khoa) }));
   if (l.cot?.length) {
-    const thuTu = l.cot.map((c) => c.khoa);
-    cot.sort((a, b) => (thuTu.indexOf(a.khoa) + 100 * +(thuTu.indexOf(a.khoa) < 0)) - (thuTu.indexOf(b.khoa) + 100 * +(thuTu.indexOf(b.khoa) < 0)));
+    // Cột đã bỏ (vd. thời hạn theo văn bản, kết quả) tự rơi khỏi bảng; cột mới đặt ngay sau cột đứng trước nó trong mặc định
+    const thuTu = l.cot.map((c) => c.khoa as string);
+    const vi = (k: KhoaCot): number => {
+      const i = thuTu.indexOf(k); if (i >= 0) return i;
+      const j = COT_MAC_DINH.findIndex((c) => c.khoa === k);
+      return j > 0 ? vi(COT_MAC_DINH[j - 1].khoa) + 0.5 : -0.5;
+    };
+    cot.sort((a, b) => vi(a.khoa) - vi(b.khoa));
   }
   return {
     ...CAU_HINH_MAC_DINH, ...l,
