@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Archive, Bell, BookOpen, ChevronDown, ChevronUp, Radar, CheckSquare, FileText, Send, Home, LayoutGrid, LogOut, Menu, ShieldCheck, SlidersHorizontal, Mail,
+  Archive, Bell, BookOpen, ChevronDown, ChevronUp, PanelLeftClose, PanelLeftOpen, Radar, CheckSquare, FileText, Send, Home, LayoutGrid, LogOut, Menu, ShieldCheck, SlidersHorizontal, Mail,
 } from 'lucide-react';
 import { laDauMoi, TEN_VAI_TRO, useAuth, type HoSo, type VaiTro } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -134,6 +134,9 @@ export default function KhungTrang() {
     return () => { window.clearTimeout(hen); document.removeEventListener('focusout', veDau); vv?.removeEventListener('resize', doiKhung); };
   }, []);
   const [moThem, setMoThem] = useState(false);
+  // Thanh menu bên (máy tính): thu gọn còn biểu tượng để rộng chỗ cho trang thao tác; nhớ theo máy
+  const [gon, setGonS] = useState(() => { try { return localStorage.getItem('bcd57-menu-gon') === '1'; } catch { return false; } });
+  const setGon = (v: boolean) => { setGonS(v); try { localStorage.setItem('bcd57-menu-gon', v ? '1' : '0'); } catch { /* bỏ qua */ } };
   const [moLienHe, setMoLienHe] = useState(false);
   const thieuSdt = useThieuSdt();
   const nav = useNavigate();
@@ -166,36 +169,47 @@ export default function KhungTrang() {
   const chuTat = hoSo.ho_ten.split(' ').slice(-2).map((x) => x[0]).join('').toUpperCase();
 
   const Link = ({ m, gon = false }: { m: Muc; gon?: boolean }) => (
-    <NavLink to={m.den} end={m.den === '/'}
+    <NavLink to={m.den} end={m.den === '/'} title={menuGon && !gon ? m.ten : undefined} aria-label={menuGon && !gon ? m.ten : undefined}
       className={({ isActive }) => gon
         ? cx('flex h-14 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 text-[10.5px] transition-colors active:scale-95', isActive ? 'font-semibold text-do' : 'text-mo')
-        : cx('flex h-11 items-center gap-2.5 rounded-[10px] px-2.5 text-[0.875rem] transition-colors duration-200', isActive ? 'bg-white/12 font-semibold text-white shadow-[inset_3px_0_0_#F5C518]' : 'text-[#F6E3E0] hover:bg-white/5')}>
-      {m.icon}<span className={gon ? 'line-clamp-2 max-w-full text-center leading-[1.15]' : 'min-w-0 flex-1 truncate'}>{gon ? m.ngan ?? m.ten : m.ten}</span>
-      {!gon && !!m.dem && <span className="shrink-0 rounded-full bg-do px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{m.dem}</span>}
+        : cx('relative flex h-11 items-center rounded-[10px] text-[0.875rem] transition-colors duration-200', menuGon ? 'justify-center' : 'gap-2.5 px-2.5', isActive ? 'bg-white/12 font-semibold text-white shadow-[inset_3px_0_0_#F5C518]' : 'text-[#F6E3E0] hover:bg-white/5')}>
+      {m.icon}{!(menuGon && !gon) && <span className={gon ? 'line-clamp-2 max-w-full text-center leading-[1.15]' : 'min-w-0 flex-1 truncate'}>{gon ? m.ngan ?? m.ten : m.ten}</span>}
+      {!gon && !!m.dem && (menuGon
+        ? <span className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-do px-1 text-center text-[10px] font-bold leading-4 text-white">{m.dem}</span>
+        : <span className="shrink-0 rounded-full bg-do px-1.5 py-0.5 text-[11px] font-bold leading-none text-white">{m.dem}</span>)}
     </NavLink>
   );
+  const menuGon = gon;
   const chinh = ds.length > 4 ? ds.slice(0, 3) : ds;
   const them = ds.length > 4 ? ds.slice(3) : [];
 
   return (
     // Điện thoại: khung cố định cao đúng màn hình (thanh trên – vùng cuộn – thanh dưới), thanh dưới không trôi khi cuộn trên iPhone
     <div className="flex min-h-screen max-lg:fixed max-lg:inset-0 max-lg:min-h-0 max-lg:overflow-hidden">
-      <nav aria-label="Điều hướng chính" className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col gap-7 overflow-y-auto bg-gradient-to-b from-[#7C1419] via-ink to-ink-3 px-4 py-6 text-[#FFF4DA] lg:flex">
-        <div className="flex items-center justify-between gap-2 px-2"><Logo />{location.pathname !== '/' && <Chuong moSangPhai toi />}</div>
-        {nhom.map((n) => (
+      <nav aria-label="Điều hướng chính" className={cx('sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto overflow-x-hidden bg-gradient-to-b from-[#7C1419] via-ink to-ink-3 py-6 text-[#FFF4DA] transition-[width] duration-200 lg:flex', gon ? 'w-[76px] gap-5 px-3' : 'w-64 gap-7 px-4')}>
+        {gon
+          ? <div className="flex flex-col items-center gap-3"><LogoBcd className="h-10 w-10" />{location.pathname !== '/' && <Chuong moSangPhai toi />}</div>
+          : <div className="flex items-center justify-between gap-2 px-2"><Logo />{location.pathname !== '/' && <Chuong moSangPhai toi />}</div>}
+        {nhom.map((n, k) => (
           <div key={n} className="flex flex-col gap-1">
-            <div className="px-3 pb-2 text-[11px] font-semibold tracking-[1px] text-[#E0A9A3]">{n}</div>
+            {gon ? (k > 0 && <div className="mx-2 mb-1 border-t border-white/10" />) : <div className="px-3 pb-2 text-[11px] font-semibold tracking-[1px] text-[#E0A9A3]">{n}</div>}
             {ds.filter((m) => (m.nhom ?? 'ĐƠN VỊ') === n).map((m) => <Link key={m.den} m={m} />)}
           </div>
         ))}
         <div className="flex-1" />
-        <button onClick={() => setMoLienHe(true)} aria-label="Tài khoản" className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/5">
+        <button onClick={() => setGon(!gon)} title={gon ? 'Mở rộng thanh menu' : 'Thu gọn thanh menu'} aria-label={gon ? 'Mở rộng thanh menu' : 'Thu gọn thanh menu'}
+          className={cx('flex h-10 items-center rounded-[10px] text-[0.8125rem] text-[#F0C9C4] transition-colors hover:bg-white/5 hover:text-white', gon ? 'justify-center' : 'gap-2.5 px-2.5')}>
+          {gon ? <PanelLeftOpen className="h-5 w-5" strokeWidth={1.8} /> : <><PanelLeftClose className="h-5 w-5" strokeWidth={1.8} /><span>Thu gọn menu</span></>}
+        </button>
+        <button onClick={() => setMoLienHe(true)} aria-label="Tài khoản" title={gon ? hoSo.ho_ten : undefined} className={cx('flex w-full items-center rounded-xl py-2 text-left transition-colors hover:bg-white/5', gon ? 'justify-center' : 'gap-2.5 px-2')}>
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#FFF4DA] text-[0.8125rem] font-bold text-den">{chuTat}</span>
+          {!gon && <>
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="line-clamp-2 text-[0.8125rem] font-semibold leading-snug text-white">{hoSo.ho_ten}</span>
             <span className="line-clamp-2 text-[11.5px] leading-snug text-[#F0C9C4]">{hoSo.vai_tro === 'don_vi' ? hoSo.don_vi?.ten : VAI_TRO[hoSo.vai_tro]}</span>
           </span>
           <ChevronUp className="h-4 w-4 shrink-0 text-[#F0C9C4]" />
+          </>}
         </button>
       </nav>
 
@@ -212,7 +226,7 @@ export default function KhungTrang() {
           <Chuong />
         </div>
         <div ref={vungCuon} className="flex flex-1 flex-col max-lg:min-h-0 max-lg:overflow-y-auto max-lg:overflow-x-hidden max-lg:overscroll-y-contain">
-        <main className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col gap-4 px-3.5 pb-6 pt-3.5 sm:gap-5 sm:px-4 sm:pt-5 lg:px-8 lg:pb-10 lg:pt-6">
+        <main className={cx('mx-auto flex w-full flex-1', location.pathname === '/nhiem-vu' ? 'max-w-none' : 'max-w-[1400px]', ' flex-col gap-4 px-3.5 pb-6 pt-3.5 sm:gap-5 sm:px-4 sm:pt-5 lg:px-8 lg:pb-10 lg:pt-6')}>
           <div key={location.pathname} className="hien-trang flex flex-col gap-3.5 sm:gap-5"><Outlet /></div>
         </main>
         </div>
