@@ -2,7 +2,7 @@
 // Mỗi nhiệm vụ báo cáo = một dòng nhiem_vu_cap_nhat có tiền tố "Báo cáo tuần NN/YYYY:" -> không cần thêm bảng mới.
 // Hạn nộp lưu ở cau_hinh (khoá 'bao_cao_tuan'): thứ trong tuần + giờ.
 export const KHOA_BCT = 'bao_cao_tuan';
-export type CauHinhBCT = { thu: number; gio: number; bat: boolean };   // thu: 1 = thứ Hai … 7 = Chủ nhật
+export type CauHinhBCT = { thu: number; gio: number; phut?: number; bat: boolean };   // thu: 1 = thứ Hai … 7 = Chủ nhật
 export const BCT_MAC_DINH: CauHinhBCT = { thu: 5, gio: 17, bat: true };
 export const TEN_THU: Record<number, string> = { 1: 'thứ Hai', 2: 'thứ Ba', 3: 'thứ Tư', 4: 'thứ Năm', 5: 'thứ Sáu', 6: 'thứ Bảy', 7: 'Chủ nhật' };
 
@@ -10,6 +10,8 @@ const VN = 7 * 3600 * 1000;
 // Ngày (theo giờ VN) dạng UTC-midnight để tính toán
 const ngayVN = (d: Date) => { const t = new Date(d.getTime() + VN); return Date.UTC(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate()); };
 
+// Giờ hạn dạng 17:00
+export const gioHan = (ch: CauHinhBCT) => `${String(ch.gio).padStart(2, '0')}:${String(ch.phut ?? 0).padStart(2, '0')}`;
 export type Tuan = { so: number; nam: number; batDau: Date; ketThuc: Date; han: Date; ten: string; tienTo: string };
 // Tuần chứa ngày d (lui = số tuần lùi lại)
 export function tuanCua(d: Date, ch: CauHinhBCT, lui = 0): Tuan {
@@ -22,7 +24,7 @@ export function tuanCua(d: Date, ch: CauHinhBCT, lui = 0): Tuan {
   const so = Math.floor((thu5.getTime() - Date.UTC(nam, 0, 1)) / (7 * 86400000)) + 1;
   const batDau = new Date(thu2 - VN);
   const ketThuc = new Date(thu2 + 7 * 86400000 - VN - 1);
-  const han = new Date(thu2 + (ch.thu - 1) * 86400000 + ch.gio * 3600000 - VN);
+  const han = new Date(thu2 + (ch.thu - 1) * 86400000 + ch.gio * 3600000 + (ch.phut ?? 0) * 60000 - VN);
   const dd = (x: number) => { const t = new Date(x); return `${String(t.getUTCDate()).padStart(2, '0')}/${String(t.getUTCMonth() + 1).padStart(2, '0')}`; };
   return { so, nam, batDau, ketThuc, han, ten: `Tuần ${so}/${nam} (${dd(thu2)} – ${dd(thu2 + 6 * 86400000)})`, tienTo: `Báo cáo tuần ${so}/${nam}:` };
 }
