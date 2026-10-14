@@ -126,9 +126,11 @@ export default function KhungTrang() {
   useEffect(() => {
     const laO = (e: Element | null) => !!e && /^(INPUT|TEXTAREA|SELECT)$/.test(e.tagName);
     let hen = 0;
-    const veDau = () => { window.clearTimeout(hen); hen = window.setTimeout(() => { if (!laO(document.activeElement) && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0); }, 80); };
+    // Chỉ áp dụng cho khung điện thoại (cố định); máy tính cuộn trang bình thường — không kéo về đầu trang sau mỗi lần sửa
+    const dienThoai = () => window.matchMedia('(max-width: 1023.98px)').matches;
+    const veDau = () => { window.clearTimeout(hen); hen = window.setTimeout(() => { if (dienThoai() && !laO(document.activeElement) && (window.scrollY || document.documentElement.scrollTop)) window.scrollTo(0, 0); }, 80); };
     const vv = window.visualViewport;
-    const doiKhung = () => { if (vv && vv.height > window.innerHeight * 0.85) window.scrollTo(0, 0); };
+    const doiKhung = () => { if (dienThoai() && vv && vv.height > window.innerHeight * 0.85) window.scrollTo(0, 0); };
     document.addEventListener('focusout', veDau);
     vv?.addEventListener('resize', doiKhung);
     return () => { window.clearTimeout(hen); document.removeEventListener('focusout', veDau); vv?.removeEventListener('resize', doiKhung); };
