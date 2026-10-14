@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Archive, Bell, BookOpen, CalendarCheck, ChevronDown, ChevronUp, PanelLeftClose, PanelLeftOpen, Radar, CheckSquare, FileText, Send, Home, LayoutGrid, LogOut, Menu, ShieldCheck, SlidersHorizontal, Mail,
+  Archive, Bell, BookOpen, CalendarCheck, ChevronDown, ChevronUp, PanelLeftClose, PanelLeftOpen, CheckSquare, FileText, Send, Home, LayoutGrid, LogOut, Menu, ShieldCheck, SlidersHorizontal, Mail,
 } from 'lucide-react';
 import { laDauMoi, TEN_VAI_TRO, useAuth, type HoSo, type VaiTro } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -22,7 +22,7 @@ function menu(h: HoSo): Muc[] {
     { den: '/bao-cao-tuan', ten: 'Báo cáo tuần', ngan: 'Báo cáo tuần', icon: i(CalendarCheck) },
     { den: '/viec-can-nop', ten: 'Văn bản cần nộp', ngan: 'Văn bản cần nộp', icon: i(FileText) },
     { den: '/nhiem-vu', ten: 'Nhiệm vụ', icon: i(CheckSquare) },
-    ...(laDauMoi(h) ? [{ den: '/theo-doi', ten: 'Theo dõi đơn vị', icon: i(Radar) }, { den: '/ky-bao-cao', ten: 'Giao báo cáo', icon: i(Send) }] : []),
+    ...(laDauMoi(h) ? [{ den: '/ky-bao-cao', ten: 'Giao báo cáo', icon: i(Send) }] : []),
     { den: '/van-ban', ten: 'Văn bản đến – đi', ngan: 'Văn bản', icon: i(Mail) },
     { den: '/kho-van-ban', ten: 'Văn bản', icon: i(Archive) },
   ];
