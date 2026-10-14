@@ -105,7 +105,13 @@ export default function NhiemVuChiTiet() {
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-5">
           {n.dinh_ky && <TheoDoiDinhKy n={n} ds={data.ky} xacNhanDuoc={daGiao && (chuTri || quanTri)} xong={taiLai} />}
-          {daGiao && (chuTri || phoiHop || quanTri || lanhDao) && (
+          {/* Đơn vị chủ trì chỉ báo cáo kết quả hằng tuần trên bảng A4 (tiến độ tự cập nhật theo báo cáo) */}
+          {daGiao && chuTri && !quanTri && (
+            <Link to="/nhiem-vu?tab=chua_bct" className="flex items-center gap-2 rounded-2xl border border-[#DDD6FE] bg-[#F7F5FF] px-4 py-3 text-[0.875rem] text-den hover:bg-[#EFEBFF]">
+              <span className="flex-1"><b>Báo cáo kết quả thực hiện</b><span className="block text-xs text-mo">Nhập báo cáo tuần ở cột “Kết quả thực hiện” trên bảng nhiệm vụ — tiến độ tự cập nhật.</span></span>
+              <span className="text-xs font-semibold text-[#6D28D9]">Mở bảng →</span></Link>
+          )}
+          {daGiao && ((phoiHop && !chuTri) || quanTri || lanhDao) && (
             <CapNhatTienDo key={`${n.trang_thai}-${n.phan_tram}-${data.cn.length}`} n={n} laChuTri={chuTri || quanTri} quanTri={quanTri} xong={taiLai}
               tieuDe={chuTri || quanTri ? 'Báo cáo tiến độ' : lanhDao ? 'Ý kiến chỉ đạo' : 'Ý kiến của đơn vị phối hợp'} />
           )}

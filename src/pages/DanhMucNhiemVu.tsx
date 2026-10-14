@@ -234,7 +234,7 @@ export default function DanhMucNhiemVu() {
             oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()}
             moO={(x, khoa, o) => {
               const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
-              const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && (baoCao || suaDuocBang) : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
+              const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && suaDuocBang : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
               if (!duoc) return false;
               setOSua({ id: x.n.id, khoa, o }); return true;
             }}
@@ -262,7 +262,7 @@ export default function DanhMucNhiemVu() {
             rong={phamVi.length > 0} />
         </div>
         {dongChon && (
-          <KhungChiTiet key={dongChon.n.id} x={dongChon} ds={hien} chon={setChon} dong={() => setChon(null)} quanTri={suaDuocBang} tenDv={tenDv}
+          <KhungChiTiet key={dongChon.n.id} tienTo={tuan.tienTo} x={dongChon} ds={hien} chon={setChon} dong={() => setChon(null)} quanTri={suaDuocBang} tenDv={tenDv}
             duocBaoCao={dongChon.n.trang_thai_giao === 'da_duyet' && (quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id)}
             laChuTri={quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id}
             daGui={() => { setThongBao({ ok: 'Đã cập nhật kết quả thực hiện.' }); void taiLai(); }}
@@ -638,7 +638,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
                             // Bấm ô: mở hộp sửa đúng ô đó (nếu được sửa); ô không sửa được (TT, tình trạng…) mở khung chi tiết
                             onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('button')) return; if (!moO(x, c.khoa, (e.currentTarget as HTMLElement).getBoundingClientRect())) mo(x.n.id); }}
                             className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-middle [overflow-wrap:anywhere]', ['tt', 'han', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative',
-                              (suaDuoc && O_SUA[c.khoa]) || c.khoa === 'tien_do' || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
+                              (suaDuoc && O_SUA[c.khoa]) || (suaDuoc && c.khoa === 'tien_do') || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
                             style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>{o(x, c)}</td>
                         );
                       })}
@@ -656,7 +656,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
         </div>
       </div>
       <p className="m-0 mt-3 px-4 text-center text-xs text-mo">
-        {suaDuoc ? 'Bấm vào ô để sửa ngay ô đó; bấm số thứ tự (ô TT) hoặc ô Tình trạng để xem chi tiết nhiệm vụ. Kéo biểu tượng ⋮ ở ô TT để đưa nhiệm vụ lên, xuống hoặc sang nhóm khác.' : 'Bấm ô “Kết quả thực hiện” để nhập báo cáo tuần, ô “Tiến độ” để cập nhật tiến độ; bấm số thứ tự để xem chi tiết nhiệm vụ.'}
+        {suaDuoc ? 'Bấm vào ô để sửa ngay ô đó; bấm số thứ tự (ô TT) hoặc ô Tình trạng để xem chi tiết nhiệm vụ. Kéo biểu tượng ⋮ ở ô TT để đưa nhiệm vụ lên, xuống hoặc sang nhóm khác.' : 'Bấm ô “Kết quả thực hiện” để nhập báo cáo tuần — tiến độ thực hiện tự cập nhật theo báo cáo. Bấm số thứ tự để xem chi tiết nhiệm vụ.'}
       </p>
     </div>
   );
@@ -665,8 +665,8 @@ const chuTriMacDinh = (x: Dong) => x.n.chu_tri_ten ? `${x.n.chu_tri_ten} chủ t
 
 
 // ---------- Dạng thẻ (điện thoại)
-function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon }: {
-  x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
+function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon }: {
+  tienTo: string; x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
   dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void; luuDong: (p: Partial<DongA4>) => void;
   dsCha: Dong[]; chonCha: (id: string | null) => void; themCon: () => void;
   duocBaoCao: boolean; laChuTri: boolean; daGui: () => void; sua: () => void;
@@ -742,7 +742,7 @@ function KhungChiTiet({ x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri,
             </ul>
           )}
 
-          {duocBaoCao && <CapNhatNhanh x={x} laChuTri={laChuTri} quanTri={quanTri} luuDong={luuDong} xong={daGui} />}
+          {duocBaoCao && (quanTri || x.canBct) && <CapNhatNhanh x={x} laChuTri={laChuTri} quanTri={quanTri} luuDong={luuDong} xong={daGui} tienTo={quanTri ? undefined : tienTo} />}
 
           <NguonVanBan x={x} quanTri={quanTri} dsVb={dsVb} gan={ganVb} luuTen={luuTenNguon} />
 
@@ -961,13 +961,14 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
     if (kq && quanTri) luuDong({ so_lieu: { tu: soTu, mau: soMau, luc: new Date().toISOString() }, ...(x.d.danh_gia ? {} : { danh_gia: dg }) });
     setMo(false); setNoiDung(''); xong();
   };
-  const oSo = (nhan: string, v: string, dat: (v: string) => void, goi?: string) => (
+  const khoaMau = !quanTri && !!dg.tong;   // tổng số do Thường trực đặt -> đơn vị không sửa
+  const oSo = (nhan: string, v: string, dat: (v: string) => void, goi?: string, khoa = false) => (
     <label className="flex min-w-0 flex-1 flex-col gap-1"><span className="text-[11px] font-semibold text-mo-2">{nhan}</span>
-      <input inputMode="decimal" className={cx(lopO, 'mono min-h-10 bg-white text-[0.9375rem]')} placeholder={goi} value={v} onChange={(e) => dat(e.target.value.replace(/[^\d.,]/g, ''))} /></label>
+      <input inputMode="decimal" readOnly={khoa} className={cx(lopO, 'mono min-h-10 text-[0.9375rem]', khoa ? 'bg-nen text-mo-2' : 'bg-white')} placeholder={goi} value={v} onChange={(e) => dat(e.target.value.replace(/[^\d.,]/g, ''))} /></label>
   );
   return (
     <div className={cx('flex flex-col gap-2.5', !moSan && 'rounded-xl border border-vien bg-nen-2 p-3')}>
-      <div className="flex items-center gap-2">
+      {!quanTri ? <div className="flex items-center gap-2 text-[11px] text-mo-2">Đánh giá theo <b className="text-den">{TEN_DG[dg.kieu]}</b>{tienTo && <span className="ml-auto rounded bg-[#EDE9FE] px-1.5 py-0.5 font-semibold text-[#6D28D9]">{tienTo.replace(':', '')}</span>}</div> : <div className="flex items-center gap-2">
         <span className="text-[11px] font-semibold text-mo-2">Đánh giá theo</span>
         <div role="group" className="flex flex-1 gap-0.5 rounded-lg bg-white p-0.5">
           {(['ty_le', 'so_luong', 'tien_do', 'ky'] as KieuDG[]).filter((k) => k !== 'ky' || n.dinh_ky).map((k) => (
@@ -975,13 +976,13 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
               className={cx('h-7 flex-1 whitespace-nowrap rounded-md px-1.5 text-[11.5px]', dg.kieu === k ? 'bg-ink font-semibold text-white' : 'text-mo-2 hover:bg-nen')}>{TEN_DG[k]}</button>
           ))}
         </div>
-      </div>
+      </div>}
 
       {dg.kieu === 'ty_le' && <>
         <div className="flex items-end gap-2">
-          {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo('Tổng số', mau, setMau, 'vd: 37.070')}
+          {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo('Tổng số', mau, setMau, 'vd: 37.070', khoaMau)}
           <label className="flex w-[74px] shrink-0 flex-col gap-1"><span className="text-[11px] font-semibold text-mo-2">Chỉ tiêu</span>
-            <input inputMode="decimal" className={cx(lopO, 'mono min-h-10 bg-white text-[0.9375rem]')} placeholder="%" value={dg.chi_tieu ?? ''}
+            <input inputMode="decimal" readOnly={!quanTri} title={quanTri ? undefined : 'Chỉ tiêu do Cơ quan Thường trực đặt'} className={cx(lopO, 'mono min-h-10 text-[0.9375rem]', quanTri ? 'bg-white' : 'bg-nen text-mo-2')} placeholder="%" value={dg.chi_tieu ?? ''}
               onChange={(e) => { const v = docSo(e.target.value); setDg({ ...dg, chi_tieu: Number.isFinite(v) && e.target.value ? v : undefined }); }}
               onBlur={() => quanTri && luuDong({ danh_gia: dg })} /></label>
         </div>
@@ -993,7 +994,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
       </>}
 
       {dg.kieu === 'so_luong' && <>
-        <div className="flex items-end gap-2">{oSo('Đã hoàn thành', tu, setTu, '0')}<span className="pb-2.5 text-mo">/</span>{oSo('Yêu cầu', mau, setMau, 'số lượng')}</div>
+        <div className="flex items-end gap-2">{oSo('Đã hoàn thành', tu, setTu, '0')}<span className="pb-2.5 text-mo">/</span>{oSo('Yêu cầu', mau, setMau, 'số lượng', khoaMau)}</div>
         {kq && <div className="flex items-center gap-2 text-[0.8125rem]">
           <div className="h-1.5 flex-1 rounded-full bg-white"><div className="h-1.5 rounded-full bg-[#16A34A]" style={{ width: `${kq.phanTram}%` }} /></div>
           <span className="mono text-xs font-bold">{kq.phanTram}%</span></div>}
