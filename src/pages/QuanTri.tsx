@@ -7,7 +7,8 @@ import { ngayGio } from '../lib/dinhDang';
 import { Chip, DangTai, Hang, HopLoi, HopThoai, lopO, Nut, O, The, ThanhThaoTac, TieuDeThe, TieuDeTrang, cx } from '../components/ui';
 import { NutTepDrive } from '../components/TepDrive';
 import LichDinhKy from '../components/LichDinhKy';
-import { useAuth } from '../lib/auth';
+import { laAdmin, useAuth } from '../lib/auth';
+import { BCT_MAC_DINH, KHOA_BCT, TEN_THU, type CauHinhBCT } from '../lib/baoCaoTuan';
 import { khongDau } from '../lib/nhiemVu';
 import { HopLienHe, hienSdt, luuLienHe, type LienHe } from '../components/LienHe';
 import TaoTaiKhoanHangLoat, { KHOI_DV, khoiCua, type DvTk } from '../components/TaiKhoanHangLoat';
@@ -307,6 +308,8 @@ export function CaiDatTrang() {
 
 // Cài đặt bằng biểu mẫu (không sửa JSON): lịch tự mở kỳ, nhắc hạn, người ký, thể thức văn bản BCĐ
 function CaiDat() {
+  const { hoSo } = useAuth();
+  const admin = laAdmin(hoSo);
   const { data, dangTai, taiLai } = useDuLieu(async () => {
     const a = await supabase.from('cau_hinh').select('khoa, gia_tri');
     const ch = Object.fromEntries(((kq(a) ?? []) as { khoa: string; gia_tri: unknown }[]).map((x) => [x.khoa, x.gia_tri]));
@@ -322,9 +325,11 @@ function CaiDat() {
   const kenh = (data.ch.kenh_nhac ?? ['web']) as string[];
   const nk = (data.ch.nguoi_ky_bao_cao ?? { chuc_danh: '', ho_ten: '' }) as NguoiKy;
   const tt = (data.ch.the_thuc_bcd ?? {}) as TheThuc;
+  const bct = { ...BCT_MAC_DINH, ...(data.ch[KHOA_BCT] as Partial<CauHinhBCT> | undefined) };
   const macDinh: Record<string, unknown> = {
     n3: nh.truoc_3_ngay !== false, n1: nh.truoc_1_ngay !== false, nqh: nh.qua_han_hang_ngay !== false, nld: nh.bao_lanh_dao_sau_ngay ?? 2, email: kenh.includes('email'),
     nk_cd: nk.chuc_danh, nk_ht: nk.ho_ten,
+    bct_thu: bct.thu, bct_gio: bct.gio, bct_phut: bct.phut ?? 0, bct_bat: bct.bat,
     tb_cd: tt.truong_ban?.chuc_danh ?? 'TRƯỞNG BAN', tb_ht: tt.truong_ban?.ho_ten ?? '', cqt: tt.co_quan_cap_tren ?? '', cq: tt.co_quan ?? '', kh: tt.ky_hieu ?? 'BCĐ',
   };
   const v = g ?? macDinh;
@@ -340,6 +345,7 @@ function CaiDat() {
         { khoa: 'nhac_han', gia_tri: { ...nh, truoc_3_ngay: v.n3, truoc_1_ngay: v.n1, qua_han_hang_ngay: v.nqh, bao_lanh_dao_sau_ngay: Number(v.nld) }, mo_ta: 'Quy tắc nhắc hạn' },
         { khoa: 'kenh_nhac', gia_tri: ['web', v.email && 'email'].filter(Boolean), mo_ta: 'Kênh nhắc hạn' },
         { khoa: 'nguoi_ky_bao_cao', gia_tri: { chuc_danh: v.nk_cd, ho_ten: v.nk_ht }, mo_ta: 'Người ký báo cáo gửi Công an tỉnh' },
+        ...(admin ? [{ khoa: KHOA_BCT, gia_tri: { thu: Number(v.bct_thu), gio: Number(v.bct_gio), phut: Number(v.bct_phut), bat: !!v.bct_bat }, mo_ta: 'Hạn nộp báo cáo tuần' }] : []),
         { khoa: 'the_thuc_bcd', gia_tri: { ...tt, co_quan_cap_tren: v.cqt, co_quan: v.cq, ky_hieu: v.kh, truong_ban: { chuc_danh: v.tb_cd, ho_ten: v.tb_ht } }, mo_ta: 'Thể thức văn bản Ban Chỉ đạo' },
       ]),
     ];
@@ -361,6 +367,20 @@ function CaiDat() {
           </Hang>
           <Hang nhan="Báo lãnh đạo khi quá hạn">sau {so_('nld', 1, 30)} ngày</Hang>
           <Hang nhan="Gửi thêm qua email"><label className="flex min-h-10 items-center gap-2"><input type="checkbox" className="h-5 w-5 accent-[#A4161A]" checked={!!v.email} onChange={(e) => dat('email', e.target.checked)} />Có</label></Hang>
+        </The>
+        <The className="flex flex-col px-5 py-3">
+          <TieuDeThe>Báo cáo tuần</TieuDeThe>
+          <Hang nhan="Hạn nộp hằng tuần">
+            <select disabled={!admin} aria-label="Thứ" className={cx(lopO, 'w-auto')} value={String(v.bct_thu)} onChange={(e) => dat('bct_thu', Number(e.target.value))}>
+              {Object.entries(TEN_THU).map(([k, t]) => <option key={k} value={k}>{t[0].toUpperCase() + t.slice(1)}</option>)}</select>
+            <span className="flex items-center gap-1">
+              <select disabled={!admin} aria-label="Giờ" className={cx(lopO, 'w-auto')} value={String(v.bct_gio)} onChange={(e) => dat('bct_gio', Number(e.target.value))}>
+                {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{String(h).padStart(2, '0')} giờ</option>)}</select>
+              <select disabled={!admin} aria-label="Phút" className={cx(lopO, 'w-auto')} value={String(v.bct_phut)} onChange={(e) => dat('bct_phut', Number(e.target.value))}>
+                {[0, 15, 30, 45].map((m) => <option key={m} value={m}>{String(m).padStart(2, '0')} phút</option>)}</select>
+            </span>
+          </Hang>
+          <p className="m-0 pb-1 text-xs text-mo">Tuần tính từ thứ Hai đến Chủ nhật. Đơn vị chủ trì nhập báo cáo tuần ngay trên bảng A4 nhiệm vụ (cột “Kết quả thực hiện”).{!admin && ' Chỉ tài khoản Quản trị hệ thống được đổi hạn nộp.'}</p>
         </The>
         <The className="flex flex-col px-5 py-3">
           <TieuDeThe>Người ký báo cáo gửi Công an tỉnh</TieuDeThe>

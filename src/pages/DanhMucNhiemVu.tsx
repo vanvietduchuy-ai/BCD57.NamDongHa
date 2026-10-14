@@ -2,7 +2,7 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
@@ -13,7 +13,7 @@ import {
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
-import { BCT_MAC_DINH, boTienTo, KHOA_BCT, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
+import { BCT_MAC_DINH, boTienTo, gioHan, KHOA_BCT, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
@@ -83,7 +83,7 @@ export default function DanhMucNhiemVu() {
   const [thamSo] = useSearchParams();
   const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
   const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
-  const [locDv, setLocDv] = useState('');
+  const [locDv, setLocDv] = useState(() => thamSo.get('dv') ?? '');
   const [xemNhu, setXemNhu] = useState('');
   const [chon, setChon] = useState<string | null>(null);
   const [moCaiDat, setMoCaiDat] = useState(false);
@@ -204,24 +204,26 @@ export default function DanhMucNhiemVu() {
       <ThanhLoc ds={viecLa} loc={locTT} datLoc={setLocTT} choDuyet={donVi ? null : viecLa.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
         moTk={moTk} datMoTk={setMoTk} soHien={hien.length}
         congCu={<>
-          <label className="relative min-w-[200px] flex-1 sm:max-w-[340px]">
+          <label className="relative min-w-[200px] flex-[1_1_100%] sm:flex-1 sm:max-w-[340px]">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-mo" />
             <input className="h-9 w-full rounded-lg border border-vien bg-nen-2 pl-8 pr-2 text-[0.8125rem] outline-none focus:border-xanh focus:bg-white" placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
           </label>
           {!donVi && !xemNhu && (
-            <select className="h-9 max-w-[220px] rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem]" value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
+            <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
               <option value="">Mọi đơn vị chủ trì</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}
             </select>
           )}
           {quanTri && (
-            <select className="h-9 max-w-[220px] rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem]" value={xemNhu} onChange={(e) => { setXemNhu(e.target.value); setLocDv(''); }} aria-label="Xem như đơn vị">
+            <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={xemNhu} onChange={(e) => { setXemNhu(e.target.value); setLocDv(''); }} aria-label="Xem như đơn vị">
               <option value="">Xem: toàn bộ</option>{data.dv.map((d) => <option key={d.id} value={d.id}>Xem như: {tenNgan(d.ten)}</option>)}
             </select>
           )}
           {(tim || locDv || locTT !== 'tat_ca') && <button className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
           <span className="flex-1" />
-          <Zoom z={rieng.zoom ?? 'vua'} dat={(z) => setRieng({ ...rieng, zoom: z })} />
+          <Zoom z={rieng.zoom} dat={(z) => setRieng({ ...rieng, zoom: z })} />
         </>} />
+      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem || !locDv || x.n.chu_tri_don_vi_id === locDv))} ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
+        loc={locTT === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length)} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
@@ -376,7 +378,7 @@ function ThongKe({ ds, tatCa, dv, dvXem, quanTri, loc, chonDv }: { ds: Dong[]; t
   );
 }
 
-function Zoom({ z, dat }: { z: number | 'vua'; dat: (z: number | 'vua') => void }) {
+function Zoom({ z, dat }: { z?: number | 'vua'; dat: (z: number | 'vua') => void }) {
   const [hien, setHien] = useState(100);
   useEffect(() => { const f = (e: Event) => setHien(Math.round((e as CustomEvent<number>).detail * 100)); window.addEventListener('a4-ti-le', f); return () => window.removeEventListener('a4-ti-le', f); }, []);
   const so = typeof z === 'number' ? z : hien / 100;
@@ -490,7 +492,9 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
     const el = giay.current; if (!el) return;
     const ro = new ResizeObserver(() => setCaoGiay(el.scrollHeight)); ro.observe(el); return () => ro.disconnect();
   }, []);
-  const tiLe = rieng.zoom && rieng.zoom !== 'vua' ? rieng.zoom : Math.min(1.6, Math.max(0.3, (rongVo - 8) / pxRong));
+  // Điện thoại: mặc định cỡ dễ đọc, dễ bấm (vuốt ngang để xem hết bảng); "Vừa khung" để xem toàn trang
+  const vuaKhung = Math.min(1.6, Math.max(0.3, (rongVo - 8) / pxRong));
+  const tiLe = typeof rieng.zoom === 'number' ? rieng.zoom : rieng.zoom === undefined && rongVo < 640 ? Math.max(vuaKhung, 0.62) : vuaKhung;
   useEffect(() => { window.dispatchEvent(new CustomEvent('a4-ti-le', { detail: tiLe })); }, [tiLe]);
   const soTrang = Math.max(1, Math.ceil((caoGiay - 2) / pxCao));
 
@@ -652,7 +656,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
         </div>
       </div>
       <p className="m-0 mt-3 px-4 text-center text-xs text-mo">
-        {suaDuoc ? 'Bấm vào ô để sửa ngay ô đó; bấm số thứ tự (ô TT) hoặc ô Tình trạng để xem chi tiết nhiệm vụ. Kéo biểu tượng ⋮ ở ô TT để đưa nhiệm vụ lên, xuống hoặc sang nhóm khác.' : 'Bấm ô Tiến độ để cập nhật kết quả; bấm số thứ tự để xem chi tiết nhiệm vụ.'}
+        {suaDuoc ? 'Bấm vào ô để sửa ngay ô đó; bấm số thứ tự (ô TT) hoặc ô Tình trạng để xem chi tiết nhiệm vụ. Kéo biểu tượng ⋮ ở ô TT để đưa nhiệm vụ lên, xuống hoặc sang nhóm khác.' : 'Bấm ô “Kết quả thực hiện” để nhập báo cáo tuần, ô “Tiến độ” để cập nhật tiến độ; bấm số thứ tự để xem chi tiết nhiệm vụ.'}
       </p>
     </div>
   );
@@ -1017,6 +1021,28 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
       )}
       {loi && <span className="text-xs text-nguy">{loi}</span>}
       <div className="flex justify-end gap-2"><Nut onClick={() => setMo(false)}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void gui()}>Gửi</Nut></div>
+    </div>
+  );
+}
+
+// ---------- Dải báo cáo tuần: tiến độ báo cáo tuần này + hạn; một chạm lọc nhiệm vụ chưa báo cáo
+function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap }: { ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean }) {
+  if (!ds.length) return null;
+  const da = ds.filter((x) => x.tuanCn.length).length, con = ds.length - da;
+  const p = Math.round((han.getTime() - Date.now()) / 60000), qua = p < 0;
+  const conLai = qua ? 'đã quá hạn' : p >= 1440 ? `còn ${Math.floor(p / 1440)} ngày` : p >= 60 ? `còn ${Math.floor(p / 60)} giờ` : `còn ${p} phút`;
+  const xong = !con, gap = !xong && (qua || p < 1440);
+  return (
+    <div className={cx('flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border px-3 py-2', xong ? 'border-[#BBF7D0] bg-[#F0FDF4]' : gap ? 'border-[#FBCFD4] bg-[#FFF5F6]' : 'border-[#DDD6FE] bg-[#F7F5FF]')}>
+      <CalendarClock className={cx('h-5 w-5 shrink-0', xong ? 'text-[#166534]' : gap ? 'text-nguy' : 'text-[#6D28D9]')} />
+      <span className="min-w-0 flex-1 text-[0.8125rem] leading-snug">
+        <b>Báo cáo {ten.toLowerCase()}:</b> <b className="mono">{da}/{ds.length}</b> nhiệm vụ đã báo cáo
+        <span className="text-mo-2"> · hạn {hanChu} ({conLai})</span>
+        {nhap && !xong && <span className="block text-xs text-mo">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
+      </span>
+      {!xong && <button onClick={() => datLoc(!loc)} aria-pressed={loc}
+        className={cx('h-9 w-full shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold sm:w-auto', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>
+        {loc ? 'Hiện tất cả' : `Chưa báo cáo (${con})`}</button>}
     </div>
   );
 }
