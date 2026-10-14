@@ -12,7 +12,7 @@ import { NutTepDrive } from '../components/TepDrive';
 import TepDinhKem, { type Tep } from '../components/TepDinhKem';
 import MinhChungVanBan, { COT_MINH_CHUNG, type MinhChung } from '../components/MinhChungVanBan';
 import TheoDoiDinhKy, { type KyNv } from '../components/TheoDoiDinhKy';
-import { HanNv, ThanhNv } from './NhiemVu';
+import { HanNv, ThanhNv } from '../components/NhanNhiemVu';
 
 type CapNhat = { id: number; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
 

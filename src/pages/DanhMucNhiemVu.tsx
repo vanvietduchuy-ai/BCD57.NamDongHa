@@ -1,8 +1,8 @@
 // Danh mục nhiệm vụ dạng bảng A4 động: theo dõi, giao đơn vị chủ trì, đơn vị nhập kết quả và minh chứng,
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowDown, ArrowUp, ChevronLeft, Download, FileUp, LayoutGrid, Minus, Paperclip, Pencil, Plus, Rows3, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowDown, ArrowUp, Download, FileUp, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
@@ -12,7 +12,7 @@ import {
   CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, tinhTrang, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
-import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, TieuDeTrang, cx } from '../components/ui';
+import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
 
 const MM = 96 / 25.4;
@@ -20,8 +20,8 @@ const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
 type DonVi = { id: string; ten: string; loai: string | null };
 type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
 type Dong = { n: NhiemVu; tt: TinhTrang; stt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4 };
-type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong';
-type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; the?: boolean };
+type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet';
+type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
 
 const KHOA_RIENG = 'bcd57-danh-muc-a4';
 const docRieng = (): Rieng => { try { return JSON.parse(localStorage.getItem(KHOA_RIENG) ?? '{}'); } catch { return {}; } };
@@ -60,8 +60,10 @@ export default function DanhMucNhiemVu() {
 
   const [rieng, setRiengS] = useState<Rieng>(docRieng);
   const setRieng = (r: Rieng) => { setRiengS(r); ghiRieng(r); };
-  const [tim, setTim] = useState('');
-  const [locTT, setLocTT] = useState<LocTT>('tat_ca');
+  // Liên kết từ Tổng quan: ?tab=qua_han|cho_duyet|hoan_thanh, ?q=từ khoá
+  const [thamSo] = useSearchParams();
+  const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
+  const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
   const [locDv, setLocDv] = useState('');
   const [xemNhu, setXemNhu] = useState('');
   const [chon, setChon] = useState<string | null>(null);
@@ -71,8 +73,6 @@ export default function DanhMucNhiemVu() {
   const [baoCao, setBaoCao] = useState<NhiemVu | null>(null);
   const [sua, setSua] = useState<NhiemVu | null>(null);
   const [thongBao, setThongBao] = useState<{ loi?: string; ok?: string } | null>(null);
-  const [rongMan, setRongMan] = useState(() => window.innerWidth);
-  useEffect(() => { const f = () => setRongMan(window.innerWidth); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, []);
 
   const ch = data?.ch ?? CAU_HINH_MAC_DINH;
   // Ghi cấu hình (chỉ Thường trực): cập nhật ngay trên màn hình rồi lưu
@@ -107,6 +107,7 @@ export default function DanhMucNhiemVu() {
   const hien = phamVi.filter((x) => {
     if (!dvXem && locDv && x.n.chu_tri_don_vi_id !== locDv) return false;
     const k = x.tt.loai;
+    if (locTT === 'cho_duyet' && x.n.trang_thai_giao !== 'de_xuat') return false;
     if (locTT === 'qua_han' && k !== 'qua_han') return false;
     if (locTT === 'sap_han' && k !== 'sap_han') return false;
     if (locTT === 'chua_xong' && k === 'xong') return false;
@@ -121,7 +122,6 @@ export default function DanhMucNhiemVu() {
   if (!data) return null;
 
   const suaDuocBang = quanTri && !xemNhu;
-  const laThe = rieng.the ?? rongMan < 720;
   const dongChon = tatCa.find((x) => x.n.id === chon) ?? null;
   const tenDv = (id: string | null) => data.dv.find((d) => d.id === id)?.ten ?? '';
 
@@ -133,8 +133,8 @@ export default function DanhMucNhiemVu() {
 
   return (
     <>
-      <TieuDeTrang tren={<><Link to="/nhiem-vu" className="text-mo"><ChevronLeft className="-mt-0.5 inline h-4 w-4" />Nhiệm vụ</Link> · {donVi ? hoSo?.don_vi?.ten : 'Bảng theo dõi dạng A4'}</>}
-        ten="Danh mục nhiệm vụ"
+      <TieuDeTrang tren={donVi ? hoSo?.don_vi?.ten : 'Danh mục nhiệm vụ · bảng A4'}
+        ten={donVi ? 'Nhiệm vụ' : 'Nhiệm vụ Ban Chỉ đạo'}
         phai={<>
           <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatWord(ch, hien).catch((e) => setThongBao({ loi: loiDe(e) }))} ngan="Word">Xuất Word</Nut>
           <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatExcel(ch, hien, phamVi, data.dv)} ngan="Excel">Xuất Excel</Nut>
@@ -155,7 +155,7 @@ export default function DanhMucNhiemVu() {
           <input className={cx(lopO, 'w-full bg-white pl-10')} placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
         </label>
         <div className="flex flex-wrap overflow-hidden rounded-xl border border-vien-2 bg-white" role="group" aria-label="Lọc theo tình trạng">
-          {([['tat_ca', 'Tất cả'], ['qua_han', 'Quá hạn'], ['sap_han', 'Sắp đến hạn'], ['chua_xong', 'Chưa xong'], ['xong', 'Hoàn thành']] as [LocTT, string][]).map(([k, t]) => (
+          {([['tat_ca', 'Tất cả'], ['qua_han', 'Quá hạn'], ['sap_han', 'Sắp đến hạn'], ['chua_xong', 'Chưa xong'], ['xong', 'Hoàn thành'], ...(donVi ? [] : [['cho_duyet', `Chờ duyệt giao${phamVi.some((x) => x.n.trang_thai_giao === 'de_xuat') ? ` (${phamVi.filter((x) => x.n.trang_thai_giao === 'de_xuat').length})` : ''}`]])] as [LocTT, string][]).map(([k, t]) => (
             <button key={k} aria-pressed={locTT === k} onClick={() => setLocTT(k)}
               className={cx('min-h-10 border-r border-vien px-3 text-[0.8125rem] font-semibold last:border-0', locTT === k ? 'bg-ink text-white' : 'text-mo-2 hover:bg-nen-2')}>{t}</button>
           ))}
@@ -171,16 +171,13 @@ export default function DanhMucNhiemVu() {
           </select>
         )}
         <span className="flex-1" />
-        {!laThe && <Zoom z={rieng.zoom ?? 'vua'} dat={(z) => setRieng({ ...rieng, zoom: z })} />}
-        <Nut icon={laThe ? <Rows3 className="h-4 w-4" /> : <LayoutGrid className="h-4 w-4" />} onClick={() => setRieng({ ...rieng, the: !laThe })}>{laThe ? 'Bảng A4' : 'Dạng thẻ'}</Nut>
+        <Zoom z={rieng.zoom ?? 'vua'} dat={(z) => setRieng({ ...rieng, zoom: z })} />
       </div>
 
-      {laThe
-        ? <DangThe ds={hien} nhomDs={nhomDs} mo={setChon} />
-        : <BangA4 ch={ch} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
+      <BangA4 ch={ch} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={setChon} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
             baoCao={(n) => setBaoCao(n)} duocBaoCao={(n) => n.trang_thai_giao === 'da_duyet' && (quanTri || n.chu_tri_don_vi_id === hoSo?.don_vi_id)}
-            rong={phamVi.length > 0} />}
+            rong={phamVi.length > 0} />
 
       {dongChon && (
         <KhungChiTiet x={dongChon} dong={() => setChon(null)} quanTri={suaDuocBang} nhomDs={nhomDs} tenDv={tenDv}
@@ -484,29 +481,6 @@ function OSuaChu({ dau, luu, huy }: { dau: string; luu: (v: string) => void; huy
 }
 
 // ---------- Dạng thẻ (điện thoại)
-function DangThe({ ds, nhomDs, mo }: { ds: Dong[]; nhomDs: NhomA4[]; mo: (id: string) => void }) {
-  if (!ds.length) return <Rong>Không có nhiệm vụ.</Rong>;
-  let truoc = '';
-  return (
-    <div className="flex flex-col gap-2.5">
-      {ds.map((x) => {
-        const g = nhomDs.find((y) => y.id === x.nhom); const dauNhom = x.nhom !== truoc; truoc = x.nhom; const m = MAU_TT[x.tt.loai];
-        return (
-          <div key={x.n.id} className="contents">
-            {dauNhom && <span className="mt-1 text-xs font-bold text-do">{g ? `${g.ky_hieu}. ${g.ten}` : 'Chưa phân nhóm'}</span>}
-            <button onClick={() => mo(x.n.id)} className="flex flex-col gap-1.5 rounded-2xl border border-vien bg-white p-3.5 text-left" style={{ borderLeft: `4px solid ${m.vach}` }}>
-              <span className="flex items-center gap-2"><b className="mono text-do">{x.stt}</b><span className="flex-1" /><span className="rounded-md px-2 py-0.5 text-[11.5px] font-bold" style={{ color: m.chu, background: m.nen }}>{x.tt.nhan}</span></span>
-              <span className="text-[0.875rem] font-semibold leading-snug">{x.n.ten}</span>
-              <span className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-mo"><span>Hạn: <b className="text-den">{ngayNgan(x.n.han) || '—'}</b></span><span>Chủ trì: {tenNgan(x.n.chu_tri_ten) || '—'}</span><span>Minh chứng: {x.mc.length}</span></span>
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---------- Khung chi tiết bên phải
 function KhungChiTiet({ x, dong, quanTri, nhomDs, tenDv, duocBaoCao, baoCao, sua, doiNhom, diChuyen, duyet, xoa, moTrang }: {
   x: Dong; dong: () => void; quanTri: boolean; nhomDs: NhomA4[]; tenDv: (id: string | null) => string; duocBaoCao: boolean;
   baoCao: () => void; sua: () => void; doiNhom: (g: string) => void; diChuyen: (h: number) => void; duyet: () => void; xoa: () => void; moTrang: () => void;

@@ -9,12 +9,11 @@ import { NutTepDrive } from '../components/TepDrive';
 import LichDinhKy from '../components/LichDinhKy';
 import { useAuth } from '../lib/auth';
 import { khongDau } from '../lib/nhiemVu';
-import PhanQuyenChiTieu from '../components/PhanQuyenChiTieu';
 import { HopLienHe, hienSdt, luuLienHe, type LienHe } from '../components/LienHe';
 import TaoTaiKhoanHangLoat, { KHOI_DV, khoiCua, type DvTk } from '../components/TaiKhoanHangLoat';
 
-type Tab = 'tai_khoan' | 'don_vi' | 'chi_tieu' | 'lich' | 'cai_dat' | 'luu_tru' | 'nhat_ky';
-const TABS: [Tab, string][] = [['tai_khoan', 'Tài khoản'], ['don_vi', 'Đơn vị'], ['chi_tieu', 'Quản lý chỉ tiêu'], ['lich', 'Lịch báo cáo định kỳ'], ['cai_dat', 'Cài đặt'], ['luu_tru', 'Lưu trữ & tự động'], ['nhat_ky', 'Nhật ký']];
+type Tab = 'tai_khoan' | 'don_vi' | 'lich' | 'cai_dat' | 'luu_tru' | 'nhat_ky';
+const TABS: [Tab, string][] = [['tai_khoan', 'Tài khoản'], ['don_vi', 'Đơn vị'], ['lich', 'Lịch báo cáo định kỳ'], ['cai_dat', 'Cài đặt'], ['luu_tru', 'Lưu trữ & tự động'], ['nhat_ky', 'Nhật ký']];
 
 export default function QuanTri() {
   const [sp, setSp] = useSearchParams();
@@ -28,7 +27,6 @@ export default function QuanTri() {
       </div>
       {tab === 'tai_khoan' && <TaiKhoan />}
       {tab === 'don_vi' && <><DauMoi /><DonVi /></>}
-      {tab === 'chi_tieu' && <PhanQuyenChiTieu />}
       {tab === 'lich' && <LichTheoDonVi />}
       {tab === 'cai_dat' && <CaiDat />}
       {tab === 'luu_tru' && <LuuTru />}

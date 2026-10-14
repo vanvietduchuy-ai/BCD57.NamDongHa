@@ -1,13 +1,12 @@
 import { Link } from 'react-router-dom';
-import { ArrowUp, BarChart3, ChevronRight, FileText, Mail, Zap } from 'lucide-react';
+import { ArrowUp, ChevronRight, FileText, Mail, Zap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { kq, useBayGio, useDuLieu } from '../lib/useDuLieu';
 import { useAuth } from '../lib/auth';
 import { conLai, hai, ngay, ngayGio, tenNgan } from '../lib/dinhDang';
 import { TT_NOP } from './KyBaoCaoChiTiet';
 import { DINH_KY, type DinhKy, type TrangThaiNv } from '../lib/nhiemVu';
-import { Chip, ChipHan, DangTai, HopLoi, Rong, The, TieuDeThe, cx } from '../components/ui';
-import { hanKy, kyMacDinh, tenKyCt } from '../lib/chiTieu';
+import { Chip, DangTai, HopLoi, Rong, The, TieuDeThe, cx } from '../components/ui';
 import { Chuong } from '../components/KhungTrang';
 
 export type Viec = { nop_id: string; don_vi_id: string; trang_thai: string; ky_id: string; ten: string; loai: string; han_nop: string; qua_han: boolean; cap?: string; don_vi_giao?: string | null };
@@ -29,21 +28,15 @@ export default function TrangChuDonVi() {
   const { hoSo } = useAuth();
   const { data, loi, dangTai, taiLai } = useDuLieu(async () => {
     const dv = hoSo!.don_vi_id!;
-    const ky = kyMacDinh();
-    const [a, b, c, ct, sl, vb] = await Promise.all([
+    const [a, b, c, vb] = await Promise.all([
       supabase.from('v_viec_can_nop').select('*').eq('don_vi_id', dv).order('han_nop'),
       supabase.from('nop_bao_cao').select('id, trang_thai, nop_luc, ky_bao_cao(ten)').eq('don_vi_id', dv).not('nop_luc', 'is', null).order('nop_luc', { ascending: false }).limit(5),
       supabase.from('v_nhiem_vu').select('id, ma, ten, han, trang_thai, phan_tram, qua_han, con_ngay, chu_tri_don_vi_id, phoi_hop_ids, dinh_ky, ky_han, ky_xong').neq('trang_thai', 'hoan_thanh').neq('trang_thai', 'tam_dung').order('han', { nullsFirst: false }),
-      supabase.from('chi_tieu').select('id, han_ngay').contains('don_vi_ids', [dv]).eq('hoat_dong', true),
-      supabase.from('chi_tieu_so_lieu').select('chi_tieu_id').eq('don_vi_id', dv).eq('ky', ky).eq('da_gui', true),
       supabase.from('v_cong_van_nhan').select('id', { count: 'exact', head: true }).eq('don_vi_id', dv).is('nhan_luc', null),
     ]);
-    const dsCt = (ct.data ?? []) as { id: string; han_ngay: number }[];
-    const soLieu = dsCt.length ? { ky, tong: dsCt.length, daGui: ((sl.data ?? []) as { chi_tieu_id: string }[]).filter((x) => dsCt.some((c) => c.id === x.chi_tieu_id)).length,
-      han: hanKy(ky, Math.min(...dsCt.map((c) => c.han_ngay))) } : null;
     const vbMoi = vb.error ? 0 : vb.count ?? 0;
     const nv = ((kq(c) ?? []) as (NvDv & { phoi_hop_ids: string[] | null })[]).filter((n) => n.chu_tri_don_vi_id === dv || (n.phoi_hop_ids ?? []).includes(dv));
-    return { viec: (kq(a) ?? []) as Viec[], daGui: (kq(b) ?? []) as unknown as DaGui[], nv, soLieu, vbMoi };
+    return { viec: (kq(a) ?? []) as Viec[], daGui: (kq(b) ?? []) as unknown as DaGui[], nv, vbMoi };
   });
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
   if (dangTai && !data) return <DangTai />;
@@ -69,22 +62,13 @@ export default function TrangChuDonVi() {
         </div>
 
         <div className="flex flex-col gap-3">
-          {(data.soLieu || data.vbMoi > 0) && (
-            <div className={cx('grid gap-3', data.soLieu && data.vbMoi > 0 ? 'grid-cols-2' : 'grid-cols-1')}>
-              {data.soLieu && (
-                <Link to="/so-lieu" className="the-noi flex min-w-0 flex-col gap-1.5 rounded-2xl border border-vien bg-white p-3.5 text-den">
-                  <span className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-mo-2"><BarChart3 className="h-4 w-4 text-[#8E1B22]" />Số liệu {tenKyCt(data.soLieu.ky).toLowerCase()}</span>
-                  <span className="flex items-baseline gap-1.5"><b className={cx('mono text-[1.375rem] leading-none', data.soLieu.daGui < data.soLieu.tong ? 'text-cam-dam' : 'text-[#166534]')}>{data.soLieu.daGui}/{data.soLieu.tong}</b><span className="text-[0.75rem] text-mo">chỉ tiêu đã gửi</span></span>
-                  {data.soLieu.daGui < data.soLieu.tong ? <ChipHan han={data.soLieu.han} className="self-start" /> : <Chip nen="bg-[#DCFCE7]" chu="text-[#166534]" className="self-start">Đã gửi đủ</Chip>}
-                </Link>
-              )}
-              {data.vbMoi > 0 && (
+          {data.vbMoi > 0 && (
+            <div className="grid grid-cols-1 gap-3">
                 <Link to="/van-ban" className="the-noi flex min-w-0 flex-col gap-1.5 rounded-2xl border border-[#FBCFD4] bg-[#FFF5F6] p-3.5 text-den">
                   <span className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-mo-2"><Mail className="h-4 w-4 text-nguy" />Văn bản đến</span>
                   <span className="flex items-baseline gap-1.5"><b className="mono text-[1.375rem] leading-none text-nguy">{data.vbMoi}</b><span className="text-[0.75rem] text-mo">chưa bấm nhận</span></span>
                   <span className="text-[11.5px] font-semibold text-[#8E1B22]">Mở xem →</span>
                 </Link>
-              )}
             </div>
           )}
           <div className="flex items-center gap-2 pt-1">
