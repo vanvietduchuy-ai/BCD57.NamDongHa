@@ -13,7 +13,7 @@ export type NhomA4 = { id: string; ky_hieu: string; ten: string };
 export type KieuDG = 'ty_le' | 'so_luong' | 'tien_do' | 'ky';
 export type DanhGia = { kieu: KieuDG; chi_tieu?: number; tong?: number };
 export type SoLieuDG = { tu: number; mau: number; luc: string };
-export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number; danh_gia?: DanhGia; so_lieu?: SoLieuDG };
+export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number; danh_gia?: DanhGia; so_lieu?: SoLieuDG; cha?: string; tt_tay?: { loai: LoaiTT; nhan: string } };   // tt_tay: tình trạng sửa tay (bỏ = tự động)   // cha: id nhiệm vụ lớn chứa nhiệm vụ này
 export type CauHinhA4 = {
   tieu_de: string; dong_goc: string; dong_phu: string; ghi_chu: string; canh_bao_ngay: number;
   kho: { huong: 'ngang' | 'doc'; co_chu: number; le: [number, number, number, number] };   // lề trên, phải, dưới, trái (mm)
