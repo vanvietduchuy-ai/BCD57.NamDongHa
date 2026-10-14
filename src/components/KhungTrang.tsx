@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Archive, Bell, BookOpen, ChevronDown, ChevronUp, PanelLeftClose, PanelLeftOpen, Radar, CheckSquare, FileText, Send, Home, LayoutGrid, LogOut, Menu, ShieldCheck, SlidersHorizontal, Mail,
+  Archive, Bell, BookOpen, CalendarCheck, ChevronDown, ChevronUp, PanelLeftClose, PanelLeftOpen, Radar, CheckSquare, FileText, Send, Home, LayoutGrid, LogOut, Menu, ShieldCheck, SlidersHorizontal, Mail,
 } from 'lucide-react';
 import { laDauMoi, TEN_VAI_TRO, useAuth, type HoSo, type VaiTro } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -19,6 +19,7 @@ function menu(h: HoSo): Muc[] {
   if (vt === 'don_vi') return [
     // 3 mục đầu nằm ở thanh dưới trên điện thoại
     { den: '/', ten: 'Trang chủ', icon: i(Home) },
+    { den: '/bao-cao-tuan', ten: 'Báo cáo tuần', ngan: 'Báo cáo tuần', icon: i(CalendarCheck) },
     { den: '/viec-can-nop', ten: 'Văn bản cần nộp', ngan: 'Văn bản cần nộp', icon: i(FileText) },
     { den: '/nhiem-vu', ten: 'Nhiệm vụ', icon: i(CheckSquare) },
     ...(laDauMoi(h) ? [{ den: '/theo-doi', ten: 'Theo dõi đơn vị', icon: i(Radar) }, { den: '/ky-bao-cao', ten: 'Giao báo cáo', icon: i(Send) }] : []),
@@ -28,6 +29,7 @@ function menu(h: HoSo): Muc[] {
   const chung: Muc[] = [
     { den: '/', ten: 'Tổng quan', icon: i(LayoutGrid), nhom: 'ĐIỀU HÀNH' },
     { den: '/nhiem-vu', ten: 'Nhiệm vụ BCĐ', icon: i(CheckSquare), nhom: 'ĐIỀU HÀNH' },
+    { den: '/bao-cao-tuan', ten: 'Báo cáo tuần', ngan: 'Báo cáo tuần', icon: i(CalendarCheck), nhom: 'ĐIỀU HÀNH' },
     { den: '/ky-bao-cao', ten: 'Theo dõi kỳ báo cáo', ngan: 'Theo dõi kỳ', icon: i(FileText), nhom: 'ĐIỀU HÀNH' },
   ];
   if (vt === 'lanh_dao') return [...chung,
