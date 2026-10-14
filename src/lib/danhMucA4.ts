@@ -5,7 +5,7 @@ import { homNayVN } from './dinhDang';
 
 export const KHOA_CAU_HINH = 'danh_muc_a4';
 
-export type KhoaCot = 'tt' | 'ten' | 'nguon_vb' | 'chu_tri' | 'san_pham' | 'han' | 'tien_do' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma';
+export type KhoaCot = 'tt' | 'ten' | 'nguon_vb' | 'chu_tri' | 'san_pham' | 'han' | 'tien_do' | 'ket_qua_tuan' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma';
 export type CotA4 = { khoa: KhoaCot; nhan: string; rong: number; hien: boolean };
 export type NhomA4 = { id: string; ky_hieu: string; ten: string };
 // Thông tin riêng của từng dòng trong bảng (không có trong bảng nhiem_vu)
@@ -28,6 +28,7 @@ export const COT_MAC_DINH: CotA4[] = [
   { khoa: 'san_pham', nhan: 'Chỉ tiêu thực hiện / sản phẩm', rong: 13, hien: true },
   { khoa: 'han', nhan: 'Thời hạn hoàn thành', rong: 8, hien: true },
   { khoa: 'tien_do', nhan: 'Tiến độ thực hiện', rong: 14, hien: true },
+  { khoa: 'ket_qua_tuan', nhan: 'Kết quả thực hiện', rong: 15, hien: true },   // tự điền từ báo cáo tuần
   { khoa: 'minh_chung', nhan: 'Minh chứng', rong: 8, hien: true },
   { khoa: 'tinh_trang', nhan: 'Tình trạng', rong: 7, hien: true },
   { khoa: 'lanh_dao', nhan: 'Lãnh đạo phụ trách', rong: 7, hien: false },
