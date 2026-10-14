@@ -1,6 +1,6 @@
 import { lazy, Suspense, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
-import { AuthProvider, coQuanLyCt, laDauMoi, useAuth, type VaiTro } from './lib/auth';
+import { AuthProvider, laDauMoi, useAuth, type VaiTro } from './lib/auth';
 import KhungTrang from './components/KhungTrang';
 import { DangTai } from './components/ui';
 import DangNhap from './pages/DangNhap';
@@ -12,15 +12,12 @@ const TrangChuDonVi = lazy(() => import('./pages/TrangChuDonVi'));
 const ViecCanNop = lazy(() => import('./pages/ViecCanNop'));
 const NopBaoCao = lazy(() => import('./pages/NopBaoCao'));
 const QuanTri = lazy(() => import('./pages/QuanTri'));
-const NhiemVu = lazy(() => import('./pages/NhiemVu'));
 const NhiemVuChiTiet = lazy(() => import('./pages/NhiemVuChiTiet'));
 const DanhMucNhiemVu = lazy(() => import('./pages/DanhMucNhiemVu'));
 const KhoVanBan = lazy(() => import('./pages/KhoVanBan'));
 const SoanBaoCaoChung = lazy(() => import('./pages/SoanBaoCaoChung'));
 const SoCongVan = lazy(() => import('./pages/SoCongVan'));
 const VanBanDenDi = lazy(() => import('./pages/VanBanDenDi'));
-const ChiTieu = lazy(() => import('./pages/ChiTieu'));
-const SoLieu = lazy(() => import('./pages/SoLieu'));
 const CaiDatTrang = lazy(() => import('./pages/QuanTri').then((m) => ({ default: m.CaiDatTrang })));
 
 function Chan({ cho, hoac = false, children }: { cho: VaiTro[]; hoac?: boolean; children: ReactNode }) {
@@ -45,14 +42,12 @@ function CacTrang() {
           <Route path="theo-doi" element={<Chan cho={[]} hoac={laDauMoi(hoSo)}><TongQuan chuTri={hoSo.don_vi_id} /></Chan>} />
           <Route path="viec-can-nop" element={<ViecCanNop />} />
           <Route path="viec-can-nop/:id" element={<NopBaoCao />} />
-          <Route path="nhiem-vu" element={<NhiemVu />} />
-          <Route path="nhiem-vu/danh-muc" element={<DanhMucNhiemVu />} />
+          <Route path="nhiem-vu" element={<DanhMucNhiemVu />} />
+          <Route path="nhiem-vu/danh-muc" element={<Navigate to="/nhiem-vu" replace />} />
           <Route path="nhiem-vu/:id" element={<NhiemVuChiTiet />} />
           <Route path="kho-van-ban" element={<KhoVanBan />} />
           <Route path="so-cong-van" element={<SoCongVan />} />
           <Route path="van-ban" element={<Chan cho={['admin', 'quan_tri', 'don_vi']}><VanBanDenDi /></Chan>} />
-          <Route path="chi-tieu" element={<Chan cho={cqtt} hoac={coQuanLyCt(hoSo)}><ChiTieu /></Chan>} />
-          <Route path="so-lieu" element={<Chan cho={['don_vi', 'quan_tri', 'admin']}><SoLieu /></Chan>} />
           <Route path="quan-tri" element={<Chan cho={['admin']}><QuanTri /></Chan>} />
           <Route path="cai-dat" element={<Chan cho={['admin', 'quan_tri']}><CaiDatTrang /></Chan>} />
           <Route path="*" element={<Navigate to="/" replace />} />
