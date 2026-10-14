@@ -8,6 +8,7 @@ import { TT_NOP } from './KyBaoCaoChiTiet';
 import { DINH_KY, type DinhKy, type TrangThaiNv } from '../lib/nhiemVu';
 import { Chip, DangTai, HopLoi, Rong, The, TieuDeThe, cx } from '../components/ui';
 import { Chuong } from '../components/KhungTrang';
+import { TheBaoCaoTuan } from './BaoCaoTuan';
 
 export type Viec = { nop_id: string; don_vi_id: string; trang_thai: string; ky_id: string; ten: string; loai: string; han_nop: string; qua_han: boolean; cap?: string; don_vi_giao?: string | null };
 // Nhãn loại việc kèm đơn vị giao (Thường trực BCĐ / đầu mối)
@@ -62,6 +63,7 @@ export default function TrangChuDonVi() {
         </div>
 
         <div className="flex flex-col gap-3">
+          {hoSo?.don_vi_id && <TheBaoCaoTuan dv={hoSo.don_vi_id} />}
           {data.vbMoi > 0 && (
             <div className="grid grid-cols-1 gap-3">
                 <Link to="/van-ban" className="the-noi flex min-w-0 flex-col gap-1.5 rounded-2xl border border-[#FBCFD4] bg-[#FFF5F6] p-3.5 text-den">
