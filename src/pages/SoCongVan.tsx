@@ -1,4 +1,5 @@
 // Sổ công văn đến / đi — tự vào sổ khi đơn vị gửi báo cáo văn bản, khi Cơ quan Thường trực thêm văn bản vào kho.
+// Lấy số theo từng loại văn bản: công văn, thông báo, báo cáo… mỗi loại một dãy số riêng trong năm.
 import { useMemo, useState } from 'react';
 import { BookPlus, ExternalLink, FilePen, FileSpreadsheet, Layers, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
@@ -41,7 +42,9 @@ export default function SoCongVan() {
   const [nam, setNam] = useState(new Date().getFullYear());
   const [tim, setTim] = useState('');
   const [loai, setLoai] = useState<LoaiVb | ''>('');
-  const [nhom, setNhom] = useState(false);
+  // Số đánh theo từng loại nên mặc định xem sổ nhóm theo loại; nhớ lựa chọn theo máy
+  const [nhom, setNhomS] = useState(() => { try { return localStorage.getItem('bcd57-so-nhom') !== '0'; } catch { return true; } });
+  const setNhom = (v: boolean) => { setNhomS(v); try { localStorage.setItem('bcd57-so-nhom', v ? '1' : '0'); } catch { /* bỏ qua */ } };
   const [chon, setChon] = useState<Dong | null>(null);
   const [them, setThem] = useState(false);
   // Hai sổ: sổ của Ban Chỉ đạo (văn bản đến BCĐ, văn bản BCĐ ban hành) và sổ của Cơ quan Thường trực; nhớ lựa chọn theo máy
@@ -53,7 +56,7 @@ export default function SoCongVan() {
     const chuSo = cuaSo === 'bcd'
       ? ((await supabase.from('don_vi').select('id').eq('loai', 'lanh_dao_bcd').limit(1).maybeSingle()).data?.id as string | undefined) ?? ''
       : ((await supabase.rpc('don_vi_thuong_truc')).data as string | null) ?? '';
-    const r = await supabase.from('v_so_van_ban').select('*').eq('don_vi_id', chuSo).eq('nam', nam).order('so_thu_tu', { ascending: false });
+    const r = await supabase.from('v_so_van_ban').select('*').eq('don_vi_id', chuSo).eq('nam', nam).order('ngay', { ascending: false }).order('tao_luc', { ascending: false });
     return { dong: (kq(r) ?? []) as Dong[], chuSo };
   }, [nam, cuaSo]);
 
@@ -69,22 +72,24 @@ export default function SoCongVan() {
     return THU_TU_LOAI.filter((k) => m.has(k)).map((k) => [k, m.get(k)!] as const);
   }, [theoSo]);
   const ds = useMemo(() => theoSo.filter((d) => !loai || d.loai === loai), [theoSo, loai]);
-  const nhomDs = useMemo(() => THU_TU_LOAI.map((k) => [k, ds.filter((d) => d.loai === k)] as const).filter(([, r]) => r.length), [ds]);
+  // Trong từng loại: số mới nhất lên đầu
+  const nhomDs = useMemo(() => THU_TU_LOAI.map((k) => [k, ds.filter((d) => d.loai === k).sort((a, b) => b.so_thu_tu - a.so_thu_tu)] as const).filter(([, r]) => r.length), [ds]);
+  const dsLoc = useMemo(() => (loai ? [...ds].sort((a, b) => b.so_thu_tu - a.so_thu_tu) : ds), [ds, loai]);
   const dem = (l: 'den' | 'di') => (data?.dong ?? []).filter((d) => d.loai_so === l).length;
 
   const xuatExcel = async () => {
     const XLSX = await import('xlsx');
-    const thuTu = nhom ? nhomDs.flatMap(([, r]) => [...r].reverse()) : [...ds].reverse();
+    const thuTu = nhom || loai ? nhomDs.flatMap(([, r]) => [...r].reverse()) : [...ds].reverse();
     const dong = thuTu.map((d) => ({
       [so === 'den' ? 'Số đến' : 'Số đi']: d.so_thu_tu, [so === 'den' ? 'Ngày đến' : 'Ngày gửi']: ngay(d.ngay),
-      'Số, ký hiệu': d.so_ky_hieu ?? '', 'Ngày văn bản': d.ngay_ban_hanh ? ngay(d.ngay_ban_hanh) : '', 'Loại': LOAI_VB[d.loai],
+      'Loại': LOAI_VB[d.loai], 'Số, ký hiệu': d.so_ky_hieu ?? '', 'Ngày văn bản': d.ngay_ban_hanh ? ngay(d.ngay_ban_hanh) : '',
       [so === 'den' ? 'Nơi gửi' : 'Nơi nhận']: (so === 'den' ? d.noi_gui : d.noi_nhan) ?? '', 'Trích yếu': d.trich_yeu,
       'Người ký': [d.chuc_vu_nguoi_ky, d.nguoi_ky].filter(Boolean).join(' '), 'Ghi chú': d.ghi_chu ?? '',
       'Tệp (Google Drive)': d.drive_url || linkXemDrive(d.drive_file_id) || '',
       'Tài liệu kèm theo': (d.tep ?? []).map((f) => f.ten).join('; '),
     }));
     const ws = XLSX.utils.json_to_sheet(dong);
-    ws['!cols'] = [8, 12, 18, 12, 12, 30, 60, 30, 20, 45, 40].map((w) => ({ wch: w }));
+    ws['!cols'] = [8, 12, 12, 18, 12, 30, 60, 30, 20, 45, 40].map((w) => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, so === 'den' ? 'Sổ đến' : 'Sổ đi');
     // Thống kê số văn bản theo loại (cả sổ đến và sổ đi trong năm)
@@ -162,7 +167,7 @@ export default function SoCongVan() {
             <BangSo ds={r} so={so} chon={setChon} anLoai />
           </section>
         ))
-        : <BangSo ds={ds} so={so} chon={setChon} anLoai={!!loai} />}
+        : <BangSo ds={dsLoc} so={so} chon={setChon} anLoai={!!loai} />}
 
       <ChiTietSo d={chon} cuaSo={cuaSo} dong={() => setChon(null)} xong={() => { setChon(null); void taiLai(); }} />
       {quanTri && cuaSo === 'bcd' && them && <HopVaoSoBcd so={so} chuSo={data?.chuSo ?? ''} dong={() => setThem(false)} xong={() => { setThem(false); void taiLai(); }} />}
@@ -255,7 +260,7 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
       : { ghi_chu: g.ghi_chu.trim() || null };
     const { error } = await supabase.from('so_van_ban').update(capNhat).eq('id', d.id);
     setDang(false);
-    if (error) setLoi(/duplicate|unique/i.test(error.message) ? `${den ? 'Số đến' : 'Số đi'} ${so}/${g.ngay.slice(0, 4)} đã có trong sổ — chọn số khác.` : loiDe(error));
+    if (error) setLoi(/duplicate|unique/i.test(error.message) ? `${den ? 'Số đến' : 'Số đi'} ${so}/${g.ngay.slice(0, 4)} của loại ${LOAI_VB[d.loai] ?? 'Khác'} đã có trong sổ — chọn số khác.` : loiDe(error));
     else xong();
   };
   const xoaKhoiSo = async () => {
@@ -281,13 +286,13 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
   };
   return (
     <>
-      <HopThoai mo dong={dong} tieuDe={`${den ? 'Số đến' : 'Số đi'} ${d.so_thu_tu}/${d.nam}`} rong="max-w-[900px]">
+      <HopThoai mo dong={dong} tieuDe={`${den ? 'Số đến' : 'Số đi'} ${d.so_thu_tu}/${d.nam} · ${LOAI_VB[d.loai] ?? 'Khác'}`} rong="max-w-[900px]">
         <div className="flex flex-col gap-4">
           {sua ? (
             <div className="flex flex-col gap-3 rounded-2xl border border-vien bg-nen-2 p-3 sm:p-4">
               <div className="flex items-center gap-2 text-[0.8125rem] font-bold text-den"><Pencil className="h-4 w-4" />Sửa thông tin vào sổ</div>
               <div className="grid grid-cols-2 gap-3">
-                <O nhan={den ? 'Số đến' : 'Số đi'}><input inputMode="numeric" className={lopO} value={g.so_thu_tu} onChange={(e) => setG({ ...g, so_thu_tu: e.target.value.replace(/\D/g, '') })} /></O>
+                <O nhan={`${den ? 'Số đến' : 'Số đi'} (${LOAI_VB[d.loai] ?? 'Khác'})`}><input inputMode="numeric" className={lopO} value={g.so_thu_tu} onChange={(e) => setG({ ...g, so_thu_tu: e.target.value.replace(/\D/g, '') })} /></O>
                 <O nhan={den ? 'Ngày đến' : 'Ngày gửi'}><input type="date" className={lopO} value={g.ngay} onChange={(e) => setG({ ...g, ngay: e.target.value })} /></O>
               </div>
               <O nhan={den ? 'Nơi gửi' : 'Nơi nhận'}><input className={lopO} value={g.noi} onChange={(e) => setG({ ...g, noi: e.target.value })} /></O>
@@ -323,7 +328,7 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
 }
 
 // Vào sổ của Ban Chỉ đạo: chọn văn bản trong kho (hoặc tải văn bản mới), số đến / đi hệ thống tự cấp nếu để trống
-type VbChon = { id: string; so_ky_hieu: string | null; trich_yeu: string; co_quan_ban_hanh: string; ngay_ban_hanh: string | null };
+type VbChon = { id: string; so_ky_hieu: string | null; trich_yeu: string; co_quan_ban_hanh: string; ngay_ban_hanh: string | null; loai: LoaiVb };
 function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: string; dong: () => void; xong: () => void }) {
   const den = so === 'den';
   const homNay = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
@@ -333,7 +338,7 @@ function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: strin
   const [taiMoi, setTaiMoi] = useState(false);
   const [dang, setDang] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
-  const ds = useDuLieu(async () => (kq(await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(500)) ?? []) as VbChon[], []);
+  const ds = useDuLieu(async () => (kq(await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh, loai').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(500)) ?? []) as VbChon[], []);
   const loc = useMemo(() => { const t = khongDau(tim.trim()); return (ds.data ?? []).filter((v) => !t || khongDau(`${v.so_ky_hieu ?? ''} ${v.trich_yeu} ${v.co_quan_ban_hanh}`).includes(t)).slice(0, 40); }, [ds.data, tim]);
   const chonVb = (v: VbChon) => { setVb(v); if (den && !g.noi) setG((x) => ({ ...x, noi: v.co_quan_ban_hanh })); };
   const luu = async () => {
@@ -347,7 +352,7 @@ function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: strin
       [den ? 'noi_gui' : 'noi_nhan']: g.noi.trim() || null, ghi_chu: g.ghi_chu.trim() || null, ...(soTT ? { so_thu_tu: soTT } : {}),
     });
     setDang(false);
-    if (error) setLoi(/duplicate|unique/i.test(error.message) ? 'Số này hoặc văn bản này đã có trong sổ — kiểm tra lại.' : loiDe(error)); else xong();
+    if (error) setLoi(/duplicate|unique/i.test(error.message) ? `Số này (loại ${LOAI_VB[vb.loai] ?? 'Khác'}) hoặc văn bản này đã có trong sổ — kiểm tra lại.` : loiDe(error)); else xong();
   };
   return (
     <>
@@ -355,7 +360,7 @@ function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: strin
         <div className="flex flex-col gap-3.5">
           {vb ? (
             <div className="flex items-start gap-3 rounded-xl border border-vien bg-nen-2 p-3">
-              <div className="flex min-w-0 flex-1 flex-col"><b className="so text-[0.875rem]">{vb.so_ky_hieu ?? '—'}</b><span className="text-[0.875rem] leading-snug">{vb.trich_yeu}</span><span className="text-xs text-mo">{vb.co_quan_ban_hanh}</span></div>
+              <div className="flex min-w-0 flex-1 flex-col"><span className="flex items-center gap-2"><NhanLoai l={vb.loai} /><b className="so text-[0.875rem]">{vb.so_ky_hieu ?? '—'}</b></span><span className="text-[0.875rem] leading-snug">{vb.trich_yeu}</span><span className="text-xs text-mo">{vb.co_quan_ban_hanh}</span></div>
               <Nut onClick={() => setVb(null)}>Đổi</Nut>
             </div>
           ) : (
@@ -376,7 +381,7 @@ function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: strin
             </div>
           )}
           <div className="grid grid-cols-2 gap-3">
-            <O nhan={den ? 'Số đến' : 'Số đi'} goiY="Để trống: hệ thống tự cấp số tiếp theo"><input inputMode="numeric" className={lopO} value={g.so} onChange={(e) => setG({ ...g, so: e.target.value.replace(/\D/g, '') })} /></O>
+            <O nhan={den ? 'Số đến' : 'Số đi'} goiY={vb ? `Để trống: tự cấp số ${LOAI_VB[vb.loai] ?? 'Khác'} tiếp theo` : 'Để trống: tự cấp số tiếp theo của loại văn bản'}><input inputMode="numeric" className={lopO} value={g.so} onChange={(e) => setG({ ...g, so: e.target.value.replace(/\D/g, '') })} /></O>
             <O nhan={den ? 'Ngày đến' : 'Ngày gửi'}><input type="date" className={lopO} value={g.ngay} onChange={(e) => setG({ ...g, ngay: e.target.value })} /></O>
           </div>
           <O nhan={den ? 'Nơi gửi' : 'Nơi nhận'}><input className={lopO} value={g.noi} onChange={(e) => setG({ ...g, noi: e.target.value })} /></O>
@@ -388,7 +393,7 @@ function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: strin
       {taiMoi && <FormVanBan mo dong={() => setTaiMoi(false)} dau={{ thu_muc: den ? 'cap_tren_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
         xong={async (id) => {
           setTaiMoi(false);
-          const r = await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh').eq('id', id).maybeSingle();
+          const r = await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh, loai').eq('id', id).maybeSingle();
           if (r.data) chonVb(r.data as VbChon); void ds.taiLai();
         }} />}
     </>
