@@ -19,9 +19,8 @@ function menu(h: HoSo): Muc[] {
   if (vt === 'don_vi') return [
     // 3 mục đầu nằm ở thanh dưới trên điện thoại
     { den: '/', ten: 'Trang chủ', icon: i(Home) },
-    { den: '/bao-cao-tuan', ten: 'Báo cáo tuần', ngan: 'Báo cáo tuần', icon: i(CalendarCheck) },
+    { den: '/nhiem-vu', ten: 'Nhiệm vụ, báo cáo tuần', ngan: 'Nhiệm vụ', icon: i(CheckSquare) },
     { den: '/viec-can-nop', ten: 'Văn bản cần nộp', ngan: 'Văn bản cần nộp', icon: i(FileText) },
-    { den: '/nhiem-vu', ten: 'Nhiệm vụ', icon: i(CheckSquare) },
     ...(laDauMoi(h) ? [{ den: '/ky-bao-cao', ten: 'Giao báo cáo', icon: i(Send) }] : []),
     { den: '/van-ban', ten: 'Văn bản đến – đi', ngan: 'Văn bản', icon: i(Mail) },
     { den: '/kho-van-ban', ten: 'Văn bản', icon: i(Archive) },
