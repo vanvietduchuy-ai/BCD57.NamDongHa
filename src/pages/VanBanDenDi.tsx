@@ -347,7 +347,7 @@ function GuiVanBan({ mo, dong, quanTri, dsDv, coQuan, xong }: { mo: boolean; don
         {quanTri ? (
           <ChonDonVi ds={dsDv} chon={chon} doi={setChon} />
         ) : (
-          <div className="flex items-start gap-2 rounded-xl bg-nen-2 px-3 py-2.5 text-[0.875rem]"><Send className="mt-0.5 h-4 w-4 shrink-0 text-mo" /><span>Gửi đến: <b>Cơ quan Thường trực BCĐ 57 (Tổ Tổng hợp)</b></span></div>
+          <div className="flex items-start gap-2 rounded-xl bg-nen-2 px-3 py-2.5 text-[0.875rem]"><Send className="mt-0.5 h-4 w-4 shrink-0 text-mo" /><span>Gửi đến: <b>Thường trực Ban Chỉ đạo 57</b></span></div>
         )}
         <ChonTepKem ds={kem} doi={setKem} baoLoi={setLoi} />
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_200px]">
