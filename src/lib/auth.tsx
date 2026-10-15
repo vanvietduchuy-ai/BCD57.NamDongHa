@@ -26,7 +26,7 @@ type Ctx = {
 // Đổi thông báo lỗi của Supabase Auth sang tiếng Việt
 export function loiDangNhap(m: string): string {
   if (/Invalid login credentials/i.test(m)) return 'Sai email hoặc mật khẩu.';
-  if (/Email not confirmed/i.test(m)) return 'Tài khoản chưa được kích hoạt. Liên hệ Tổ Tổng hợp – Công an phường.';
+  if (/Email not confirmed/i.test(m)) return 'Tài khoản chưa được kích hoạt. Liên hệ Thường trực Ban Chỉ đạo.';
   if (/security purposes|rate limit|too many/i.test(m)) return 'Thao tác quá nhiều lần. Vui lòng thử lại sau ít phút.';
   if (/Failed to fetch|NetworkError|network/i.test(m)) return 'Không kết nối được máy chủ. Kiểm tra mạng rồi thử lại.';
   if (/should be different/i.test(m)) return 'Mật khẩu mới phải khác mật khẩu cũ.';
@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!uid) { setHoSo(null); setDangTai(false); return; }
     try {
       const h = await taiHoSo(uid);
-      if (!h) setLoi('Tài khoản chưa được cấp quyền hoặc đã bị khoá. Liên hệ Tổ Tổng hợp – Công an phường.');
+      if (!h) setLoi('Tài khoản chưa được cấp quyền hoặc đã bị khoá. Liên hệ Thường trực Ban Chỉ đạo.');
       setHoSo(h);
     } catch (e) {
       setLoi(e instanceof Error ? e.message : 'Không tải được hồ sơ người dùng');
