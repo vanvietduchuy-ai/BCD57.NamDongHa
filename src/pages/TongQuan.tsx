@@ -45,7 +45,7 @@ async function tai(chuTri: string | null, donViMinh: string | null, hoSo: HoSo |
     qNop,
     supabase.from('nhiem_vu').select('id', { count: 'exact', head: true }).eq('trang_thai_giao', 'de_xuat'),
     qNv.order('han', { ascending: true, nullsFirst: false }),
-    // Tổ Tổng hợp (Thường trực) cũng nộp báo cáo chuyên đề cho Phòng VH-XH
+    // Thường trực Ban Chỉ đạo cũng nộp báo cáo chuyên đề cho Phòng VH-XH
     !chuTri && donViMinh ? supabase.from('v_viec_can_nop').select('nop_id, ten, han_nop, don_vi_giao').eq('don_vi_id', donViMinh).order('han_nop') : Promise.resolve({ data: [], error: null }),
   ]);
   const tatCa = (kq(f) ?? []) as NvChuY[];
@@ -176,7 +176,7 @@ export default function TongQuan({ chuTri = null, nhung = false }: { chuTri?: st
         <Link to={data.canNop.length === 1 ? `/viec-can-nop/${data.canNop[0].nop_id}` : '/viec-can-nop'}
           className="the-noi flex items-center gap-3 rounded-2xl border border-[#FDE68A] bg-[#FEF9E7] px-4 py-2.5 text-den">
           <Send className="h-4 w-4 shrink-0 text-cam" />
-          <span className="min-w-0 flex-1 truncate text-[0.8125rem]"><b>Tổ Tổng hợp cần nộp {data.canNop.length}</b> · {data.canNop[0].ten}</span>
+          <span className="min-w-0 flex-1 truncate text-[0.8125rem]"><b>Thường trực cần nộp {data.canNop.length}</b> · {data.canNop[0].ten}</span>
           <ChipHan han={data.canNop[0].han_nop} />
         </Link>
       )}
