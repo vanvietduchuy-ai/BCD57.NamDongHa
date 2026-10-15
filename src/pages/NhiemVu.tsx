@@ -279,7 +279,7 @@ export default function NhiemVuTrang() {
   );
 }
 
-// "Tổ Tổng hợp – Công an phường" -> "Tổ Tổng hợp - CAP"
+// "Tổ CSKV – Công an phường" -> "Tổ CSKV - CAP"
 const tenNganDv = (t: string | null | undefined) => (t ?? '').replace(' – Công an phường', ' - CAP').replace('Phòng Văn hóa – Xã hội', 'Phòng VH-XH').replace('Văn phòng HĐND – UBND', 'VP HĐND-UBND');
 
 // Khung chi tiết bên phải (màn hình rộng) theo thiết kế gốc: "6 rõ", căn cứ, cập nhật tiến độ
