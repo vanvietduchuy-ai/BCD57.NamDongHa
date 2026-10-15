@@ -37,7 +37,7 @@ type Dong = {
 export default function SoCongVan() {
   const { hoSo } = useAuth();
   const quanTri = laQuanTri(hoSo);
-  // Sổ công văn đến / đi của Cơ quan Thường trực BCĐ (Tổ Tổng hợp theo dõi); các đơn vị không theo dõi sổ này
+  // Sổ công văn đến / đi của Cơ quan Thường trực BCĐ; các đơn vị không theo dõi sổ này
   const duocXem = hoSo?.vai_tro !== 'don_vi';
   const [so, setSo] = useState<'den' | 'di'>('den');
   const [nam, setNam] = useState(new Date().getFullYear());
@@ -111,13 +111,13 @@ export default function SoCongVan() {
     XLSX.writeFile(wb, `so-cong-van-${so === 'den' ? 'den' : 'di'}${duoi}-${nam}.xlsx`);
   };
 
-  if (!duocXem) return <><TieuDeTrang ten="Sổ công văn" /><Rong>Sổ công văn đến, đi do Cơ quan Thường trực BCĐ (Tổ Tổng hợp) theo dõi.</Rong></>;
+  if (!duocXem) return <><TieuDeTrang ten="Sổ công văn" /><Rong>Sổ công văn đến, đi do Thường trực Ban Chỉ đạo theo dõi.</Rong></>;
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
   if (dangTai && !data) return <DangTai />;
 
   return (
     <>
-      <TieuDeTrang tren={cuaSo === 'bcd' ? 'Ban Chỉ đạo 57 phường · Cơ quan Thường trực quản lý' : 'Cơ quan Thường trực BCĐ 57 · Tổ Tổng hợp theo dõi'} ten="Sổ công văn"
+      <TieuDeTrang tren={cuaSo === 'bcd' ? 'Ban Chỉ đạo 57 phường · Cơ quan Thường trực quản lý' : 'Thường trực Ban Chỉ đạo 57 phường'} ten="Sổ công văn"
         phai={<>
           <Nut icon={<FileSpreadsheet className="h-4 w-4" />} onClick={xuatExcel}>Xuất Excel</Nut>
           {quanTri && <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setThem(true)}>Vào sổ văn bản</Nut>}
