@@ -1,5 +1,6 @@
 // Sổ công văn đến / đi — tự vào sổ khi đơn vị gửi báo cáo văn bản, khi Cơ quan Thường trực thêm văn bản vào kho.
-// Lấy số theo từng loại văn bản: công văn, thông báo, báo cáo… mỗi loại một dãy số riêng trong năm.
+// Sổ của Ban Chỉ đạo: lấy số theo từng loại văn bản (mỗi loại một dãy số riêng trong năm).
+// Sổ của Cơ quan Thường trực: một dãy số nối tiếp liên tục trong năm, không phụ thuộc loại văn bản.
 import { useMemo, useState } from 'react';
 import { BookPlus, ExternalLink, FilePen, FileSpreadsheet, Layers, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
@@ -71,15 +72,18 @@ export default function SoCongVan() {
     theoSo.forEach((d) => m.set(d.loai, (m.get(d.loai) ?? 0) + 1));
     return THU_TU_LOAI.filter((k) => m.has(k)).map((k) => [k, m.get(k)!] as const);
   }, [theoSo]);
+  // Sổ BCĐ đánh số theo loại; sổ Cơ quan Thường trực đánh số nối tiếp chung
+  const theoLoai = cuaSo === 'bcd';
+  const nhomLoai = nhom && theoLoai;
   const ds = useMemo(() => theoSo.filter((d) => !loai || d.loai === loai), [theoSo, loai]);
   // Trong từng loại: số mới nhất lên đầu
   const nhomDs = useMemo(() => THU_TU_LOAI.map((k) => [k, ds.filter((d) => d.loai === k).sort((a, b) => b.so_thu_tu - a.so_thu_tu)] as const).filter(([, r]) => r.length), [ds]);
-  const dsLoc = useMemo(() => (loai ? [...ds].sort((a, b) => b.so_thu_tu - a.so_thu_tu) : ds), [ds, loai]);
+  const dsLoc = useMemo(() => (loai || !theoLoai ? [...ds].sort((a, b) => b.so_thu_tu - a.so_thu_tu) : ds), [ds, loai, theoLoai]);
   const dem = (l: 'den' | 'di') => (data?.dong ?? []).filter((d) => d.loai_so === l).length;
 
   const xuatExcel = async () => {
     const XLSX = await import('xlsx');
-    const thuTu = nhom || loai ? nhomDs.flatMap(([, r]) => [...r].reverse()) : [...ds].reverse();
+    const thuTu = theoLoai && (nhom || loai) ? nhomDs.flatMap(([, r]) => [...r].reverse()) : [...dsLoc].reverse();
     const dong = thuTu.map((d) => ({
       [so === 'den' ? 'Số đến' : 'Số đi']: d.so_thu_tu, [so === 'den' ? 'Ngày đến' : 'Ngày gửi']: ngay(d.ngay),
       'Loại': LOAI_VB[d.loai], 'Số, ký hiệu': d.so_ky_hieu ?? '', 'Ngày văn bản': d.ngay_ban_hanh ? ngay(d.ngay_ban_hanh) : '',
@@ -151,7 +155,7 @@ export default function SoCongVan() {
               </button>
             ))}
           </div>
-          {!loai && demLoai.length > 1 && (
+          {theoLoai && !loai && demLoai.length > 1 && (
             <button type="button" onClick={() => setNhom(!nhom)} aria-pressed={nhom} title="Nhóm sổ theo loại văn bản"
               className={cx('flex min-h-9 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[0.8125rem]', nhom ? 'border-ink bg-[#FDF1F0] font-semibold text-ink' : 'border-vien bg-white text-mo-2')}>
               <Layers className="h-4 w-4" /><span className="hidden sm:inline">Nhóm theo loại</span><span className="sm:hidden">Nhóm</span>
@@ -161,7 +165,7 @@ export default function SoCongVan() {
       )}
 
       {ds.length === 0 ? <Rong>{theoSo.length ? 'Không có văn bản thuộc loại này.' : 'Sổ chưa có văn bản.'}</Rong>
-        : nhom && !loai ? nhomDs.map(([k, r]) => (
+        : nhomLoai && !loai ? nhomDs.map(([k, r]) => (
           <section key={k} className="flex flex-col gap-2">
             <h2 className="m-0 flex items-center gap-2 px-1 text-[0.875rem] font-bold text-den"><NhanLoai l={k} /><span className="mono text-xs font-medium text-mo">{r.length} văn bản</span></h2>
             <BangSo ds={r} so={so} chon={setChon} anLoai />
@@ -260,7 +264,7 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
       : { ghi_chu: g.ghi_chu.trim() || null };
     const { error } = await supabase.from('so_van_ban').update(capNhat).eq('id', d.id);
     setDang(false);
-    if (error) setLoi(/duplicate|unique/i.test(error.message) ? `${den ? 'Số đến' : 'Số đi'} ${so}/${g.ngay.slice(0, 4)} của loại ${LOAI_VB[d.loai] ?? 'Khác'} đã có trong sổ — chọn số khác.` : loiDe(error));
+    if (error) setLoi(/duplicate|unique/i.test(error.message) ? `${den ? 'Số đến' : 'Số đi'} ${so}/${g.ngay.slice(0, 4)}${cuaSo === 'bcd' ? ` của loại ${LOAI_VB[d.loai] ?? 'Khác'}` : ''} đã có trong sổ — chọn số khác.` : loiDe(error));
     else xong();
   };
   const xoaKhoiSo = async () => {
@@ -292,7 +296,7 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
             <div className="flex flex-col gap-3 rounded-2xl border border-vien bg-nen-2 p-3 sm:p-4">
               <div className="flex items-center gap-2 text-[0.8125rem] font-bold text-den"><Pencil className="h-4 w-4" />Sửa thông tin vào sổ</div>
               <div className="grid grid-cols-2 gap-3">
-                <O nhan={`${den ? 'Số đến' : 'Số đi'} (${LOAI_VB[d.loai] ?? 'Khác'})`}><input inputMode="numeric" className={lopO} value={g.so_thu_tu} onChange={(e) => setG({ ...g, so_thu_tu: e.target.value.replace(/\D/g, '') })} /></O>
+                <O nhan={cuaSo === 'bcd' ? `${den ? 'Số đến' : 'Số đi'} (${LOAI_VB[d.loai] ?? 'Khác'})` : (den ? 'Số đến' : 'Số đi')}><input inputMode="numeric" className={lopO} value={g.so_thu_tu} onChange={(e) => setG({ ...g, so_thu_tu: e.target.value.replace(/\D/g, '') })} /></O>
                 <O nhan={den ? 'Ngày đến' : 'Ngày gửi'}><input type="date" className={lopO} value={g.ngay} onChange={(e) => setG({ ...g, ngay: e.target.value })} /></O>
               </div>
               <O nhan={den ? 'Nơi gửi' : 'Nơi nhận'}><input className={lopO} value={g.noi} onChange={(e) => setG({ ...g, noi: e.target.value })} /></O>
