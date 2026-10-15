@@ -125,7 +125,7 @@ export default function DangNhap() {
             <div className="flex flex-col items-center gap-3 rounded-3xl border border-vien bg-white p-7 text-center shadow-sm">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-xanh-nhat text-xanh"><Mail className="h-6 w-6" /></span>
               <p className="m-0 text-[0.9375rem]">Nếu <b>{email.trim()}</b> là email của một tài khoản, hệ thống đã gửi liên kết đặt lại mật khẩu.</p>
-              <p className="m-0 text-[0.8125rem] text-mo">Mở email trên thiết bị này và bấm vào liên kết. Không thấy thư: kiểm tra mục Spam hoặc liên hệ Tổ Tổng hợp để được cấp lại mật khẩu.</p>
+              <p className="m-0 text-[0.8125rem] text-mo">Mở email trên thiết bị này và bấm vào liên kết. Không thấy thư: kiểm tra mục Spam hoặc liên hệ Thường trực Ban Chỉ đạo để được cấp lại mật khẩu.</p>
             </div>
           ) : (
             <form onSubmit={gui} noValidate={false} className="flex flex-col gap-4 rounded-3xl border border-vien bg-white p-5 shadow-sm sm:p-7">
@@ -162,7 +162,7 @@ export default function DangNhap() {
             </form>
           )}
 
-          <p className="m-0 text-center text-[0.8125rem] text-mo">Chưa có tài khoản: liên hệ Tổ Tổng hợp – Công an phường.</p>
+          <p className="m-0 text-center text-[0.8125rem] text-mo">Chưa có tài khoản: liên hệ Thường trực Ban Chỉ đạo.</p>
         </div>
       </main>
     </div>
