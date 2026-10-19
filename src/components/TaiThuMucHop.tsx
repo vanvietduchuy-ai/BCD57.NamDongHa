@@ -20,8 +20,8 @@ const LOAI_TEN: [RegExp, LoaiVb][] = [
 ];
 const tenKhongDuoi = (f: File) => f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
 const duongDan = (f: File) => ((f as File & { webkitRelativePath?: string }).webkitRelativePath || '');
-// Thư mục con bên trong thư mục được chọn (bỏ tên thư mục gốc)
-const thuMucCon = (f: File) => duongDan(f).split('/').slice(1, -1).join('/');
+// Đường dẫn thư mục của tệp (gồm cả tên thư mục được chọn) — trên Drive tạo đúng cấu trúc thư mục đó trong thư mục phiên họp
+const thuMucCon = (f: File) => duongDan(f).split('/').slice(0, -1).map((x) => x.replace(/\\/g, '-').trim()).filter(Boolean).join('/');
 
 type Dong = { f: File; tt: 'cho' | 'doc' | 'tai' | 'xong' | 'bo' | 'loi'; ghi?: string };
 
@@ -97,7 +97,7 @@ export default function TaiThuMucHop({ mo, dong, p, dsPhien, xong }: { mo: boole
   return (
     <HopThoai mo={mo} dong={() => !dangChay && dong()} tieuDe="Tải thư mục vào phiên họp" rong="max-w-2xl">
       <div className="flex flex-col gap-3">
-        <span className="text-[0.8125rem] text-mo-2">Vào hồ sơ <b className="text-den">{p.ten}</b>. Mỗi tệp thành một văn bản trong Kho; PDF, Word (.docx) tự đọc số, ký hiệu, trích yếu. Trên Google Drive lưu trong thư mục của phiên họp, giữ nguyên thư mục con.</span>
+        <span className="text-[0.8125rem] text-mo-2">Vào hồ sơ <b className="text-den">{p.ten}</b>. Mỗi tệp thành một văn bản trong Kho; PDF, Word (.docx) tự đọc số, ký hiệu, trích yếu. Trên Google Drive lưu trong thư mục của phiên họp; chọn thư mục thì Drive tạo đúng thư mục đó (cả thư mục con).</span>
         {!dangChay && !daXong && <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex min-h-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-2xl border-2 border-dashed border-[#9AA1AE] bg-white px-3 text-center hover:border-[#8E1B22]">
             <FolderUp className="h-6 w-6 text-[#8E1B22]" /><span className="text-[0.875rem] font-bold">Chọn thư mục</span>
