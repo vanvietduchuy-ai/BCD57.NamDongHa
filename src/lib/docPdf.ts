@@ -243,7 +243,7 @@ export function phanTich(trang: Trang[], ocr = false, soTrang = trang.length): M
   }
 
   // Cơ quan ban hành: cột trái phần đầu, trên dòng "Số"
-  const ySo = d1.find((d) => /^Số\b/.test(d.text))?.y ?? p1.cao * 0.2;
+  const ySo = d1.find((d) => /^Số(?!\p{L})/u.test(d.text))?.y ?? p1.cao * 0.2;
   const trai = d1.filter((d) => d.y < ySo - 1 && d.x + d.w / 2 < W * 0.5 && laHoa(d.text) && !laVach(d.text) && d.text.replace(/[^\p{L}]/gu, '').length >= 3 && !/CỘNG HÒA|ĐẢNG CỘNG SẢN/.test(d.text));
   const dam = trai.filter((d) => d.dam);                                         // tên cơ quan ban hành in đậm
   if (dam.length) m.co_quan_ban_hanh = dam.map((d) => d.text).join(' ');

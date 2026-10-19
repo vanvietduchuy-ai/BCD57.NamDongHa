@@ -44,3 +44,12 @@ export const dinhKemPhien = (phienId: string, them: string[], bo: string[] = [])
   const moi = [...new Set([...cu, ...them])].filter((x) => !bo.includes(x));
   return { ...h, kem: { ...h.kem, [phienId]: moi } };
 });
+
+// Thư mục con trên Google Drive cho từng phiên họp: "Kho văn bản/Hồ sơ họp BCĐ/<ngày> - <tên phiên>"
+// Có ngày họp để các phiên trùng tên không lẫn nhau; bỏ dấu "/" trong tên (Drive hiểu là thư mục con); vẫn trùng thì thêm mã phiên.
+export function thuMucDrivePhien(p: PhienHopKho, ds: PhienHopKho[]): string {
+  const sach = (t: string) => t.replace(/[\\/]+/g, '-').replace(/\s+/g, ' ').trim();
+  const ten = (x: PhienHopKho) => sach(`${x.ngay ? `${x.ngay.split('-').reverse().join('.')} - ` : ''}${x.ten}`);
+  const goc = ten(p);
+  return ds.some((x) => x.id !== p.id && ten(x) === goc) ? `${goc} (${p.id.slice(-4)})` : goc;
+}
