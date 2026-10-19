@@ -13,7 +13,7 @@ import {
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
-import { BCT_MAC_DINH, boTienTo, gioHan, KHOA_BCT, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
+import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, DAU_RUT, gioHan, KHOA_BCT, laBaoCaoTuanBatKy, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
@@ -25,7 +25,7 @@ type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null
 type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null };
 // cha / con: nhiệm vụ lớn gồm các nhiệm vụ con (vd: 15. Nhóm nhiệm vụ ĐA06 -> 15.1 … 15.10); nhiệm vụ lớn tự tổng hợp tiến độ từ nhiệm vụ con
 // tuanCn: các lần báo cáo tuần này (tiền tố "Báo cáo tuần NN/YYYY:"); canBct: nhiệm vụ phải báo cáo tuần
-type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: MinhChungO[]; d: DongA4; vb: VbCanCu | null };
+type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; tienTo: string; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: MinhChungO[]; d: DongA4; vb: VbCanCu | null };
 // Minh chứng của nhiệm vụ: văn bản (kho) hoặc tệp đính kèm — bấm để xem
 type MinhChungO = { ten: string; loai: 'van_ban' | 'tep'; id: string; ten_tep: string; url: string | null };
 // Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …")
@@ -37,6 +37,8 @@ function soLieuCua(x: Dong): { tu: number; mau: number } | null {
   if (a && (!tuCn || a.luc >= tuCn.luc)) return a;
   return tuCn && Number.isFinite(tuCn.tu) && Number.isFinite(tuCn.mau) ? tuCn : null;
 }
+// Báo cáo tuần gần nhất còn hiệu lực: tuần này (nếu chưa rút), không thì tuần trước đó
+const baoCaoGanNhat = (x: Dong) => x.tuanCn[0] ?? x.cn.find((c) => laBaoCaoTuanBatKy(c.noi_dung) && !c.noi_dung.startsWith(x.tienTo)) ?? null;
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
@@ -121,8 +123,8 @@ export default function DanhMucNhiemVu() {
       const xongLuc = cn.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null;
       const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
       const tt = tinhTrang(n, ch.canh_bao_ngay, xongLuc);
-      const tuanCn = cn.filter((y) => y.luc >= tuan.batDau.toISOString() && y.noi_dung.startsWith(tuan.tienTo));
-      return { n, tt, ttTD: tt, tuanCn, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
+      const tuanCn = baoCaoHieuLuc(cn.filter((y) => y.luc >= tuan.batDau.toISOString()), tuan);   // đã tính lần rút báo cáo
+      return { n, tt, ttTD: tt, tuanCn, tienTo: tuan.tienTo, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     const theoId = new Map(ds.map((x) => [x.n.id, x]));
     // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
@@ -594,13 +596,13 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
       case 'ket_qua_tuan': {
         if (x.con.length) { const can = x.con.filter((c) => c.canBct); return can.length ? <span className="font-sans text-[8pt] font-semibold">{can.filter((c) => c.tuanCn.length).length}/{can.length} nhiệm vụ con đã báo cáo</span> : null; }
         // Kết quả thực hiện = báo cáo tuần mới nhất (tự điền khi đơn vị gửi báo cáo tuần)
-        const cuoi = x.tuanCn[0] ?? x.cn.find((c) => /^Báo cáo tuần \d+\/\d+:/.test(c.noi_dung)) ?? null;
+        const cuoi = baoCaoGanNhat(x);
         const tuanCuoi = cuoi?.noi_dung.match(/^Báo cáo tuần (\d+\/\d+):/)?.[1];
         return <>
           {cuoi && <span className="block whitespace-pre-wrap">{boTienTo(cuoi.noi_dung)}</span>}
           {cuoi && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#6B6B6B]">Tuần {tuanCuoi} · {cuoi.boi_ten ?? ''} · {ngayGioDu(cuoi.luc)}</span>}
           {x.canBct && (x.tuanCn.length
-            ? <span className="mt-0.5 block font-sans text-[7.5pt] font-semibold text-[#166534]">✓ Đã báo cáo tuần này</span>
+            ? <span className="mt-0.5 block font-sans text-[7.5pt] font-semibold text-[#166534]">✓ Đã báo cáo tuần này{x.tuanCn.length > 1 ? ' (đã sửa)' : ''} <span className="font-normal text-[#6B6B6B]">· bấm để sửa / rút</span></span>
             : <span className={cx('mt-0.5 block font-sans text-[7.5pt] italic', Date.now() > hanTuan ? 'font-semibold text-[#BE123C]' : 'text-[#8D8486]')}>{Date.now() > hanTuan ? 'Quá hạn chưa báo cáo tuần này' : 'Chưa báo cáo tuần này — bấm để nhập'}</span>)}
           {!cuoi && !x.canBct && <span className="text-[#8D8486]">—</span>}
         </>;
@@ -928,7 +930,18 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
   const [dg, setDg] = useState<DanhGia>(x.d.danh_gia ?? goiY);
   const [mo, setMoS] = useState(moSan);
   const setMo = (v: boolean) => { if (!v && huy) huy(); else setMoS(v); };
-  const [noiDung, setNoiDung] = useState('');
+  // Đã báo cáo tuần này: mở lại để sửa (nạp nội dung đã gửi; gửi lại = thay bản cũ) hoặc rút báo cáo
+  const daBao = tienTo ? x.tuanCn[0] ?? null : null;
+  const [noiDung, setNoiDung] = useState(() => (daBao ? boTienTo(daBao.noi_dung).replace(/^Kết quả:.*?\.(\s+|$)/, '') : ''));
+  const [dangRut, setDangRut] = useState(false);
+  const rut = async () => {
+    if (!tienTo || !window.confirm(`Rút báo cáo ${tienTo.replace(':', '').toLowerCase()} của nhiệm vụ này?\n\nNhiệm vụ trở về "Chưa báo cáo tuần này"; nội dung đã gửi vẫn lưu trong lịch sử cập nhật.`)) return;
+    setDangRut(true); setLoi(null);
+    const { error } = await supabase.from('nhiem_vu_cap_nhat').insert({ nhiem_vu_id: n.id, noi_dung: `${tienTo} ${DAU_RUT}`, phan_tram: null, trang_thai_moi: null });
+    setDangRut(false);
+    if (error) { setLoi(loiDe(error)); return; }
+    setMo(false); xong();
+  };
   // Mẫu số biến động: đơn vị chủ trì được sửa tổng số; ô mặc định lấy tổng số báo cáo gần nhất
   const slCu = soLieuCua(x);
   const mauDv = mauDonViSua(dg, n);
@@ -1009,6 +1022,11 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
         </div>
       </div>}
 
+      {daBao && <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-[#F0FDF4] px-2.5 py-1.5 text-[0.75rem] text-[#166534]">
+        <span className="min-w-0 flex-1">✓ Đã báo cáo {ngayGioDu(daBao.luc)}{daBao.boi_ten ? ` · ${daBao.boi_ten}` : ''} — sửa rồi bấm <b>Gửi lại</b> để thay nội dung.</span>
+        {laChuTri && <button type="button" disabled={dangRut} onClick={() => void rut()} className="shrink-0 rounded-md px-1.5 py-0.5 font-semibold text-nguy hover:bg-white disabled:opacity-50">{dangRut ? 'Đang rút…' : 'Rút — chưa báo cáo'}</button>}
+      </div>}
+
       {dg.kieu === 'ty_le' && <>
         <div className="flex items-end gap-2">
           {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo(nhanMau('Tổng số'), mau, setMau, 'vd: 37.070', khoaMau)}
@@ -1054,7 +1072,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
         </label>
       )}
       {loi && <span className="text-xs text-nguy">{loi}</span>}
-      <div className="flex justify-end gap-2"><Nut onClick={() => setMo(false)}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void gui()}>Gửi</Nut></div>
+      <div className="flex justify-end gap-2"><Nut onClick={() => setMo(false)}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void gui()}>{daBao ? 'Gửi lại' : 'Gửi'}</Nut></div>
     </div>
   );
 }
@@ -1318,7 +1336,7 @@ function oChu(c: KhoaCot, x: Dong): string {
       return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     }
     case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
-      const cuoi = x.tuanCn[0] ?? x.cn.find((c) => /^Báo cáo tuần \d+\/\d+:/.test(c.noi_dung)); return cuoi ? boTienTo(cuoi.noi_dung) : ''; }
+      const cuoi = baoCaoGanNhat(x); return cuoi ? boTienTo(cuoi.noi_dung) : ''; }
     case 'minh_chung': return x.mc.map((t) => t.ten).join('\n');
     case 'tinh_trang': return x.tt.nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';

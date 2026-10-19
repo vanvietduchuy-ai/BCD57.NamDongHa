@@ -10,7 +10,7 @@ import { ngayGioDu } from '../lib/dinhDang';
 import { type TrangThaiNv } from '../lib/nhiemVu';
 import { ghepCauHinh, KHOA_CAU_HINH } from '../lib/danhMucA4';
 import {
-  BCT_MAC_DINH, boTienTo, gioHan, KHOA_BCT, laBaoCaoTuan, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
+  baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, gioHan, KHOA_BCT, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
 } from '../lib/baoCaoTuan';
 import { LienLacDonVi } from '../components/LienLacTrucTiep';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
@@ -51,7 +51,7 @@ export default function BaoCaoTuan() {
     const cha = new Set(Object.values(data.a4.dong).map((x) => x.cha).filter(Boolean) as string[]);
     const tu = tuan.batDau.toISOString(), den = tuan.ketThuc.toISOString();
     return data.nv.filter((n) => !cha.has(n.id) && n.chu_tri_don_vi_id).map((n) => {
-      const trongTuan = data.cn.filter((c) => c.nhiem_vu_id === n.id && c.luc >= tu && c.luc <= den && laBaoCaoTuan(c, tuan));
+      const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id && c.luc >= tu && c.luc <= den), tuan);   // đã tính sửa / rút
       return { n, tuan: trongTuan };
     }).filter((x) => x.tuan.length > 0 || !['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai))
       .sort((a, b) => (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc));
@@ -145,7 +145,7 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
                       <li key={x.n.id} className="flex flex-col text-[0.8125rem]">
                         <span className="flex items-start gap-2"><span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.tuan.length ? 'bg-[#16A34A]' : 'bg-vien-2')} />
                           <Link to={`/nhiem-vu/${x.n.id}`} className="font-semibold text-den hover:underline">{x.n.ma && <span className="mono mr-1 text-xs text-mo">{x.n.ma}</span>}{x.n.ten}</Link></span>
-                        <span className="pl-4 text-mo-2">{x.tuan.length ? x.tuan.map((c) => boTienTo(c.noi_dung)).join(' | ') : <i className="text-mo">Chưa báo cáo tuần này</i>}</span>
+                        <span className="pl-4 text-mo-2">{x.tuan.length ? `${boTienTo(x.tuan[0].noi_dung)}${x.tuan.length > 1 ? ' (đã sửa)' : ''}` : <i className="text-mo">Chưa báo cáo tuần này</i>}</span>
                       </li>
                     ))}
                   </ul>
@@ -228,8 +228,9 @@ export function TheBaoCaoTuan({ dv }: { dv: string }) {
     const cha = new Set(Object.values(a4.dong).map((x) => x.cha).filter(Boolean) as string[]);
     const nv = ((b.data ?? []) as { id: string; trang_thai: TrangThaiNv }[]).filter((n) => !cha.has(n.id) && !['hoan_thanh', 'tam_dung'].includes(n.trang_thai));
     const t = tuanCua(new Date(), bct);
-    const c = nv.length ? await supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung').in('nhiem_vu_id', nv.map((n) => n.id)).gte('luc', t.batDau.toISOString()) : { data: [] };
-    const da = new Set(((c.data ?? []) as { nhiem_vu_id: string; noi_dung: string }[]).filter((x) => x.noi_dung.startsWith(t.tienTo)).map((x) => x.nhiem_vu_id));
+    const c = nv.length ? await supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc').in('nhiem_vu_id', nv.map((n) => n.id)).gte('luc', t.batDau.toISOString()) : { data: [] };
+    const ds = (c.data ?? []) as { nhiem_vu_id: string; noi_dung: string; luc: string }[];
+    const da = new Set(nv.map((n) => n.id).filter((id) => baoCaoHieuLuc(ds.filter((x) => x.nhiem_vu_id === id), t).length > 0));
     return { t, tong: nv.length, da: nv.filter((n) => da.has(n.id)).length };
   }, [dv]);
   if (!data || !data.tong) return null;
