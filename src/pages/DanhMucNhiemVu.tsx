@@ -51,6 +51,18 @@ const tienDo3 = (x: Dong): TienDo3 => {
   const cuoi = x.cn.find((c) => !laRutBaoCao(c.noi_dung));
   return cuoi && boTienTo(cuoi.noi_dung).startsWith(DAU_CHUA_HT) ? 'chua' : 'dang';
 };
+// Tỷ lệ % của nhiệm vụ đánh giá theo tỷ lệ (từ số liệu báo cáo mới nhất); dat: so với chỉ tiêu (undefined nếu không có chỉ tiêu)
+const tyLeNv = (x: Dong) => {
+  const sl = soLieuCua(x); if (!sl || !sl.mau) return null;
+  const chiTieu = (x.d.danh_gia ?? goiYDanhGia(x.n)).chi_tieu; const tyLe = (sl.tu / sl.mau) * 100;
+  return { tu: sl.tu, mau: sl.mau, tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
+};
+// Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt / Không đạt (so với chỉ tiêu %) hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
+const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
+  if (x.d.tt_tay || x.con.length || (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'ty_le') return x.tt;
+  const t = tyLeNv(x); if (!t) return x.tt;
+  return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'dang', nhan: 'Đảm bảo', tyLe: true };
+};
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
@@ -603,8 +615,14 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
         const sl = soLieuCua(x); const dg = x.d.danh_gia ?? goiYDanhGia(x.n);
         if (dg.kieu === 'tien_do') { const t = TIEN_DO_3[tienDo3(x)]; return <><span className="inline-block rounded px-1 font-sans text-[8pt] font-semibold" style={{ color: t.chu, background: t.nen }}>{t.nhan}</span>
           {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>; }
+        // Nhiệm vụ tỷ lệ: ghi tỷ lệ % tính từ số liệu (không ghi "Hoàn thành 100%")
+        if (dg.kieu === 'ty_le') { const t = tyLeNv(x); return <>{t
+          ? <><span className="font-sans text-[8pt] font-semibold" style={{ color: t.dat === false ? '#9F1239' : t.dat ? '#166534' : '#1E3A8A' }}>Tỷ lệ {soVN(t.tyLe, 2)}%</span>
+            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(t.tu)}/{soVN(t.mau)}{t.chiTieu ? `; CT ${soVN(t.chiTieu, 2)}% — ${t.dat ? 'đạt' : 'chưa đạt'}` : ''}</span></>
+          : <span className="font-sans text-[8pt] italic text-[#8D8486]">Chưa có số liệu</span>}
+          {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>; }
         return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.n.trang_thai].nhan} · {x.n.phan_tram}%</span>
-        {sl && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(sl.tu)}/{soVN(sl.mau)}{dg.kieu === 'ty_le' && sl.mau ? ` (${soVN((sl.tu / sl.mau) * 100, 2)}%${dg.chi_tieu ? `; CT ${soVN(dg.chi_tieu, 2)}%` : ''})` : ''}</span>}
+        {sl && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(sl.tu)}/{soVN(sl.mau)}</span>}
         {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>;
       }
       case 'ket_qua_tuan': {
@@ -626,7 +644,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
           <button key={i} type="button" title={`Xem: ${t.ten}`} onClick={(e) => { e.stopPropagation(); void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url); }}
             className="text-left text-[#1E4F86] underline-offset-2 hover:underline">▸ {t.ten}</button>))}</span>
         : <span className="text-[#8D8486]">—</span>;
-      case 'tinh_trang': { const m = MAU_TT[x.tt.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : 'Tình trạng tự động theo hạn và tiến độ'}>{x.tt.nhan}{x.d.tt_tay && ' ✎'}</span>; }
+      case 'tinh_trang': { const h = ttHienThi(x); const m = MAU_TT[h.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : h.tyLe ? 'Theo tỷ lệ so với chỉ tiêu' : 'Tình trạng tự động theo hạn và tiến độ'}>{h.nhan}{x.d.tt_tay && ' ✎'}</span>; }
       case 'lanh_dao': return x.n.lanh_dao_phu_trach;
       case 'ma': return x.n.ma;
     }
@@ -1352,12 +1370,15 @@ function oChu(c: KhoaCot, x: Dong): string {
       if (x.con.length) return `${x.con.filter((c) => c.tt.loai === 'xong').length}/${x.con.length} nhiệm vụ con hoàn thành (${x.pt}%)`;
       const sl = soLieuCua(x);
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'tien_do') return `${TIEN_DO_3[tienDo3(x)].nhan}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
+      if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'ty_le') { const t = tyLeNv(x);
+        return `${t ? `Tỷ lệ ${soVN(t.tyLe, 2)}%\nĐạt ${soVN(t.tu)}/${soVN(t.mau)}${t.chiTieu ? `; CT ${soVN(t.chiTieu, 2)}% — ${t.dat ? 'đạt' : 'chưa đạt'}` : ''}` : 'Chưa có số liệu'}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`; }
       return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     }
     case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
+      if (x.canBct && !x.tuanCn.length) return 'Chưa báo cáo tuần';   // đơn vị chưa báo cáo tuần này
       const cuoi = baoCaoGanNhat(x); return cuoi ? boTienTo(cuoi.noi_dung) : ''; }
     case 'minh_chung': return x.mc.map((t) => t.ten).join('\n');
-    case 'tinh_trang': return x.tt.nhan;
+    case 'tinh_trang': return ttHienThi(x).nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';
     case 'ma': return x.n.ma ?? '';
   }
