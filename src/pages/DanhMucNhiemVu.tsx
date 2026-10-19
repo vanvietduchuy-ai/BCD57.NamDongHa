@@ -94,7 +94,12 @@ function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomThe
   const ss = (a: Dong, b: Dong) => sapTheo === 'han' ? hanCua(a).localeCompare(hanCua(b)) || a.stt - b.stt
     : sapTheo === 'tinh_trang' ? THU_TU_TT.indexOf(a.tt.loai) - THU_TU_TT.indexOf(b.tt.loai) || hanCua(a).localeCompare(hanCua(b)) || a.stt - b.stt
     : a.stt - b.stt;
-  return { ds: ds2.sort(ss), nhom };
+  // Đánh lại số thứ tự liên tục theo thứ tự đang xem (nhóm trước, trong nhóm theo cách sắp)
+  ds2.sort(ss);
+  let so = 0;
+  const coNhom = new Set(nhom.map((g) => g.id));
+  const kq = [...nhom.flatMap((g) => ds2.filter((x) => x.nhom === g.id)), ...ds2.filter((x) => !coNhom.has(x.nhom))].map((x) => ({ ...x, so: String(++so) }));
+  return { ds: kq, nhom };
 }
 
 const KHOA_RIENG = 'bcd57-danh-muc-a4';
