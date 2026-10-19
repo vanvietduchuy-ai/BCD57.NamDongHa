@@ -63,6 +63,10 @@ const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
   const t = tyLeNv(x); if (!t) return x.tt;
   return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'dang', nhan: 'Đảm bảo', tyLe: true };
 };
+// Cột "Kết quả thực hiện" chỉ ghi phần lời; số liệu (Kết quả: a/b …) và trạng thái tiến độ đã có ở cột Tiến độ / Tình trạng
+const loiKetQua = (noiDung: string) => boTienTo(noiDung).replace(/^Kết quả:.*?\.(\s+|$)/, '').replace(/^Tiến độ: chưa hoàn thành\.\s*/, '').trim();
+// Người báo cáo: bỏ phần lặp (vd "Phòng Văn hóa – Xã hội · Phòng Văn hóa – Xã hội")
+const nguoiGon = (t: string | null) => tenNgan([...new Set((t ?? '').split(/\s*·\s*/).filter(Boolean))].join(' · '));
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
@@ -654,7 +658,7 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
         // Nhiệm vụ tỷ lệ: ghi tỷ lệ % tính từ số liệu (không ghi "Hoàn thành 100%")
         if (dg.kieu === 'ty_le') { const t = tyLeNv(x); return <>{t
           ? <><span className="font-sans text-[8pt] font-semibold" style={{ color: t.dat === false ? '#9F1239' : t.dat ? '#166534' : '#1E3A8A' }}>Tỷ lệ {soVN(t.tyLe, 2)}%</span>
-            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(t.tu)}/{soVN(t.mau)}{t.chiTieu ? `; CT ${soVN(t.chiTieu, 2)}% — ${t.dat ? 'đạt' : 'chưa đạt'}` : ''}</span></>
+            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(t.tu)}/{soVN(t.mau)}{t.chiTieu ? ` · CT ${soVN(t.chiTieu, 2)}%` : ''}</span></>
           : <span className="font-sans text-[8pt] italic text-[#8D8486]">Chưa có số liệu</span>}
           {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>; }
         return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.n.trang_thai].nhan} · {x.n.phan_tram}%</span>
@@ -667,10 +671,11 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
         const cuoi = baoCaoGanNhat(x);
         const tuanCuoi = cuoi?.noi_dung.match(/^Báo cáo tuần (\d+\/\d+):/)?.[1];
         return <>
-          {cuoi && <span className="block whitespace-pre-wrap">{boTienTo(cuoi.noi_dung)}</span>}
-          {cuoi && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#6B6B6B]">Tuần {tuanCuoi} · {cuoi.boi_ten ?? ''} · {ngayGioDu(cuoi.luc)}</span>}
+          {cuoi && loiKetQua(cuoi.noi_dung) && <span className="block whitespace-pre-wrap">{loiKetQua(cuoi.noi_dung)}</span>}
+          {cuoi && <span className={cx('mt-0.5 block font-sans text-[7.5pt]', x.tuanCn.length ? 'text-[#166534]' : 'text-[#6B6B6B]')} title={x.tuanCn.length ? 'Bấm để sửa hoặc rút báo cáo tuần này' : undefined}>
+            {x.tuanCn.length ? '✓ ' : ''}Tuần {tuanCuoi} · {nguoiGon(cuoi.boi_ten)} · {ngayGioDu(cuoi.luc)}{x.tuanCn.length > 1 ? ' (đã sửa)' : ''}</span>}
           {x.canBct && (x.tuanCn.length
-            ? <span className="mt-0.5 block font-sans text-[7.5pt] font-semibold text-[#166534]">✓ Đã báo cáo tuần này{x.tuanCn.length > 1 ? ' (đã sửa)' : ''} <span className="font-normal text-[#6B6B6B]">· bấm để sửa / rút</span></span>
+            ? null
             : <span className={cx('mt-0.5 block font-sans text-[7.5pt] italic', Date.now() > hanTuan ? 'font-semibold text-[#BE123C]' : 'text-[#8D8486]')}>{Date.now() > hanTuan ? 'Quá hạn chưa báo cáo tuần này' : 'Chưa báo cáo tuần này — bấm để nhập'}</span>)}
           {!cuoi && !x.canBct && <span className="text-[#8D8486]">—</span>}
         </>;
@@ -1097,6 +1102,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
         {laChuTri && <button type="button" disabled={dangRut} onClick={() => void rut()} className="shrink-0 rounded-md px-1.5 py-0.5 font-semibold text-nguy hover:bg-white disabled:opacity-50">{dangRut ? 'Đang rút…' : 'Rút — chưa báo cáo'}</button>}
       </div>}
 
+      {dg.kieu !== 'ky' && (dg.kieu !== 'tien_do' || laChuTri) && <span className="-mb-1 text-[11px] font-bold text-[#8E1B22]">① {dg.kieu === 'tien_do' ? 'Tiến độ' : 'Số liệu'} <span className="font-normal text-mo">→ cột Tiến độ{dg.kieu === 'ty_le' ? ', Tình trạng (tự tính tỷ lệ)' : ''}</span></span>}
       {dg.kieu === 'ty_le' && <>
         <div className="flex items-end gap-2">
           {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo(nhanMau('Tổng số'), mau, setMau, 'vd: 37.070', khoaMau)}
@@ -1133,7 +1139,8 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 
       {dg.kieu === 'ky' && <span className="text-[0.8125rem] text-mo-2">Kỳ {tenKyNv(n.ky_ma)}{n.ky_xong ? ' — đã xác nhận hoàn thành.' : n.ky_han ? ` · hạn ${ngayNgan(n.ky_han)}` : ''}</span>}
 
-      <textarea className={cx(lopO, 'min-h-16 bg-white py-2 text-[0.8125rem]')} placeholder={dg.kieu === 'tien_do' ? 'Kết quả đã thực hiện, vướng mắc' : 'Ghi chú, vướng mắc (không bắt buộc)'}
+      <span className="-mb-1 text-[11px] font-bold text-[#8E1B22]">{dg.kieu === 'ky' ? '' : '② '}Nội dung kết quả <span className="font-normal text-mo">→ cột Kết quả thực hiện</span></span>
+      <textarea className={cx(lopO, 'min-h-16 bg-white py-2 text-[0.8125rem]')} placeholder={dg.kieu === 'tien_do' ? 'Kết quả đã thực hiện, vướng mắc' : 'Việc đã làm, vướng mắc — không ghi lại số liệu đã nhập ở trên'}
         value={noiDung} onChange={(e) => setNoiDung(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void gui(); if (e.key === 'Escape') setMo(false); }} />
 
       {laChuTri && dg.kieu !== 'tien_do' && !(dg.kieu === 'ky' && n.ky_xong) && (
@@ -1407,12 +1414,12 @@ function oChu(c: KhoaCot, x: Dong): string {
       const sl = soLieuCua(x);
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'tien_do') return `${TIEN_DO_3[tienDo3(x)].nhan}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'ty_le') { const t = tyLeNv(x);
-        return `${t ? `Tỷ lệ ${soVN(t.tyLe, 2)}%\nĐạt ${soVN(t.tu)}/${soVN(t.mau)}${t.chiTieu ? `; CT ${soVN(t.chiTieu, 2)}% — ${t.dat ? 'đạt' : 'chưa đạt'}` : ''}` : 'Chưa có số liệu'}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`; }
+        return `${t ? `Tỷ lệ ${soVN(t.tyLe, 2)}%\nĐạt ${soVN(t.tu)}/${soVN(t.mau)}${t.chiTieu ? ` · CT ${soVN(t.chiTieu, 2)}%` : ''}` : 'Chưa có số liệu'}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`; }
       return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     }
     case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
       if (x.canBct && !x.tuanCn.length) return 'Chưa báo cáo tuần';   // đơn vị chưa báo cáo tuần này
-      const cuoi = baoCaoGanNhat(x); return cuoi ? boTienTo(cuoi.noi_dung) : ''; }
+      const cuoi = baoCaoGanNhat(x); return cuoi ? loiKetQua(cuoi.noi_dung) : ''; }
     case 'minh_chung': return x.mc.map((t) => t.ten).join('\n');
     case 'tinh_trang': return ttHienThi(x).nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';
