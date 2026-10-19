@@ -25,7 +25,9 @@ type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null
 type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null };
 // cha / con: nhiệm vụ lớn gồm các nhiệm vụ con (vd: 15. Nhóm nhiệm vụ ĐA06 -> 15.1 … 15.10); nhiệm vụ lớn tự tổng hợp tiến độ từ nhiệm vụ con
 // tuanCn: các lần báo cáo tuần này (tiền tố "Báo cáo tuần NN/YYYY:"); canBct: nhiệm vụ phải báo cáo tuần
-type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: string[]; d: DongA4; vb: VbCanCu | null };
+type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: MinhChungO[]; d: DongA4; vb: VbCanCu | null };
+// Minh chứng của nhiệm vụ: văn bản (kho) hoặc tệp đính kèm — bấm để xem
+type MinhChungO = { ten: string; loai: 'van_ban' | 'tep'; id: string; ten_tep: string; url: string | null };
 // Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …")
 function soLieuCua(x: Dong): { tu: number; mau: number } | null {
   const c = x.cn.find((y) => /Kết quả: (?:hoàn thành )?[\d.,]+\/[\d.,]+/.test(y.noi_dung));
@@ -58,18 +60,19 @@ export default function DanhMucNhiemVu() {
       supabase.from('v_nhiem_vu').select(COT_NV).order('han', { ascending: true, nullsFirst: false }),
       supabase.from('don_vi').select('id, ten, loai').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, phan_tram, trang_thai_moi, luc, boi_ten').order('luc', { ascending: false }).limit(5000),
-      supabase.from('v_minh_chung_nhiem_vu').select('nhiem_vu_id, so_ky_hieu, trich_yeu, ten_tep'),
-      supabase.from('tep').select('nhiem_vu_id, ten').not('nhiem_vu_id', 'is', null),
+      supabase.from('v_minh_chung_nhiem_vu').select('nhiem_vu_id, van_ban_id, so_ky_hieu, trich_yeu, ten_tep, drive_url'),
+      supabase.from('tep').select('id, nhiem_vu_id, ten').not('nhiem_vu_id', 'is', null),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_BCT).maybeSingle(),
       supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, drive_url, ten_tep').neq('trang_thai', 'du_thao').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(1000),
     ]);
     const cn = new Map<string, CapNhat[]>();
     for (const x of (c.data ?? []) as CapNhat[]) { if (!cn.has(x.nhiem_vu_id)) cn.set(x.nhiem_vu_id, []); cn.get(x.nhiem_vu_id)!.push(x); }
-    const mc = new Map<string, string[]>();
-    const them = (id: string, ten: string) => { if (!mc.has(id)) mc.set(id, []); mc.get(id)!.push(ten); };
-    for (const x of (d.data ?? []) as { nhiem_vu_id: string; so_ky_hieu: string | null; trich_yeu: string; ten_tep: string | null }[]) them(x.nhiem_vu_id, x.so_ky_hieu ? `${x.so_ky_hieu} – ${x.trich_yeu}` : x.ten_tep ?? x.trich_yeu);
-    for (const x of (e.data ?? []) as { nhiem_vu_id: string; ten: string }[]) them(x.nhiem_vu_id, x.ten);
+    const mc = new Map<string, MinhChungO[]>();
+    const them = (id: string, o: MinhChungO) => { if (!mc.has(id)) mc.set(id, []); mc.get(id)!.push(o); };
+    for (const x of (d.data ?? []) as { nhiem_vu_id: string; van_ban_id: string; so_ky_hieu: string | null; trich_yeu: string; ten_tep: string | null; drive_url: string | null }[])
+      them(x.nhiem_vu_id, { ten: x.so_ky_hieu ? `${x.so_ky_hieu} – ${x.trich_yeu}` : x.ten_tep ?? x.trich_yeu, loai: 'van_ban', id: x.van_ban_id, ten_tep: x.ten_tep ?? `${x.so_ky_hieu ?? 'van-ban'}.pdf`, url: x.drive_url });
+    for (const x of (e.data ?? []) as { id: string; nhiem_vu_id: string; ten: string }[]) them(x.nhiem_vu_id, { ten: x.ten, loai: 'tep', id: x.id, ten_tep: x.ten, url: null });
     return {
       nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc, vb: (g.data ?? []) as VbCanCu[],
       ch: ghepCauHinh((f.data as { gia_tri?: Partial<CauHinhA4> } | null)?.gia_tri),
@@ -603,7 +606,9 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
         </>;
       }
       case 'minh_chung': return x.mc.length
-        ? <span className="flex flex-col gap-0.5">{x.mc.map((t, i) => <span key={i} className="text-[#1E4F86]">▸ {t}</span>)}</span>
+        ? <span className="flex flex-col gap-0.5">{x.mc.map((t, i) => (
+          <button key={i} type="button" title={`Xem: ${t.ten}`} onClick={(e) => { e.stopPropagation(); void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url); }}
+            className="text-left text-[#1E4F86] underline-offset-2 hover:underline">▸ {t.ten}</button>))}</span>
         : <span className="text-[#8D8486]">—</span>;
       case 'tinh_trang': { const m = MAU_TT[x.tt.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : 'Tình trạng tự động theo hạn và tiến độ'}>{x.tt.nhan}{x.d.tt_tay && ' ✎'}</span>; }
       case 'lanh_dao': return x.n.lanh_dao_phu_trach;
@@ -790,7 +795,9 @@ function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, l
           <section className="flex flex-col gap-1">
             <h3 className="m-0 flex items-center text-[0.8125rem] font-bold">Minh chứng <span className="flex-1" />
               <button className="flex items-center gap-1 text-xs font-semibold text-[#8E1B22]" onClick={moTrang}><Paperclip className="h-3.5 w-3.5" />Đính kèm</button></h3>
-            {x.mc.length ? x.mc.map((t, i) => <span key={i} className="truncate text-[0.8125rem] text-[#1E4F86]" title={t}>▸ {t}</span>) : <span className="text-[0.8125rem] text-mo">Chưa có.</span>}
+            {x.mc.length ? x.mc.map((t, i) => (
+              <button key={i} type="button" onClick={() => void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url)} title={`Xem: ${t.ten}`}
+                className="truncate text-left text-[0.8125rem] text-[#1E4F86] hover:underline">▸ {t.ten}</button>)) : <span className="text-[0.8125rem] text-mo">Chưa có.</span>}
           </section>
         </div>
 
@@ -1312,7 +1319,7 @@ function oChu(c: KhoaCot, x: Dong): string {
     }
     case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
       const cuoi = x.tuanCn[0] ?? x.cn.find((c) => /^Báo cáo tuần \d+\/\d+:/.test(c.noi_dung)); return cuoi ? boTienTo(cuoi.noi_dung) : ''; }
-    case 'minh_chung': return x.mc.join('\n');
+    case 'minh_chung': return x.mc.map((t) => t.ten).join('\n');
     case 'tinh_trang': return x.tt.nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';
     case 'ma': return x.n.ma ?? '';
