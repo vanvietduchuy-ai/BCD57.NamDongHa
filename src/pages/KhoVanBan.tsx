@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Check, Download, Link2, Unlink, Folder, FolderOpen, MapPin, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { CalendarDays, Check, Download, FolderUp, Link2, Unlink, Folder, FolderOpen, MapPin, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { useManRong } from '../lib/manHinh';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
@@ -11,6 +11,7 @@ import { COT_VB, linkVb, LOAI_VB, THU_MUC, TT_VB, xoaVanBan, type LoaiVb, type T
 import { CHUA_XEP, dinhKemPhien, docHoSoHop, sapXepPhien, suaHoSoHop, THANH_PHAN_HOP, type PhienHopKho } from '../lib/phienHop';
 import { Chip, DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, cx } from '../components/ui';
 import FormVanBan from '../components/FormVanBan';
+import TaiThuMucHop from '../components/TaiThuMucHop';
 
 export default function KhoVanBan() {
   const { hoSo } = useAuth();
@@ -53,6 +54,7 @@ export default function KhoVanBan() {
     : tm === 'hop_bcd' && phien && phien !== CHUA_XEP ? trongPhien(v, phien)
     : v.thu_muc === tm && (tm !== 'hop_bcd' || !phien || phienCua(v) === phien));
   const [moKem, setMoKem] = useState(false);
+  const [moThuMuc, setMoThuMuc] = useState(false);
   const boKem = async (v: VanBan, pid: string) => {
     try { await dinhKemPhien(pid, [], [v.id]); setTb(`Đã bỏ đính kèm ${v.so_ky_hieu ?? v.trich_yeu} khỏi phiên họp.`); void taiLai(); }
     catch (e) { setTb(loiDe(e)); }
@@ -135,7 +137,7 @@ export default function KhoVanBan() {
 
         <The className="flex min-w-0 flex-col overflow-hidden">
           {phienChon && <TheoPhien p={phienChon} ds={(data?.vb ?? []).filter((v) => conHl(v) && trongPhien(v, phienChon.id))} quanTri={quanTri}
-            them={() => setForm({})} kem={() => setMoKem(true)} sua={() => setSuaPhien(phienChon)} xoa={() => void xoaPhien(phienChon)} />}
+            them={() => setForm({})} kem={() => setMoKem(true)} thuMuc={() => setMoThuMuc(true)} sua={() => setSuaPhien(phienChon)} xoa={() => void xoaPhien(phienChon)} />}
           {thuMuc === 'hop_bcd' && !phien && <div className="border-b border-vien bg-nen-2 px-4 py-2.5 text-[0.8125rem] text-mo-2">
             Hồ sơ họp được lập theo từng phiên họp — chọn phiên họp ở danh mục thư mục{quanTri ? ' hoặc bấm “Tạo phiên họp”' : ''}.</div>}
           <div className="flex flex-wrap gap-2 border-b border-vien p-4">
@@ -221,6 +223,8 @@ export default function KhoVanBan() {
       <FormVanBan mo={!!form} dong={() => setForm(null)} vb={form?.vb} dau={thuMuc && thuMuc !== 'cap_tren' ? { thu_muc: thuMuc } : undefined}
         phienDs={data?.hh.ds ?? []} phienDau={form?.vb ? phienCua(form.vb) : thuMuc === 'hop_bcd' ? phien : ''}
         xong={() => { setForm(null); void taiLai(); }} daXoa={() => { setForm(null); setChonId(null); setTb('Đã xoá văn bản.'); void taiLai(); }} />
+      {phienChon && <TaiThuMucHop mo={moThuMuc} p={phienChon} dsPhien={data?.hh.ds ?? []} dong={() => { setMoThuMuc(false); void taiLai(); }}
+        xong={(n) => { setMoThuMuc(false); setTb(`Đã tải ${n} văn bản vào ${phienChon.ten}.`); void taiLai(); }} />}
       {phienChon && <ChonVanBanCoSan mo={moKem} dong={() => setMoKem(false)} p={phienChon} ds={(data?.vb ?? []).filter((v) => conHl(v) && !trongPhien(v, phienChon.id))}
         tenPhien={(v) => (v.thu_muc === 'hop_bcd' ? dsPhien.find((x) => x.id === phienCua(v))?.ten : undefined)}
         xong={(n) => { setMoKem(false); setTb(`Đã đính kèm ${n} văn bản vào ${phienChon.ten}.`); void taiLai(); }} />}
@@ -241,7 +245,7 @@ function CHIP_LOAI(v: VanBan): [string, string, string] {
 }
 
 // Đầu thư mục một phiên họp: thông tin phiên + thành phần hồ sơ đã có / còn thiếu
-function TheoPhien({ p, ds, quanTri, them, kem, sua, xoa }: { p: PhienHopKho; ds: VanBan[]; quanTri: boolean; them: () => void; kem: () => void; sua: () => void; xoa: () => void }) {
+function TheoPhien({ p, ds, quanTri, them, kem, thuMuc, sua, xoa }: { p: PhienHopKho; ds: VanBan[]; quanTri: boolean; them: () => void; kem: () => void; thuMuc: () => void; sua: () => void; xoa: () => void }) {
   const co = new Set(ds.map((v) => v.loai));
   return (
     <div className="flex flex-col gap-2.5 border-b border-vien bg-[#FDF6F5] px-4 py-3.5">
@@ -269,8 +273,9 @@ function TheoPhien({ p, ds, quanTri, them, kem, sua, xoa }: { p: PhienHopKho; ds
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <span className="mono min-w-0 flex-1 whitespace-nowrap text-xs text-mo">{ds.length} văn bản trong hồ sơ</span>
-        {quanTri && <div className="flex gap-2 max-sm:w-full">
-          <Nut className="max-sm:flex-1" icon={<Link2 className="h-4 w-4" />} onClick={kem}>Đính kèm văn bản có sẵn</Nut>
+        {quanTri && <div className="flex flex-wrap gap-2 max-sm:w-full">
+          <Nut className="max-sm:flex-1" icon={<Link2 className="h-4 w-4" />} onClick={kem} ngan="Có sẵn">Đính kèm văn bản có sẵn</Nut>
+          <Nut className="max-sm:flex-1" icon={<FolderUp className="h-4 w-4" />} onClick={thuMuc} ngan="Thư mục">Tải thư mục</Nut>
           <Nut kieu="chinh" className="max-sm:flex-1" icon={<Upload className="h-4 w-4" />} onClick={them} ngan="Tải lên mới">Tải lên văn bản mới</Nut>
         </div>}
       </div>
