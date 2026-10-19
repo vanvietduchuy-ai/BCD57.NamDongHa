@@ -7,7 +7,7 @@ import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
-import { COT_NV, khongDau, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
+import { COT_NV, khongDau, LINH_VUC, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
   CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
@@ -65,7 +65,33 @@ const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
 };
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
-type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua' };
+type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
+type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
+type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo };
+const TEN_NHOM_THEO: Record<NhomTheo, string> = { nhom: 'Nhóm theo danh mục', don_vi: 'Nhóm theo đơn vị chủ trì', linh_vuc: 'Nhóm theo lĩnh vực', kieu: 'Nhóm theo loại đánh giá' };
+const TEN_SAP_THEO: Record<SapTheo, string> = { thu_tu: 'Thứ tự danh mục', han: 'Sắp theo hạn hoàn thành', tinh_trang: 'Sắp theo tình trạng' };
+const TEN_KIEU_NHOM: Record<KieuDG, string> = { ty_le: 'Nhiệm vụ tính theo tỷ lệ %', so_luong: 'Nhiệm vụ tính theo số lượng', tien_do: 'Nhiệm vụ theo tiến độ', ky: 'Nhiệm vụ định kỳ' };
+const LA_MA = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
+const hanCua = (x: Dong) => (x.n.dinh_ky ? x.n.ky_han : x.n.han) ?? '9999-12-31';
+const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
+// Cách xem bảng: nhóm lại theo đơn vị chủ trì / lĩnh vực / loại đánh giá và sắp theo hạn, tình trạng (chỉ đổi cách xem và bản xuất, không đổi thứ tự danh mục)
+function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, sapTheo: SapTheo): { ds: Dong[]; nhom: NhomA4[] } {
+  if (nhomTheo === 'nhom' && sapTheo === 'thu_tu') return { ds, nhom: nhomGoc };
+  const la = ds.filter((x) => !x.con.length);                     // nhiệm vụ lớn (tổng hợp) chỉ hiện ở thứ tự danh mục
+  const khoa = (x: Dong) => nhomTheo === 'nhom' ? x.nhom : nhomTheo === 'don_vi' ? (x.n.chu_tri_don_vi_id ?? '_chua_giao')
+    : nhomTheo === 'linh_vuc' ? x.n.linh_vuc : (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu;
+  const ds2 = la.map((x) => ({ ...x, nhom: khoa(x) }));
+  let nhom: NhomA4[] = nhomTheo === 'nhom' ? nhomGoc
+    : nhomTheo === 'don_vi' ? [...dv.map((d) => ({ id: d.id, ky_hieu: '', ten: d.ten })), { id: '_chua_giao', ky_hieu: '', ten: 'Chưa giao đơn vị chủ trì' }]
+    : nhomTheo === 'linh_vuc' ? (Object.entries(LINH_VUC) as [string, string][]).map(([k, v]) => ({ id: k, ky_hieu: '', ten: v }))
+    : (Object.entries(TEN_KIEU_NHOM) as [string, string][]).map(([k, v]) => ({ id: k, ky_hieu: '', ten: v }));
+  nhom = nhom.filter((g) => ds2.some((x) => x.nhom === g.id));
+  if (nhomTheo !== 'nhom') nhom = nhom.map((g, i) => ({ ...g, ky_hieu: LA_MA[i] ?? String(i + 1) }));
+  const ss = (a: Dong, b: Dong) => sapTheo === 'han' ? hanCua(a).localeCompare(hanCua(b)) || a.stt - b.stt
+    : sapTheo === 'tinh_trang' ? THU_TU_TT.indexOf(a.tt.loai) - THU_TU_TT.indexOf(b.tt.loai) || hanCua(a).localeCompare(hanCua(b)) || a.stt - b.stt
+    : a.stt - b.stt;
+  return { ds: ds2.sort(ss), nhom };
+}
 
 const KHOA_RIENG = 'bcd57-danh-muc-a4';
 const docRieng = (): Rieng => { try { return JSON.parse(localStorage.getItem(KHOA_RIENG) ?? '{}'); } catch { return {}; } };
@@ -197,6 +223,9 @@ export default function DanhMucNhiemVu() {
   const hien = hienLa.filter((x) => !x.con.length || coCon.has(x.n.id) || hienLa.some((y) => y.cha === x.n.id))
     .concat(phamVi.filter((x) => x.con.length && coCon.has(x.n.id) && !hienLa.includes(x)));
   hien.sort((a, b) => a.stt - b.stt);
+  const nhomTheo: NhomTheo = rieng.nhomTheo ?? 'nhom', sapTheo: SapTheo = rieng.sapTheo ?? 'thu_tu';
+  const xem = sapXepXem(hien, nhomDs, data?.dv ?? [], nhomTheo, sapTheo);
+  const macDinhXem = nhomTheo === 'nhom' && sapTheo === 'thu_tu';
   const viecLa = phamVi.filter((x) => !x.con.length);
 
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
@@ -220,8 +249,8 @@ export default function DanhMucNhiemVu() {
       <TieuDeTrang tren={donVi ? hoSo?.don_vi?.ten : 'Danh mục nhiệm vụ · bảng A4'}
         ten={donVi ? 'Nhiệm vụ' : 'Nhiệm vụ Ban Chỉ đạo'}
         phai={<>
-          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatWord(chHien, hien).catch((e) => setThongBao({ loi: loiDe(e) }))} ngan="Word">Xuất Word</Nut>
-          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatExcel(chHien, hien, phamVi, data.dv)} ngan="Excel">Xuất Excel</Nut>
+          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatWord(chHien, xem.ds, xem.nhom).catch((e) => setThongBao({ loi: loiDe(e) }))} ngan="Word">Xuất Word</Nut>
+          <Nut icon={<Download className="h-4 w-4" />} onClick={() => void xuatExcel(chHien, xem.ds, phamVi, data.dv, xem.nhom)} ngan="Excel">Xuất Excel</Nut>
           {suaDuocBang && <Nut icon={<FileUp className="h-4 w-4" />} onClick={() => setMoNhap(true)} ngan="Nhập">Nhập từ Word</Nut>}
           {suaDuocBang && <Nut icon={<Settings2 className="h-4 w-4" />} onClick={() => setMoCaiDat(true)} ngan="Thiết lập">Thiết lập bảng</Nut>}
           {suaDuocBang && <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setMoThem(true)} ngan="Thêm">Thêm nhiệm vụ</Nut>}
@@ -237,6 +266,13 @@ export default function DanhMucNhiemVu() {
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-mo" />
             <input className="h-9 w-full rounded-lg border border-vien bg-nen-2 pl-8 pr-2 text-[0.8125rem] outline-none focus:border-xanh focus:bg-white" placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
           </label>
+          <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={nhomTheo} onChange={(e) => setRieng({ ...rieng, nhomTheo: e.target.value as NhomTheo })} aria-label="Nhóm nhiệm vụ theo">
+            {(Object.keys(TEN_NHOM_THEO) as NhomTheo[]).filter((k) => !(donVi && k === 'don_vi')).map((k) => <option key={k} value={k}>{TEN_NHOM_THEO[k]}</option>)}
+          </select>
+          <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={sapTheo} onChange={(e) => setRieng({ ...rieng, sapTheo: e.target.value as SapTheo })} aria-label="Sắp xếp nhiệm vụ">
+            {(Object.keys(TEN_SAP_THEO) as SapTheo[]).map((k) => <option key={k} value={k}>{TEN_SAP_THEO[k]}</option>)}
+          </select>
+          {!macDinhXem && <button type="button" onClick={() => setRieng({ ...rieng, nhomTheo: 'nhom', sapTheo: 'thu_tu' })} className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-nen" title="Trở về thứ tự danh mục (kéo thả được)">Về mặc định</button>}
           {!donVi && !xemNhu && (
             <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
               <option value="">Mọi đơn vị chủ trì</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}
@@ -258,7 +294,7 @@ export default function DanhMucNhiemVu() {
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
       <div className="flex items-start gap-4">
         <div className="min-w-0 flex-1">
-          <BangA4 ch={chHien} ds={hien} nhomDs={nhomDs} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
+          <BangA4 ch={chHien} ds={xem.ds} nhomDs={xem.nhom} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={(id) => { setOSua(null); setChon((c) => (c === id ? null : id)); }} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
             oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()}
             moO={(x, khoa, o) => {
@@ -423,7 +459,7 @@ function Zoom({ z, dat }: { z?: number | 'vua'; dat: (z: number | 'vua') => void
 
 // ---------- Bảng A4
 type BangProps = {
-  ch: CauHinhA4; ds: Dong[]; nhomDs: NhomA4[]; rieng: Rieng; setRieng: (r: Rieng) => void; suaDuoc: boolean; chon: string | null; rong: boolean;
+  ch: CauHinhA4; ds: Dong[]; nhomDs: NhomA4[]; keoDuoc: boolean; rieng: Rieng; setRieng: (r: Rieng) => void; suaDuoc: boolean; chon: string | null; rong: boolean;
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
@@ -508,7 +544,7 @@ function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: K
   );
 }
 
-function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, hanTuan, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, hanTuan, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -595,7 +631,7 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
 
   const o = (x: Dong, c: CotA4): ReactNode => {
     switch (c.khoa) {
-      case 'tt': return <>{suaDuoc
+      case 'tt': return <>{keoDuoc
         ? <span onPointerDown={(e) => batDauKeo(e, x)} title="Kéo để đưa nhiệm vụ lên, xuống" className={cx('-mx-[2pt] inline-flex cursor-grab touch-none select-none items-center whitespace-nowrap active:cursor-grabbing', x.so.length > 3 && 'text-[0.85em]')}><GripVertical className="h-[0.9em] w-[0.9em] shrink-0 text-[#B9A9AC]" />{x.so}</span>
         : <span className={cx('whitespace-nowrap', x.so.length > 3 && 'text-[0.85em]')}>{x.so}</span>}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
         className="absolute -bottom-1 left-0 z-10 h-2 w-[4000px] cursor-row-resize hover:bg-do/20" /></>;
@@ -1383,11 +1419,11 @@ function oChu(c: KhoaCot, x: Dong): string {
     case 'ma': return x.n.ma ?? '';
   }
 }
-function nhomTheoThuTu(ch: CauHinhA4, ds: Dong[]) {
-  const g = ch.nhom.length ? ch.nhom : nhomMacDinh();
+function nhomTheoThuTu(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
+  const g = nhom ?? (ch.nhom.length ? ch.nhom : nhomMacDinh());
   return [...g, { id: '_khac', ky_hieu: '', ten: 'Chưa phân nhóm' }].map((x) => [x, ds.filter((y) => y.nhom === x.id)] as const).filter(([, v]) => v.length);
 }
-async function xuatWord(ch: CauHinhA4, ds: Dong[]) {
+async function xuatWord(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
   const D = await import('docx');
   const { AlignmentType, Document, Header, Packer, PageNumber, PageOrientation, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlign, WidthType, BorderStyle } = D;
   const cot = ch.cot.filter((c) => c.hien); const tong = cot.reduce((a, c) => a + c.rong, 0);
@@ -1403,7 +1439,7 @@ async function xuatWord(ch: CauHinhA4, ds: Dong[]) {
     verticalAlign: VerticalAlign.CENTER, margins: { top: 40, bottom: 40, left: 70, right: 70 }, children: doan(t, o2) });
   const giua = ['tt', 'han', 'tinh_trang'];
   const hang: InstanceType<typeof TableRow>[] = [new TableRow({ tableHeader: true, children: cot.map((c, i) => o(c.nhan, rong[i], { dam: true, can: AlignmentType.CENTER })) })];
-  for (const [g, arr] of nhomTheoThuTu(ch, ds)) {
+  for (const [g, arr] of nhomTheoThuTu(ch, ds, nhom)) {
     hang.push(new TableRow({ children: [o(`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`, rongNd, { dam: true, gop: cot.length })] }));
     for (const x of arr) hang.push(new TableRow({ children: cot.map((c, i) => o(oChu(c.khoa, x), rong[i], { can: giua.includes(c.khoa) ? AlignmentType.CENTER : AlignmentType.JUSTIFIED, dam: c.khoa === 'han' })) }));
   }
@@ -1426,12 +1462,12 @@ async function xuatWord(ch: CauHinhA4, ds: Dong[]) {
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `danh-muc-nhiem-vu-${homNayVN()}.docx`; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-async function xuatExcel(ch: CauHinhA4, ds: Dong[], phamVi: Dong[], dv: DonVi[]) {
+async function xuatExcel(ch: CauHinhA4, ds: Dong[], phamVi: Dong[], dv: DonVi[], nhom?: NhomA4[]) {
   const XLSX = await import('xlsx');
   const cot = ch.cot.filter((c) => c.hien); const tong = cot.reduce((a, c) => a + c.rong, 0);
   const aoa: (string | number)[][] = [[ch.tieu_de], [ch.dong_phu.replace(/\{ngay\}/g, ngayNgan(homNayVN()))], [], cot.map((c) => c.nhan)];
   const gop = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cot.length - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: cot.length - 1 } }];
-  for (const [g, arr] of nhomTheoThuTu(ch, ds)) {
+  for (const [g, arr] of nhomTheoThuTu(ch, ds, nhom)) {
     gop.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: cot.length - 1 } }); aoa.push([`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`]);
     for (const x of arr) aoa.push(cot.map((c) => (c.khoa === 'tt' ? x.stt : oChu(c.khoa, x))));
   }
