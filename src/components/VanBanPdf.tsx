@@ -1,8 +1,9 @@
 // Chọn PDF văn bản đã ký, đóng dấu → web tự đọc số, ký hiệu, ngày, trích yếu, người ký (sửa được) · Xem văn bản đã nộp
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { FileCheck2, FileUp, RefreshCw, ScanText, ShieldAlert } from 'lucide-react';
+import { FileCheck2, FileText, FileUp, RefreshCw, ScanText, ShieldAlert } from 'lucide-react';
 import { CHE_DO_THU, goiChucNang } from '../lib/supabase';
 import { docVanBanPdf, META_TRONG, soKyHieu, type MetaVb } from '../lib/docPdf';
+import { docVanBanWord } from '../lib/docWord';
 import { LOAI_VB, type LoaiVb } from '../lib/vanBan';
 import { ngay } from '../lib/dinhDang';
 import { HopLoi, lopO, O, cx } from './ui';
@@ -89,6 +90,16 @@ export default function OVanBanPdf({ meta, doiMeta: doiMeta_, tep, chonTep: chon
     } finally { setDangDoc(null); }
   };
   const dat = <K extends keyof MetaVb>(k: K, v: MetaVb[K]) => doiMeta({ ...meta, [k]: v });
+  // Điền thông tin từ bản Word (.docx) của văn bản — dùng khi PDF là bản scan đọc chưa đúng; tệp nộp vẫn là PDF
+  const tuWord = async (f: File) => {
+    setLoi(null); setDangDoc('Đang đọc tệp Word…');
+    try {
+      const w = await docVanBanWord(f);
+      const giu = (k: keyof MetaVb) => (w[k] ? { [k]: w[k] } : {});
+      doiMeta({ ...meta, ...giu('so_van_ban'), ...giu('ky_hieu'), ...giu('ngay_ban_hanh'), ...giu('trich_yeu'), ...giu('nguoi_ky'), ...giu('chuc_vu_nguoi_ky'),
+        ...(hienCoQuan ? giu('co_quan_ban_hanh') : {}), ...(w.trich_yeu || w.ky_hieu ? { loai: w.loai } : {}), ...(w.noi_dung ? { noi_dung: w.noi_dung } : {}), mat: meta.mat || w.mat });
+    } catch (e) { setLoi(e instanceof Error ? e.message : 'Không đọc được tệp Word'); } finally { setDangDoc(null); }
+  };
   const coTep = !!tep || !!driveId;
   const xem = blob ?? (laThu(driveId) ? null : `https://drive.google.com/file/d/${driveId}/preview`);
 
@@ -129,7 +140,12 @@ export default function OVanBanPdf({ meta, doiMeta: doiMeta_, tep, chonTep: chon
         {meta.mat && <div className="flex items-center gap-2 rounded-xl bg-nguy-nhat px-3 py-2 text-[0.8125rem] font-semibold text-nguy"><ShieldAlert className="h-4 w-4" />Văn bản có độ mật — không nộp lên hệ thống.</div>}
         {tep && !dangDoc && (
           <div className="flex items-center gap-2 rounded-xl bg-nen-3 px-3 py-2 text-[0.7812rem] text-mo-2">
-            <ScanText className="h-4 w-4 shrink-0" />{meta.ocr ? 'Bản scan: đã nhận dạng chữ.' : 'Đã đọc tự động.'} Kiểm tra, sửa nếu sai.
+            <ScanText className="h-4 w-4 shrink-0" /><span className="min-w-0 flex-1">{meta.ocr ? 'Bản scan: đã nhận dạng chữ.' : 'Đã đọc tự động.'} Kiểm tra, sửa nếu sai.</span>
+            <label className="flex shrink-0 cursor-pointer items-center gap-1 rounded-lg px-1.5 py-1 font-semibold text-[#8E1B22] hover:bg-white" title="Đọc số, ký hiệu, trích yếu… từ bản Word của văn bản; tệp nộp vẫn là PDF">
+              <FileText className="h-3.5 w-3.5" />Điền từ tệp Word
+              <input type="file" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" className="sr-only" aria-label="Chọn tệp Word để điền thông tin"
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) void tuWord(f); e.target.value = ''; }} />
+            </label>
           </div>
         )}
         {loi && <HopLoi loi={loi} />}

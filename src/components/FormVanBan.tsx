@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react';
 import { ShieldAlert, Trash2 } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { docVanBanPdf, soKyHieu, type MetaVb } from '../lib/docPdf';
+import { docVanBanWord } from '../lib/docWord';
 import { taiPdfLenDrive } from './VanBanPdf';
 import { idTuLinkDrive, LOAI_VB, SO_THEO_THU_MUC, THU_MUC, TT_VB, xoaVanBan, type LoaiVb, type ThuMuc, type TtVb, type VanBan } from '../lib/vanBan';
-import { CHUA_XEP, ganVanBanPhien, sapXepPhien, type PhienHopKho } from '../lib/phienHop';
+import { CHUA_XEP, ganVanBanPhien, sapXepPhien, thuMucDrivePhien, type PhienHopKho } from '../lib/phienHop';
 import { HopLoi, HopThoai, lopO, Nut, O, cx } from './ui';
 
 type G = {
@@ -41,12 +42,13 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
   useEffect(() => { if (mo) { setPhien(phienDau && phienDau !== CHUA_XEP ? phienDau : ''); setG(tuVb(vb ?? dau)); setFile(null); setDoc(null); setKhongMat(!!vb); setLoi(null); } }, [mo]); // eslint-disable-line react-hooks/exhaustive-deps
   const dat = <K extends keyof G>(k: K, v: G[K]) => setG((x) => ({ ...x, [k]: v }));
 
-  // Chọn PDF: tự đọc số, ký hiệu, ngày, trích yếu, cơ quan, người ký
+  // Chọn PDF / Word (.docx): tự đọc số, ký hiệu, ngày, trích yếu, cơ quan, người ký
   const chonTep = async (f: File | null) => {
     setFile(f); setDoc(null); setLoi(null);
-    if (!f || !/\.pdf$/i.test(f.name)) return;
+    const laWord = !!f && /\.docx$/i.test(f.name);
+    if (!f || !(laWord || /\.pdf$/i.test(f.name))) return;
     try {
-      const m = await docVanBanPdf(f, setDangDoc);
+      const m = laWord ? (setDangDoc('Đang đọc tệp Word…'), await docVanBanWord(f)) : await docVanBanPdf(f, setDangDoc);
       setDoc(m);
       setG((x) => ({
         ...x, so_ky_hieu: soKyHieu(m.so_van_ban, m.ky_hieu) || x.so_ky_hieu, ngay_ban_hanh: m.ngay_ban_hanh || x.ngay_ban_hanh,
@@ -54,7 +56,7 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
         loai: m.trich_yeu || m.ky_hieu ? m.loai : x.loai, nguoi_ky: m.nguoi_ky || x.nguoi_ky,
       }));
       if (m.mat) { setKhongMat(false); setLoi('Văn bản có độ mật — không đưa lên hệ thống.'); }
-    } catch { setLoi('Không đọc được PDF — nhập thông tin thủ công.'); } finally { setDangDoc(null); }
+    } catch (e) { setLoi(laWord ? `${e instanceof Error ? e.message : 'Không đọc được tệp Word'} — nhập thông tin thủ công.` : 'Không đọc được PDF — nhập thông tin thủ công.'); } finally { setDangDoc(null); }
   };
 
   const luu = async () => {
@@ -67,7 +69,9 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
     try {
       let drive: { drive_file_id: string | null; drive_url: string | null; ten_tep: string | null } | null = null;
       if (file) {
-        const r = await taiPdfLenDrive(file, 'van_ban', { thuMuc: THU_MUC[g.thu_muc] });
+        // Hồ sơ họp: mỗi phiên họp một thư mục con trên Drive
+        const ph = g.thu_muc === 'hop_bcd' && phien ? phienDs?.find((x) => x.id === phien) : undefined;
+        const r = await taiPdfLenDrive(file, 'van_ban', { thuMuc: ph ? `${THU_MUC.hop_bcd}/${thuMucDrivePhien(ph, phienDs ?? [])}` : THU_MUC[g.thu_muc] });
         drive = { drive_file_id: r.drive_file_id, drive_url: r.url ?? null, ten_tep: file.name };
       } else if (idLink && idLink !== vb?.drive_file_id) {
         drive = { drive_file_id: idLink, drive_url: g.link.trim(), ten_tep: null };
@@ -94,11 +98,11 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
   return (
     <HopThoai mo={mo} dong={dong} tieuDe={vb ? 'Sửa văn bản' : 'Thêm văn bản vào kho'} rong="max-w-2xl">
       <div className="flex flex-col gap-3.5">
-        <O nhan={vb?.drive_file_id ? 'Thay tệp (PDF: tự đọc thông tin)' : 'Tệp văn bản (PDF: tự đọc thông tin)'}>
+        <O nhan={vb?.drive_file_id ? 'Thay tệp (PDF, Word .docx: tự đọc thông tin)' : 'Tệp văn bản (PDF, Word .docx: tự đọc thông tin)'}>
           <input type="file" aria-label="Tệp văn bản" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip" className={cx(lopO, 'py-2')} onChange={(e) => void chonTep(e.target.files?.[0] ?? null)} />
         </O>
         {dangDoc && <div className="rounded-xl bg-xanh-nhat px-3 py-2 text-[0.8125rem] text-xanh">{dangDoc}</div>}
-        {doc && !dangDoc && <div className="rounded-xl bg-nen-3 px-3 py-2 text-[0.7812rem] text-mo-2">{doc.ocr ? 'Bản scan: đã nhận dạng chữ.' : 'Đã đọc tự động từ PDF.'} Kiểm tra, sửa nếu sai.</div>}
+        {doc && !dangDoc && <div className="rounded-xl bg-nen-3 px-3 py-2 text-[0.7812rem] text-mo-2">{doc.ocr ? 'Bản scan: đã nhận dạng chữ.' : file && /\.docx$/i.test(file.name) ? 'Đã đọc tự động từ tệp Word.' : 'Đã đọc tự động từ PDF.'} Kiểm tra, sửa nếu sai.</div>}
         <div className="grid gap-3 sm:grid-cols-[1fr_170px]">
           <O nhan="Số, ký hiệu"><input className={lopO} placeholder="VD: 12-TB/BCĐ" value={g.so_ky_hieu} onChange={(e) => dat('so_ky_hieu', e.target.value)} /></O>
           <O nhan="Ngày ban hành"><input type="date" className={lopO} value={g.ngay_ban_hanh} onChange={(e) => dat('ngay_ban_hanh', e.target.value)} /></O>
