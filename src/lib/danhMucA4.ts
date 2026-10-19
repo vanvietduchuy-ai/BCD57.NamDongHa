@@ -11,7 +11,8 @@ export type NhomA4 = { id: string; ky_hieu: string; ten: string };
 // Thông tin riêng của từng dòng trong bảng (không có trong bảng nhiem_vu)
 // Cách đánh giá kết quả từng nhiệm vụ: tỷ lệ (đạt/tổng so với chỉ tiêu %), số lượng sản phẩm, % tiến độ, theo kỳ
 export type KieuDG = 'ty_le' | 'so_luong' | 'tien_do' | 'ky';
-export type DanhGia = { kieu: KieuDG; chi_tieu?: number; tong?: number };
+// mau_dv: mẫu số (tổng số) biến động theo thời gian -> đơn vị chủ trì được sửa khi báo cáo (bỏ trống = tự đoán theo tên nhiệm vụ)
+export type DanhGia = { kieu: KieuDG; chi_tieu?: number; tong?: number; mau_dv?: boolean };
 export type SoLieuDG = { tu: number; mau: number; luc: string };
 export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number; danh_gia?: DanhGia; so_lieu?: SoLieuDG; cha?: string; tt_tay?: { loai: LoaiTT; nhan: string } };   // tt_tay: tình trạng sửa tay (bỏ = tự động)   // cha: id nhiệm vụ lớn chứa nhiệm vụ này
 export type CauHinhA4 = {
@@ -213,6 +214,9 @@ export function trangThaiTuChu(s: string): 'chua_trien_khai' | 'dang_thuc_hien' 
 // ---------- Đánh giá kết quả: tự nhận cách đánh giá từ "Chỉ tiêu / sản phẩm"
 // "37.070" (dấu chấm phân nghìn) -> 37070; "92,3" -> 92.3
 export const docSo = (t: string) => { const x = /^\d{1,3}(\.\d{3})+$/.test(t) ? t.replace(/\./g, '') : t.replace(',', '.'); const v = Number(x); return Number.isFinite(v) ? v : NaN; };
+// Nhiệm vụ có mẫu số thay đổi theo thời gian (vd: kích hoạt VNeID mức 2 — tổng số công dân đủ điều kiện tăng/giảm)
+export const MAU_BIEN_DONG = /vneid|định danh điện tử|kích hoạt tài khoản/i;
+export const mauDonViSua = (dg: DanhGia, n: Pick<NhiemVu, 'ten'>) => dg.mau_dv ?? MAU_BIEN_DONG.test(n.ten ?? '');
 export function goiYDanhGia(n: Pick<NhiemVu, 'san_pham' | 'dinh_ky'>): DanhGia {
   if (n.dinh_ky) return { kieu: 'ky' };
   const sp = n.san_pham ?? '';
