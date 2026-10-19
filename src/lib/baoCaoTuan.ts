@@ -32,6 +32,17 @@ export function tuanCua(d: Date, ch: CauHinhBCT, lui = 0): Tuan {
 export type CapNhatTuan = { nhiem_vu_id: string; noi_dung: string; luc: string; phan_tram: number | null; boi_ten: string | null };
 export const laBaoCaoTuan = (c: CapNhatTuan, t: Tuan) => c.noi_dung.startsWith(t.tienTo);
 export const boTienTo = (s: string) => s.replace(/^Báo cáo tuần \d+\/\d+:\s*/, '');
+// Đơn vị rút báo cáo tuần (báo là chưa báo cáo): ghi một dòng đánh dấu, không xoá lịch sử
+export const DAU_RUT = '(Đơn vị rút báo cáo — chưa báo cáo tuần này)';
+export const laRutBaoCao = (noiDung: string) => boTienTo(noiDung).startsWith(DAU_RUT);
+// Các lần báo cáo tuần còn hiệu lực (mới nhất trước): bỏ những lần trước lần rút gần nhất; lần mới nhất là bản đang dùng (sửa = gửi lại)
+export function baoCaoHieuLuc<T extends { noi_dung: string; luc: string }>(ds: T[], t: Tuan): T[] {
+  const cua = ds.filter((c) => c.noi_dung.startsWith(t.tienTo)).sort((a, b) => b.luc.localeCompare(a.luc));
+  const i = cua.findIndex((c) => laRutBaoCao(c.noi_dung));
+  return i < 0 ? cua : cua.slice(0, i);
+}
+// Báo cáo tuần gần nhất (mọi tuần) còn hiệu lực — bỏ dòng rút
+export const laBaoCaoTuanBatKy = (noiDung: string) => /^Báo cáo tuần \d+\/\d+:/.test(noiDung) && !laRutBaoCao(noiDung);
 
 // Tình trạng báo cáo tuần của một đơn vị
 export type TinhTrangTuan = 'du' | 'tre' | 'thieu' | 'chua' | 'qua_han' | 'khong_co';
