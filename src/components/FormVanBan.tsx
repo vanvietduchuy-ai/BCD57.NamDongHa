@@ -4,6 +4,7 @@ import { loiDe, supabase } from '../lib/supabase';
 import { docVanBanPdf, soKyHieu, type MetaVb } from '../lib/docPdf';
 import { taiPdfLenDrive } from './VanBanPdf';
 import { idTuLinkDrive, LOAI_VB, SO_THEO_THU_MUC, THU_MUC, TT_VB, xoaVanBan, type LoaiVb, type ThuMuc, type TtVb, type VanBan } from '../lib/vanBan';
+import { CHUA_XEP, ganVanBanPhien, sapXepPhien, type PhienHopKho } from '../lib/phienHop';
 import { HopLoi, HopThoai, lopO, Nut, O, cx } from './ui';
 
 type G = {
@@ -18,9 +19,12 @@ const tuVb = (v?: Partial<VanBan>): G => ({
 });
 
 // Thêm / sửa văn bản trong kho. Tệp đưa lên Google Drive qua Edge Function (thư mục "Kho văn bản/<thư mục>").
-export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa }: {
+// phienDs: có thì hiện ô chọn phiên họp khi thư mục là "Hồ sơ họp BCĐ" (mỗi phiên họp một bộ hồ sơ)
+export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, phienDau }: {
   mo: boolean; dong: () => void; vb?: VanBan; dau?: Partial<VanBan>; xong: (id: string) => void; daXoa?: () => void;
+  phienDs?: PhienHopKho[]; phienDau?: string;
 }) {
+  const [phien, setPhien] = useState(phienDau ?? '');
   const [dangXoa, setDangXoa] = useState(false);
   const xoa = async () => {
     if (!vb || !window.confirm(`Xoá văn bản "${vb.so_ky_hieu ?? vb.trich_yeu}"?\n\nVăn bản bị gỡ khỏi sổ công văn, bỏ liên kết căn cứ / minh chứng nhiệm vụ; tệp trên Google Drive chuyển vào thùng rác.`)) return;
@@ -34,7 +38,7 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa }: {
   const [khongMat, setKhongMat] = useState(!!vb);
   const [dangChay, setDangChay] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
-  useEffect(() => { if (mo) { setG(tuVb(vb ?? dau)); setFile(null); setDoc(null); setKhongMat(!!vb); setLoi(null); } }, [mo]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (mo) { setPhien(phienDau && phienDau !== CHUA_XEP ? phienDau : ''); setG(tuVb(vb ?? dau)); setFile(null); setDoc(null); setKhongMat(!!vb); setLoi(null); } }, [mo]); // eslint-disable-line react-hooks/exhaustive-deps
   const dat = <K extends keyof G>(k: K, v: G[K]) => setG((x) => ({ ...x, [k]: v }));
 
   // Chọn PDF: tự đọc số, ký hiệu, ngày, trích yếu, cơ quan, người ký
@@ -78,7 +82,12 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa }: {
         ? await supabase.from('van_ban').update(dong_).eq('id', vb.id).select('id').single()
         : await supabase.from('van_ban').insert(dong_).select('id').single();
       if (r.error) throw r.error;
-      xong(r.data.id as string);
+      const id = r.data.id as string;
+      if (phienDs) {
+        try { await ganVanBanPhien(id, g.thu_muc === 'hop_bcd' ? phien || null : null); }
+        catch (e) { window.alert(`Đã lưu văn bản nhưng chưa xếp được vào phiên họp: ${loiDe(e)}`); }
+      }
+      xong(id);
     } catch (e) { setLoi(loiDe(e)); } finally { setDangChay(false); }
   };
 
@@ -102,6 +111,11 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa }: {
             {Object.entries(LOAI_VB).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></O>
           <O nhan="Thư mục" goiY={SO_THEO_THU_MUC(g.thu_muc) === 'den' ? 'Tự vào sổ công văn đến' : SO_THEO_THU_MUC(g.thu_muc) === 'di' ? 'Tự vào sổ công văn đi' : undefined}><select className={lopO} value={g.thu_muc} onChange={(e) => dat('thu_muc', e.target.value as ThuMuc)}>
             {Object.entries(THU_MUC).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></O>
+          {phienDs && g.thu_muc === 'hop_bcd' && <O nhan="Phiên họp" goiY={phienDs.length ? undefined : 'Chưa có phiên họp — tạo phiên trong thư mục Hồ sơ họp BCĐ'}>
+            <select className={lopO} value={phien} onChange={(e) => setPhien(e.target.value)}>
+              <option value="">— Chưa xếp phiên họp —</option>
+              {sapXepPhien(phienDs).map((p) => <option key={p.id} value={p.id}>{p.ten}{p.ngay ? ` (${p.ngay.split('-').reverse().join('/')})` : ''}</option>)}
+            </select></O>}
           <O nhan="Tình trạng" goiY={g.trang_thai === 'du_thao' ? 'Đơn vị không thấy dự thảo' : undefined}>
             <select className={lopO} value={g.trang_thai} onChange={(e) => dat('trang_thai', e.target.value as TtVb)}>
               {Object.entries(TT_VB).map(([k, v]) => <option key={k} value={k}>{v.nhan}</option>)}</select></O>
