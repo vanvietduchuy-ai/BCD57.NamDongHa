@@ -9,7 +9,7 @@ import { laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
 import { COT_NV, khongDau, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
-  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, docSo, goiYDanhGia, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
+  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
@@ -91,7 +91,7 @@ export default function DanhMucNhiemVu() {
   const [moThem, setMoThem] = useState(false);
   const [themCon, setThemCon] = useState<string | null>(null);   // thêm nhiệm vụ con vào nhiệm vụ lớn (id)
   const [moTk, setMoTk] = useState(false);
-  const [oSua, setOSua] = useState<{ id: string; khoa: KhoaCot; o: DOMRect } | null>(null);
+  const [oSua, setOSua] = useState<{ id: string; khoa: KhoaCot; o: HTMLElement } | null>(null);
   const [sua, setSua] = useState<NhiemVu | null>(null);
   const [thongBao, setThongBao] = useState<{ loi?: string; ok?: string } | null>(null);
 
@@ -286,7 +286,7 @@ export default function DanhMucNhiemVu() {
         const x = tatCa.find((y) => y.n.id === oSua.id); if (!x) return null;
         const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
         return (
-          <HopSuaO x={x} khoa={oSua.khoa} o={oSua.o} nhan={chHien.cot.find((c) => c.khoa === oSua.khoa)?.nhan ?? ''} dong={() => setOSua(null)}
+          <HopSuaO x={x} khoa={oSua.khoa} oEl={oSua.o} nhan={chHien.cot.find((c) => c.khoa === oSua.khoa)?.nhan ?? ''} dong={() => setOSua(null)}
             luu={async (v) => { setOSua(null); await luuOSua(x, oSua.khoa, v, capNhatNv, suaDong); }}
             noiDungO={oSua.khoa === 'tien_do'
               ? <>
@@ -398,7 +398,7 @@ type BangProps = {
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
-  moO: (x: Dong, khoa: KhoaCot, o: DOMRect) => boolean; oDangMo: string | null; hanTuan: number;
+  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; oDangMo: string | null; hanTuan: number;
 };
 const O_SUA: Partial<Record<KhoaCot, 'nv' | 'dong'>> = { ten: 'nv', san_pham: 'nv', han: 'nv', lanh_dao: 'nv', ma: 'nv', nguon_vb: 'dong', chu_tri: 'dong', tien_do: 'dong' };
 const giaTriSua = (x: Dong, k: KhoaCot): string =>
@@ -413,21 +413,30 @@ async function luuOSua(x: Dong, k: KhoaCot, v: string, capNhatNv: (id: string, p
 }
 
 // Hộp sửa một ô: nổi ngay cạnh ô được bấm (vị trí cố định, không cuộn trang); điện thoại hiện ở cuối màn hình
-function HopSuaO({ x, khoa, o, nhan, dong, luu, noiDungO }: { x: Dong; khoa: KhoaCot; o: DOMRect; nhan: string; dong: () => void; luu: (v: string) => void; noiDungO: ReactNode }) {
+function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: KhoaCot; oEl: HTMLElement; nhan: string; dong: () => void; luu: (v: string) => void; noiDungO: ReactNode }) {
   const [v, setV] = useState(giaTriSua(x, khoa));
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { const t = ref.current; if (t) { t.focus({ preventScroll: true }); t.setSelectionRange(t.value.length, t.value.length); } }, []);
   useLayoutEffect(() => { const t = ref.current; if (t) { t.style.height = '0'; t.style.height = `${Math.min(260, t.scrollHeight + 2)}px`; } }, [v]);
   useEffect(() => { const f = (e: KeyboardEvent) => { if (e.key === 'Escape') dong(); }; window.addEventListener('keydown', f); return () => window.removeEventListener('keydown', f); }, [dong]);
+  // Hộp gắn cố định với ô đang sửa: cuộn trang / cuộn bảng thì hộp đi theo ô, không đứng yên giữa màn hình
+  const timO = useCallback(() => (oEl.isConnected ? oEl : document.querySelector<HTMLElement>(`[data-o="${x.n.id}:${khoa}"]`) ?? oEl), [oEl, x.n.id, khoa]);
+  const [o, setO] = useState<DOMRect>(() => oEl.getBoundingClientRect());
+  useEffect(() => {
+    let raf = 0;
+    const cap = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => setO(timO().getBoundingClientRect())); };
+    window.addEventListener('scroll', cap, true); window.addEventListener('resize', cap);
+    const ro = new ResizeObserver(cap); ro.observe(timO());
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('scroll', cap, true); window.removeEventListener('resize', cap); ro.disconnect(); };
+  }, [timO]);
   const rong = khoa === 'tien_do' ? 420 : khoa === 'nguon_vb' ? 400 : Math.max(320, Math.min(460, o.width + 120));
   const hep = window.innerWidth < 640;
   const trai = Math.max(12, Math.min(o.left, window.innerWidth - rong - 12));
-  // Đặt hộp dưới ô nếu đủ chỗ, không thì trên ô; luôn nằm gọn trong màn hình
+  // Chọn đặt dưới / trên ô một lần lúc mở (không đổi khi cuộn); vị trí dọc bám theo ô
   const caoToiDa = Math.min(560, window.innerHeight * 0.7);
-  const duoi = window.innerHeight - o.bottom - 12 >= caoToiDa || o.top < window.innerHeight - o.bottom;
-  const viTri: React.CSSProperties = hep ? { left: 8, right: 8, bottom: 8 }
-    : duoi ? { left: trai, top: Math.max(12, Math.min(o.bottom + 6, window.innerHeight - caoToiDa - 12)), width: rong }
-    : { left: trai, bottom: Math.max(12, window.innerHeight - o.top + 6), width: rong };
+  const [duoi] = useState(() => { const r = oEl.getBoundingClientRect(); return window.innerHeight - r.bottom - 12 >= caoToiDa || r.top < window.innerHeight - r.bottom; });
+  const doc: React.CSSProperties = duoi ? { top: o.bottom + 6 } : { bottom: window.innerHeight - o.top + 6 };
+  const viTri: React.CSSProperties = hep ? { left: 8, right: 8, ...doc } : { left: trai, width: rong, ...doc };
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={dong} />
@@ -634,9 +643,9 @@ function BangA4({ ch, ds, nhomDs, rieng, setRieng, suaDuoc, chon, mo, luuCH, sua
                       {cot.map((c, i) => {
                         const dangMo = oDangMo === `${x.n.id}:${c.khoa}`;
                         return (
-                          <td key={c.khoa}
+                          <td key={c.khoa} data-o={`${x.n.id}:${c.khoa}`}
                             // Bấm ô: mở hộp sửa đúng ô đó (nếu được sửa); ô không sửa được (TT, tình trạng…) mở khung chi tiết
-                            onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('button')) return; if (!moO(x, c.khoa, (e.currentTarget as HTMLElement).getBoundingClientRect())) mo(x.n.id); }}
+                            onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('button')) return; if (!moO(x, c.khoa, e.currentTarget as HTMLElement)) mo(x.n.id); }}
                             className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-middle [overflow-wrap:anywhere]', ['tt', 'han', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative',
                               (suaDuoc && O_SUA[c.khoa]) || (suaDuoc && c.khoa === 'tien_do') || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
                             style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>{o(x, c)}</td>
@@ -913,14 +922,17 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
   const [mo, setMoS] = useState(moSan);
   const setMo = (v: boolean) => { if (!v && huy) huy(); else setMoS(v); };
   const [noiDung, setNoiDung] = useState('');
-  const [tu, setTu] = useState(x.d.so_lieu ? String(x.d.so_lieu.tu) : '');
-  const [mau, setMau] = useState(x.d.so_lieu ? String(x.d.so_lieu.mau) : dg.tong ? String(dg.tong) : '');
+  // Mẫu số biến động: đơn vị chủ trì được sửa tổng số; ô mặc định lấy tổng số báo cáo gần nhất
+  const slCu = soLieuCua(x);
+  const mauDv = mauDonViSua(dg, n);
+  const [tu, setTu] = useState(slCu ? String(slCu.tu) : '');
+  const [mau, setMau] = useState(() => { const v = !quanTri && dg.tong && !mauDv ? dg.tong : slCu?.mau ?? dg.tong; return v ? String(v) : ''; });
   const [p, setP] = useState(n.phan_tram);
   const [xongNv, setXongNv] = useState(false);
   const [dang, setDang] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
   const doiKieu = (k: KieuDG) => {
-    const moi: DanhGia = k === goiY.kieu ? goiY : { kieu: k };
+    const moi: DanhGia = { ...(k === goiY.kieu ? goiY : { kieu: k }), ...(dg.mau_dv !== undefined ? { mau_dv: dg.mau_dv } : {}) };
     setDg(moi); if (!mau && moi.tong) setMau(String(moi.tong));
     if (quanTri) luuDong({ danh_gia: moi });
   };
@@ -961,7 +973,19 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
     if (kq && quanTri) luuDong({ so_lieu: { tu: soTu, mau: soMau, luc: new Date().toISOString() }, ...(x.d.danh_gia ? {} : { danh_gia: dg }) });
     setMo(false); setNoiDung(''); xong();
   };
-  const khoaMau = !quanTri && !!dg.tong;   // tổng số do Thường trực đặt -> đơn vị không sửa
+  const khoaMau = !quanTri && !!dg.tong && !mauDv;   // tổng số do Thường trực đặt -> đơn vị không sửa (trừ nhiệm vụ có mẫu số biến động)
+  const nhanMau = (goc: string) => (mauDv && !quanTri ? `${goc} (cập nhật mới)` : goc);
+  const mauDoi = slCu && Number.isFinite(soMau) && mau.trim() !== '' && soMau !== slCu.mau;
+  // Thường trực bật/tắt quyền sửa mẫu số cho đơn vị chủ trì
+  const chonMauDv = quanTri && (dg.kieu === 'ty_le' || dg.kieu === 'so_luong') && (
+    <label className="flex items-start gap-2 text-[11.5px] leading-snug text-mo-2">
+      <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#8E1B22]" checked={mauDv}
+        onChange={(e) => { const moi = { ...dg, mau_dv: e.target.checked }; setDg(moi); luuDong({ danh_gia: moi }); }} />
+      <span><b className="text-den">Mẫu số biến động</b> — đơn vị chủ trì được sửa {dg.kieu === 'ty_le' ? 'tổng số' : 'số yêu cầu'} khi báo cáo (vd: số công dân đủ điều kiện kích hoạt VNeID mức 2 thay đổi theo thời gian).</span>
+    </label>);
+  const ghiChuMau = !quanTri && mauDv && (dg.kieu === 'ty_le' || dg.kieu === 'so_luong') && (
+    <span className="text-[11px] leading-snug text-mo-2">Mẫu số biến động: đơn vị nhập {dg.kieu === 'ty_le' ? 'tổng số' : 'số yêu cầu'} mới nhất tại thời điểm báo cáo.
+      {mauDoi && <b className="text-cam-dam"> Lần trước: {soVN(slCu!.mau)} → nay {soVN(soMau)}.</b>}</span>);
   const oSo = (nhan: string, v: string, dat: (v: string) => void, goi?: string, khoa = false) => (
     <label className="flex min-w-0 flex-1 flex-col gap-1"><span className="text-[11px] font-semibold text-mo-2">{nhan}</span>
       <input inputMode="decimal" readOnly={khoa} className={cx(lopO, 'mono min-h-10 text-[0.9375rem]', khoa ? 'bg-nen text-mo-2' : 'bg-white')} placeholder={goi} value={v} onChange={(e) => dat(e.target.value.replace(/[^\d.,]/g, ''))} /></label>
@@ -980,7 +1004,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 
       {dg.kieu === 'ty_le' && <>
         <div className="flex items-end gap-2">
-          {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo('Tổng số', mau, setMau, 'vd: 37.070', khoaMau)}
+          {oSo('Đạt', tu, setTu, 'vd: 34.605')}<span className="pb-2.5 text-mo">/</span>{oSo(nhanMau('Tổng số'), mau, setMau, 'vd: 37.070', khoaMau)}
           <label className="flex w-[74px] shrink-0 flex-col gap-1"><span className="text-[11px] font-semibold text-mo-2">Chỉ tiêu</span>
             <input inputMode="decimal" readOnly={!quanTri} title={quanTri ? undefined : 'Chỉ tiêu do Cơ quan Thường trực đặt'} className={cx(lopO, 'mono min-h-10 text-[0.9375rem]', quanTri ? 'bg-white' : 'bg-nen text-mo-2')} placeholder="%" value={dg.chi_tieu ?? ''}
               onChange={(e) => { const v = docSo(e.target.value); setDg({ ...dg, chi_tieu: Number.isFinite(v) && e.target.value ? v : undefined }); }}
@@ -994,11 +1018,13 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
       </>}
 
       {dg.kieu === 'so_luong' && <>
-        <div className="flex items-end gap-2">{oSo('Đã hoàn thành', tu, setTu, '0')}<span className="pb-2.5 text-mo">/</span>{oSo('Yêu cầu', mau, setMau, 'số lượng', khoaMau)}</div>
+        <div className="flex items-end gap-2">{oSo('Đã hoàn thành', tu, setTu, '0')}<span className="pb-2.5 text-mo">/</span>{oSo(nhanMau('Yêu cầu'), mau, setMau, 'số lượng', khoaMau)}</div>
         {kq && <div className="flex items-center gap-2 text-[0.8125rem]">
           <div className="h-1.5 flex-1 rounded-full bg-white"><div className="h-1.5 rounded-full bg-[#16A34A]" style={{ width: `${kq.phanTram}%` }} /></div>
           <span className="mono text-xs font-bold">{kq.phanTram}%</span></div>}
       </>}
+
+      {ghiChuMau}{chonMauDv}
 
       {dg.kieu === 'tien_do' && laChuTri && (
         <div className="flex items-center gap-1">
