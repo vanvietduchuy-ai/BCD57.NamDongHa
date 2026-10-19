@@ -5,8 +5,9 @@ import type { LoaiVb } from './vanBan';
 
 export const KHOA_HO_SO_HOP = 'ho_so_hop_bcd';
 export type PhienHopKho = { id: string; ten: string; ngay?: string; dia_diem?: string; ghi_chu?: string };
-export type HoSoHop = { ds: PhienHopKho[]; vb: Record<string, string> };   // vb: id văn bản -> id phiên họp
-export const HO_SO_HOP_RONG: HoSoHop = { ds: [], vb: {} };
+// vb: văn bản thuộc thư mục Hồ sơ họp -> id phiên họp; kem: id phiên họp -> văn bản có sẵn ở thư mục khác được đính kèm vào phiên (không chuyển thư mục)
+export type HoSoHop = { ds: PhienHopKho[]; vb: Record<string, string>; kem: Record<string, string[]> };
+export const HO_SO_HOP_RONG: HoSoHop = { ds: [], vb: {}, kem: {} };
 export const CHUA_XEP = '_chua';
 
 // Thành phần hồ sơ một phiên họp (đối chiếu theo loại văn bản đã có trong phiên)
@@ -18,7 +19,7 @@ export const THANH_PHAN_HOP: [LoaiVb, string][] = [
 export async function docHoSoHop(): Promise<HoSoHop> {
   const { data } = await supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_HO_SO_HOP).maybeSingle();
   const g = (data?.gia_tri ?? {}) as Partial<HoSoHop>;
-  return { ds: Array.isArray(g.ds) ? g.ds : [], vb: g.vb && typeof g.vb === 'object' ? g.vb : {} };
+  return { ds: Array.isArray(g.ds) ? g.ds : [], vb: g.vb && typeof g.vb === 'object' ? g.vb : {}, kem: g.kem && typeof g.kem === 'object' ? g.kem : {} };
 }
 
 // Đọc bản mới nhất rồi mới sửa, tránh ghi đè thay đổi của người khác
@@ -36,3 +37,10 @@ export const ganVanBanPhien = (vbId: string, phienId: string | null) => suaHoSoH
 });
 
 export const sapXepPhien = (ds: PhienHopKho[]) => [...ds].sort((a, b) => (b.ngay ?? '9999').localeCompare(a.ngay ?? '9999') || a.ten.localeCompare(b.ten, 'vi'));
+
+// Đính kèm / bỏ đính kèm văn bản có sẵn vào một phiên họp
+export const dinhKemPhien = (phienId: string, them: string[], bo: string[] = []) => suaHoSoHop((h) => {
+  const cu = h.kem[phienId] ?? [];
+  const moi = [...new Set([...cu, ...them])].filter((x) => !bo.includes(x));
+  return { ...h, kem: { ...h.kem, [phienId]: moi } };
+});
