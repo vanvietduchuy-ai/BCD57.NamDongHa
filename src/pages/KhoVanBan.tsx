@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { CalendarDays, Check, Download, Folder, FolderOpen, MapPin, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
+import { CalendarDays, Check, Download, Link2, Unlink, Folder, FolderOpen, MapPin, Pencil, Plus, Search, Trash2, Upload } from 'lucide-react';
 import { useManRong } from '../lib/manHinh';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
@@ -8,7 +8,7 @@ import { ngay } from '../lib/dinhDang';
 import { khongDau } from '../lib/nhiemVu';
 import { moTepDrive } from '../components/TepDrive';
 import { COT_VB, linkVb, LOAI_VB, THU_MUC, TT_VB, xoaVanBan, type LoaiVb, type ThuMuc, type VanBan } from '../lib/vanBan';
-import { CHUA_XEP, docHoSoHop, sapXepPhien, suaHoSoHop, THANH_PHAN_HOP, type PhienHopKho } from '../lib/phienHop';
+import { CHUA_XEP, dinhKemPhien, docHoSoHop, sapXepPhien, suaHoSoHop, THANH_PHAN_HOP, type PhienHopKho } from '../lib/phienHop';
 import { Chip, DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, cx } from '../components/ui';
 import FormVanBan from '../components/FormVanBan';
 
@@ -45,7 +45,18 @@ export default function KhoVanBan() {
   };
 
   const phienCua = (v: VanBan) => { const p = data?.hh.vb[v.id]; return p && data?.hh.ds.some((x) => x.id === p) ? p : CHUA_XEP; };
-  const hop = (v: VanBan, tm: ThuMuc | 'cap_tren' | '') => !tm || (tm === 'cap_tren' ? v.thu_muc.startsWith('cap_tren') : v.thu_muc === tm && (tm !== 'hop_bcd' || !phien || phienCua(v) === phien));
+  // Văn bản đính kèm vào phiên (văn bản có sẵn ở thư mục khác, hoặc của phiên khác)
+  const kemCua = (pid: string) => new Set(data?.hh.kem[pid] ?? []);
+  const trongPhien = (v: VanBan, pid: string) => (v.thu_muc === 'hop_bcd' && phienCua(v) === pid) || kemCua(pid).has(v.id);
+  const laKem = (v: VanBan, pid: string) => !(v.thu_muc === 'hop_bcd' && phienCua(v) === pid) && kemCua(pid).has(v.id);
+  const hop = (v: VanBan, tm: ThuMuc | 'cap_tren' | '') => !tm || (tm === 'cap_tren' ? v.thu_muc.startsWith('cap_tren')
+    : tm === 'hop_bcd' && phien && phien !== CHUA_XEP ? trongPhien(v, phien)
+    : v.thu_muc === tm && (tm !== 'hop_bcd' || !phien || phienCua(v) === phien));
+  const [moKem, setMoKem] = useState(false);
+  const boKem = async (v: VanBan, pid: string) => {
+    try { await dinhKemPhien(pid, [], [v.id]); setTb(`Đã bỏ đính kèm ${v.so_ky_hieu ?? v.trich_yeu} khỏi phiên họp.`); void taiLai(); }
+    catch (e) { setTb(loiDe(e)); }
+  };
   const conHl = (v: VanBan) => hetHl || v.trang_thai !== 'het_hieu_luc';
   const ds = useMemo(() => {
     const t = khongDau(tim.trim());
@@ -73,17 +84,17 @@ export default function KhoVanBan() {
   const phienChon = thuMuc === 'hop_bcd' && phien && phien !== CHUA_XEP ? dsPhien.find((p) => p.id === phien) ?? null : null;
   const thuMucHop = <>
     {nutTM('hop_bcd', THU_MUC.hop_bcd)}
-    {dsPhien.map((p) => nutTM('hop_bcd', p.ten, true, p.id, vbHop.filter((v) => phienCua(v) === p.id).length))}
+    {dsPhien.map((p) => nutTM('hop_bcd', p.ten, true, p.id, (data?.vb ?? []).filter((v) => conHl(v) && trongPhien(v, p.id)).length))}
     {soChuaXep > 0 && nutTM('hop_bcd', 'Chưa xếp phiên họp', true, CHUA_XEP, soChuaXep)}
     {quanTri && <button key="them-phien" onClick={() => setSuaPhien('moi')}
       className="flex min-h-10 shrink-0 items-center gap-2.5 rounded-xl border border-dashed border-vien-2 bg-white px-3 text-left text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-white/70 lg:w-full lg:border-0 lg:bg-transparent lg:pl-8">
       <Plus className="h-4 w-4 shrink-0" /><span className="whitespace-nowrap">Tạo phiên họp</span></button>}
   </>;
   const xoaPhien = async (p: PhienHopKho) => {
-    const n = vbHop.filter((v) => phienCua(v) === p.id).length;
+    const n = vbHop.filter((v) => phienCua(v) === p.id).length;   // văn bản đính kèm từ thư mục khác chỉ bỏ liên kết
     if (!window.confirm(`Xoá phiên họp "${p.ten}"?${n ? `\n\n${n} văn bản của phiên chuyển sang "Chưa xếp phiên họp" (không xoá văn bản).` : ''}`)) return;
     try {
-      await suaHoSoHop((h) => ({ ds: h.ds.filter((x) => x.id !== p.id), vb: Object.fromEntries(Object.entries(h.vb).filter(([, v]) => v !== p.id)) }));
+      await suaHoSoHop((h) => ({ ds: h.ds.filter((x) => x.id !== p.id), vb: Object.fromEntries(Object.entries(h.vb).filter(([, v]) => v !== p.id)), kem: Object.fromEntries(Object.entries(h.kem).filter(([k]) => k !== p.id)) }));
       setPhien(''); setTb(`Đã xoá phiên họp ${p.ten}.`); void taiLai();
     } catch (e) { setTb(loiDe(e)); }
   };
@@ -123,8 +134,8 @@ export default function KhoVanBan() {
         </div>
 
         <The className="flex min-w-0 flex-col overflow-hidden">
-          {phienChon && <TheoPhien p={phienChon} ds={vbHop.filter((v) => phienCua(v) === phienChon.id)} quanTri={quanTri}
-            them={() => setForm({})} sua={() => setSuaPhien(phienChon)} xoa={() => void xoaPhien(phienChon)} />}
+          {phienChon && <TheoPhien p={phienChon} ds={(data?.vb ?? []).filter((v) => conHl(v) && trongPhien(v, phienChon.id))} quanTri={quanTri}
+            them={() => setForm({})} kem={() => setMoKem(true)} sua={() => setSuaPhien(phienChon)} xoa={() => void xoaPhien(phienChon)} />}
           {thuMuc === 'hop_bcd' && !phien && <div className="border-b border-vien bg-nen-2 px-4 py-2.5 text-[0.8125rem] text-mo-2">
             Hồ sơ họp được lập theo từng phiên họp — chọn phiên họp ở danh mục thư mục{quanTri ? ' hoặc bấm “Tạo phiên họp”' : ''}.</div>}
           <div className="flex flex-wrap gap-2 border-b border-vien p-4">
@@ -137,25 +148,28 @@ export default function KhoVanBan() {
             <ul className="flex flex-col">
               {ds.map((v) => {
                 const tenPhien = thuMuc === 'hop_bcd' && !phien ? dsPhien.find((p) => p.id === phienCua(v))?.ten : undefined;
+                const kem = !!phienChon && laKem(v, phienChon.id);
+                const hangNut = quanTri && (!rong || kem);
                 const c = CHIP_LOAI(v);
                 const dangXem = vbChon?.id === v.id;
                 return (
                   <li key={v.id}>
                     <button type="button" onClick={() => (rong ? setChonId(v.id) : linkVb(v) ? moVb(v) : quanTri && setForm({ vb: v }))}
                       className={cx('grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 border-b border-[#F1EEE7] px-4 py-3 text-left transition-colors sm:grid-cols-[120px_minmax(0,1fr)_auto]',
-                        dangXem ? 'bg-[#FDF1F0] shadow-[inset_3px_0_0_var(--color-ink)]' : 'hover:bg-nen-2', v.trang_thai === 'het_hieu_luc' && 'opacity-60', quanTri && !rong && 'border-b-0 pb-1')}>
+                        dangXem ? 'bg-[#FDF1F0] shadow-[inset_3px_0_0_var(--color-ink)]' : 'hover:bg-nen-2', v.trang_thai === 'het_hieu_luc' && 'opacity-60', hangNut && 'border-b-0 pb-1')}>
                       <span className="mono col-span-2 flex gap-2 text-[0.75rem] leading-snug text-mo-2 sm:col-span-1 sm:flex-col sm:gap-0">
                         <b className="font-bold text-den">{v.so_ky_hieu ?? '…'}</b><span>{v.ngay_ban_hanh ? ngay(v.ngay_ban_hanh) : '…'}</span>
                       </span>
                       <span className="flex min-w-0 flex-col">
                         <span className="line-clamp-2 text-[0.875rem] font-semibold leading-snug text-den sm:line-clamp-1">{v.trich_yeu}</span>
-                        <span className="truncate text-[0.7812rem] text-mo">{v.co_quan_ban_hanh}{tenPhien && <> · <b className="font-semibold text-[#8E1B22]">{tenPhien}</b></>}</span>
+                        <span className="truncate text-[0.7812rem] text-mo">{kem && <span className="mr-1 inline-flex items-center gap-1 rounded bg-[#E0E7FF] px-1.5 font-semibold text-[#3730A3]"><Link2 className="h-3 w-3" />Đính kèm · {v.thu_muc === 'hop_bcd' ? 'phiên khác' : THU_MUC[v.thu_muc]}</span>}{v.co_quan_ban_hanh}{tenPhien && <> · <b className="font-semibold text-[#8E1B22]">{tenPhien}</b></>}</span>
                       </span>
                       <Chip nen={c[0]} chu={c[1]}>{c[2]}</Chip>
                     </button>
-                    {quanTri && !rong && <div className="-mt-px flex justify-end gap-1 border-b border-[#F1EEE7] px-3 pb-1.5">
-                      <button type="button" onClick={() => setForm({ vb: v })} className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-mo-2 hover:bg-nen"><Pencil className="h-3.5 w-3.5" />Sửa</button>
-                      <button type="button" onClick={() => void xoa(v)} className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-nguy hover:bg-nguy-nhat"><Trash2 className="h-3.5 w-3.5" />Xoá</button>
+                    {hangNut && <div className="-mt-px flex justify-end gap-1 border-b border-[#F1EEE7] px-3 pb-1.5">
+                      {kem && <button type="button" onClick={() => void boKem(v, phienChon!.id)} className="mr-auto flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-[#3730A3] hover:bg-[#EEF2FF]"><Unlink className="h-3.5 w-3.5" />Bỏ khỏi phiên</button>}
+                      {!rong && <><button type="button" onClick={() => setForm({ vb: v })} className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-mo-2 hover:bg-nen"><Pencil className="h-3.5 w-3.5" />Sửa</button>
+                      <button type="button" onClick={() => void xoa(v)} className="flex min-h-8 items-center gap-1.5 rounded-lg px-2.5 text-[0.8125rem] font-semibold text-nguy hover:bg-nguy-nhat"><Trash2 className="h-3.5 w-3.5" />Xoá</button></>}
                     </div>}
                   </li>
                 );
@@ -207,6 +221,9 @@ export default function KhoVanBan() {
       <FormVanBan mo={!!form} dong={() => setForm(null)} vb={form?.vb} dau={thuMuc && thuMuc !== 'cap_tren' ? { thu_muc: thuMuc } : undefined}
         phienDs={data?.hh.ds ?? []} phienDau={form?.vb ? phienCua(form.vb) : thuMuc === 'hop_bcd' ? phien : ''}
         xong={() => { setForm(null); void taiLai(); }} daXoa={() => { setForm(null); setChonId(null); setTb('Đã xoá văn bản.'); void taiLai(); }} />
+      {phienChon && <ChonVanBanCoSan mo={moKem} dong={() => setMoKem(false)} p={phienChon} ds={(data?.vb ?? []).filter((v) => conHl(v) && !trongPhien(v, phienChon.id))}
+        tenPhien={(v) => (v.thu_muc === 'hop_bcd' ? dsPhien.find((x) => x.id === phienCua(v))?.ten : undefined)}
+        xong={(n) => { setMoKem(false); setTb(`Đã đính kèm ${n} văn bản vào ${phienChon.ten}.`); void taiLai(); }} />}
       <FormPhien p={suaPhien} dong={() => setSuaPhien(null)} xong={(id, ten) => { const moi = suaPhien === 'moi'; setSuaPhien(null); setThuMuc('hop_bcd'); setPhien(id); setTb(moi ? `Đã tạo phiên họp ${ten} — tải lên hồ sơ của phiên.` : 'Đã lưu phiên họp.'); void taiLai(); }} />
     </>
   );
@@ -224,7 +241,7 @@ function CHIP_LOAI(v: VanBan): [string, string, string] {
 }
 
 // Đầu thư mục một phiên họp: thông tin phiên + thành phần hồ sơ đã có / còn thiếu
-function TheoPhien({ p, ds, quanTri, them, sua, xoa }: { p: PhienHopKho; ds: VanBan[]; quanTri: boolean; them: () => void; sua: () => void; xoa: () => void }) {
+function TheoPhien({ p, ds, quanTri, them, kem, sua, xoa }: { p: PhienHopKho; ds: VanBan[]; quanTri: boolean; them: () => void; kem: () => void; sua: () => void; xoa: () => void }) {
   const co = new Set(ds.map((v) => v.loai));
   return (
     <div className="flex flex-col gap-2.5 border-b border-vien bg-[#FDF6F5] px-4 py-3.5">
@@ -250,9 +267,12 @@ function TheoPhien({ p, ds, quanTri, them, sua, xoa }: { p: PhienHopKho; ds: Van
             {co.has(k) && <Check className="h-3.5 w-3.5" />}{t}</span>
         ))}
       </div>
-      <div className="flex items-center gap-2">
-        <span className="mono flex-1 text-xs text-mo">{ds.length} văn bản trong hồ sơ</span>
-        {quanTri && <Nut kieu="chinh" icon={<Upload className="h-4 w-4" />} onClick={them}>Thêm văn bản vào phiên</Nut>}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="mono min-w-0 flex-1 whitespace-nowrap text-xs text-mo">{ds.length} văn bản trong hồ sơ</span>
+        {quanTri && <div className="flex gap-2 max-sm:w-full">
+          <Nut className="max-sm:flex-1" icon={<Link2 className="h-4 w-4" />} onClick={kem}>Đính kèm văn bản có sẵn</Nut>
+          <Nut kieu="chinh" className="max-sm:flex-1" icon={<Upload className="h-4 w-4" />} onClick={them} ngan="Tải lên mới">Tải lên văn bản mới</Nut>
+        </div>}
       </div>
     </div>
   );
@@ -291,6 +311,63 @@ function FormPhien({ p, dong, xong }: { p: PhienHopKho | 'moi' | null; dong: () 
         <O nhan="Ghi chú (thành phần, nội dung chính…)"><textarea className={cx(lopO, 'min-h-16 py-2')} value={g.ghi_chu} onChange={(e) => setG({ ...g, ghi_chu: e.target.value })} /></O>
         {loi && <HopLoi loi={loi} />}
         <div className="flex justify-end gap-2"><Nut onClick={dong}>Huỷ</Nut><Nut kieu="chinh" dangChay={dangChay} onClick={() => void luu()}>{goc ? 'Lưu' : 'Tạo phiên họp'}</Nut></div>
+      </div>
+    </HopThoai>
+  );
+}
+
+// Chọn văn bản có sẵn trong kho (mọi thư mục) để đính kèm vào hồ sơ phiên họp — văn bản giữ nguyên thư mục gốc
+function ChonVanBanCoSan({ mo, dong, p, ds, tenPhien, xong }: { mo: boolean; dong: () => void; p: PhienHopKho; ds: VanBan[]; tenPhien: (v: VanBan) => string | undefined; xong: (n: number) => void }) {
+  const [tim, setTim] = useState('');
+  const [tm, setTm] = useState<ThuMuc | ''>('');
+  const [chon, setChon] = useState<Set<string>>(new Set());
+  const [dangChay, setDangChay] = useState(false);
+  const [loi, setLoi] = useState<string | null>(null);
+  const [moTruoc, setMoTruoc] = useState(false);
+  if (mo !== moTruoc) { setMoTruoc(mo); if (mo) { setTim(''); setTm(''); setChon(new Set()); setLoi(null); } }
+  const t = khongDau(tim.trim());
+  const loc = ds.filter((v) => (!tm || v.thu_muc === tm) && (!t || khongDau(`${v.so_ky_hieu ?? ''} ${v.trich_yeu} ${v.co_quan_ban_hanh} ${v.nguoi_ky ?? ''}`).includes(t)));
+  const cacTm = [...new Set(ds.map((v) => v.thu_muc))];
+  const doi = (id: string) => setChon((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const luu = async () => {
+    if (!chon.size) { setLoi('Chọn ít nhất một văn bản'); return; }
+    setDangChay(true); setLoi(null);
+    try { await dinhKemPhien(p.id, [...chon]); xong(chon.size); } catch (e) { setLoi(loiDe(e)); } finally { setDangChay(false); }
+  };
+  return (
+    <HopThoai mo={mo} dong={dong} tieuDe="Đính kèm văn bản có sẵn" rong="max-w-2xl">
+      <div className="flex flex-col gap-3">
+        <span className="text-[0.8125rem] text-mo-2">Vào hồ sơ <b className="text-den">{p.ten}</b>. Văn bản giữ nguyên thư mục gốc, không tải lại tệp.</span>
+        <div className="flex flex-wrap gap-2">
+          <label className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-mo" />
+            <input className={cx(lopO, 'w-full pl-9')} autoFocus placeholder="Số ký hiệu, trích yếu" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm văn bản" />
+          </label>
+          <select className={cx(lopO, 'max-sm:w-full')} value={tm} onChange={(e) => setTm(e.target.value as ThuMuc | '')} aria-label="Thư mục">
+            <option value="">Mọi thư mục</option>
+            {cacTm.map((k) => <option key={k} value={k}>{THU_MUC[k]}</option>)}
+          </select>
+        </div>
+        <ul className="m-0 flex max-h-[min(52vh,440px)] list-none flex-col overflow-y-auto rounded-xl border border-vien p-0">
+          {loc.length === 0 ? <li className="p-4 text-[0.8125rem] text-mo">Không có văn bản phù hợp.</li> : loc.map((v) => (
+            <li key={v.id} className="border-b border-[#F1EEE7] last:border-0">
+              <label className={cx('flex cursor-pointer items-start gap-3 px-3 py-2.5', chon.has(v.id) ? 'bg-[#FDF1F0]' : 'hover:bg-nen-2')}>
+                <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-[#8E1B22]" checked={chon.has(v.id)} onChange={() => doi(v.id)} />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="mono text-[0.75rem] text-mo-2"><b className="text-den">{v.so_ky_hieu ?? '…'}</b>{v.ngay_ban_hanh ? ` · ${ngay(v.ngay_ban_hanh)}` : ''} · {LOAI_VB[v.loai]}</span>
+                  <span className="line-clamp-2 text-[0.8438rem] font-semibold leading-snug">{v.trich_yeu}</span>
+                  <span className="truncate text-[0.75rem] text-mo">{THU_MUC[v.thu_muc]}{tenPhien(v) ? ` / ${tenPhien(v)}` : ''}</span>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        {loi && <HopLoi loi={loi} />}
+        <div className="flex items-center justify-end gap-2">
+          <span className="mr-auto text-[0.8125rem] text-mo">Đã chọn <b className="mono text-den">{chon.size}</b></span>
+          <Nut onClick={dong}>Huỷ</Nut>
+          <Nut kieu="chinh" dangChay={dangChay} onClick={() => void luu()}>Đính kèm</Nut>
+        </div>
       </div>
     </HopThoai>
   );
