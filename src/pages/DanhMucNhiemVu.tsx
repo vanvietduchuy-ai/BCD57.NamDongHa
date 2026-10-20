@@ -70,6 +70,19 @@ const ttThongKe = (x: Dong): TinhTrang => { const h = ttHienThi(x); return h.tyL
 const loiKetQua = (noiDung: string) => boTienTo(noiDung).replace(/^Kết quả:.*?\.(\s+|$)/, '').replace(/^Tiến độ: chưa hoàn thành\.\s*/, '').trim();
 // Người báo cáo: bỏ phần lặp (vd "Phòng Văn hóa – Xã hội · Phòng Văn hóa – Xã hội")
 const nguoiGon = (t: string | null) => tenNgan([...new Set((t ?? '').split(/\s*·\s*/).filter(Boolean))].join(' · '));
+// Thống kê tình trạng nhiệm vụ cho bản in (chỉ tính nhiệm vụ không có nhiệm vụ con; Đạt / Đảm bảo tính là hoàn thành)
+const MUC_TK: { loai: LoaiTT; nhan: string }[] = [
+  { loai: 'xong', nhan: 'Hoàn thành' }, { loai: 'dang', nhan: 'Đang thực hiện' }, { loai: 'sap_han', nhan: 'Sắp đến hạn' },
+  { loai: 'qua_han', nhan: 'Quá hạn' }, { loai: 'chua', nhan: 'Chưa triển khai' }, { loai: 'dung', nhan: 'Tạm dừng' },
+];
+function thongKeTT(ds: Dong[]) {
+  const la = ds.filter((x) => !x.con.length);
+  const muc = MUC_TK.map((m) => ({ ...m, so: la.filter((x) => x.tt.loai === m.loai).length })).filter((m) => m.so > 0 || m.loai === 'xong' || m.loai === 'qua_han');
+  const xong = la.filter((x) => x.tt.loai === 'xong');
+  return { tong: la.length, muc, dungHan: xong.filter((x) => !x.tt.tre).length, tre: xong.filter((x) => x.tt.tre).length };
+}
+const ptTK = (a: number, b: number) => `${String(phanTramTK(a, b)).replace('.', ',')}%`;
+const phanTramTK = (a: number, b: number) => (b ? Math.round((a * 1000) / b) / 10 : 0);
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
 type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
@@ -747,6 +760,23 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
               ])}
             </tbody>
           </table>
+          {ds.length > 0 && (() => { const tk = thongKeTT(ds); return (
+            <div className="mt-[8pt]" style={{ breakInside: 'avoid' }}>
+              <div className="mb-[3pt] font-bold">THỐNG KÊ TÌNH TRẠNG NHIỆM VỤ</div>
+              <table className="border-collapse text-center" style={{ tableLayout: 'fixed', width: `${Math.min(100, 16 * (tk.muc.length + 1))}%` }}>
+                <thead><tr>
+                  <th className="border border-[#2B2B2B] px-[4pt] py-[3pt] font-bold">Tổng số</th>
+                  {tk.muc.map((m) => <th key={m.loai} className="border border-[#2B2B2B] px-[4pt] py-[3pt] font-bold">{m.nhan}</th>)}
+                </tr></thead>
+                <tbody>
+                  <tr><td className="border border-[#2B2B2B] px-[4pt] py-[3pt] font-bold">{tk.tong}</td>
+                    {tk.muc.map((m) => <td key={m.loai} className="border border-[#2B2B2B] px-[4pt] py-[3pt]"><b style={{ color: MAU_TT[m.loai].chu }}>{m.so}</b></td>)}</tr>
+                  <tr><td className="border border-[#2B2B2B] px-[4pt] py-[3pt] italic">Tỷ lệ</td>
+                    {tk.muc.map((m) => <td key={m.loai} className="border border-[#2B2B2B] px-[4pt] py-[3pt]"><b>{ptTK(m.so, tk.tong)}</b></td>)}</tr>
+                </tbody>
+              </table>
+              {tk.muc[0].so > 0 && <p className="m-0 mt-[3pt] text-[0.9em] italic">Trong {tk.muc[0].so} nhiệm vụ hoàn thành: <b>{tk.dungHan}</b> đúng hạn{tk.tre ? <>, <b>{tk.tre}</b> hoàn thành trễ hạn</> : ''}; nhiệm vụ tính theo tỷ lệ đạt chỉ tiêu (Đạt) hoặc Đảm bảo được tính là hoàn thành.</p>}
+            </div>); })()}
           {ch.ghi_chu && <p className="mt-[6pt] whitespace-pre-wrap text-justify text-[0.9em] italic">{ch.ghi_chu}</p>}
           {Array.from({ length: soTrang - 1 }, (_, k) => (
             <div key={k} aria-hidden className="pointer-events-none absolute inset-x-0 border-t-[1.5px] border-dashed border-[#B9A9AC]" style={{ top: (k + 1) * pxCao }}>
@@ -1470,6 +1500,27 @@ async function xuatWord(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
     ...(phu ? doan(phu, { nghieng: true, can: AlignmentType.CENTER, co: 26 }) : []),
     new Paragraph({ children: [] }),
     new Table({ width: { size: rongNd, type: WidthType.DXA }, columnWidths: rong, layout: TableLayoutType.FIXED, rows: hang }),
+    ...(() => {
+      if (!ds.length) return [];
+      const tk = thongKeTT(ds); const n = tk.muc.length + 1; const w = Math.round(Math.min(rongNd, tw(28) * n) / n);
+      const oTK = (t: string, dam = false, nghieng = false) => new TableCell({ borders, width: { size: w, type: WidthType.DXA }, verticalAlign: VerticalAlign.CENTER, margins: { top: 40, bottom: 40, left: 70, right: 70 },
+        children: doan(t, { dam, nghieng, can: AlignmentType.CENTER }) });
+      return [new Paragraph({ children: [] }), ...doan('THỐNG KÊ TÌNH TRẠNG NHIỆM VỤ', { dam: true }),
+        new Table({ width: { size: w * n, type: WidthType.DXA }, columnWidths: Array(n).fill(w), layout: TableLayoutType.FIXED, rows: [
+          new TableRow({ children: [oTK('Tổng số', true), ...tk.muc.map((m) => oTK(m.nhan, true))] }),
+          new TableRow({ children: [oTK(String(tk.tong), true), ...tk.muc.map((m) => oTK(String(m.so), true))] }),
+          new TableRow({ children: [oTK('Tỷ lệ', false, true), ...tk.muc.map((m) => oTK(ptTK(m.so, tk.tong), true))] }),
+        ] }),
+        ...(tk.muc[0].so ? [new Paragraph({ widowControl: false, spacing: { before: 60, after: 0, line: 240 }, children: [
+          new TextRun({ text: `Trong ${tk.muc[0].so} nhiệm vụ hoàn thành: `, italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) }),
+          new TextRun({ text: String(tk.dungHan), bold: true, italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) }),
+          new TextRun({ text: ' đúng hạn', italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) }),
+          ...(tk.tre ? [new TextRun({ text: ', ', italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) }), new TextRun({ text: String(tk.tre), bold: true, italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) }),
+            new TextRun({ text: ' hoàn thành trễ hạn', italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) })] : []),
+          new TextRun({ text: '; nhiệm vụ tính theo tỷ lệ đạt chỉ tiêu (Đạt) hoặc Đảm bảo được tính là hoàn thành.', italics: true, font: 'Times New Roman', size: Math.max(18, sz - 2) }),
+        ] })] : []),
+      ];
+    })(),
     ...(ch.ghi_chu ? [new Paragraph({ children: [] }), ...doan(ch.ghi_chu, { nghieng: true, can: AlignmentType.JUSTIFIED, co: Math.max(18, sz - 2) })] : []),
   ];
   const doc = new Document({ styles: { default: { document: { run: { font: 'Times New Roman', size: sz } } } }, sections: [{
@@ -1491,6 +1542,9 @@ async function xuatExcel(ch: CauHinhA4, ds: Dong[], phamVi: Dong[], dv: DonVi[],
     gop.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: cot.length - 1 } }); aoa.push([`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`]);
     for (const x of arr) aoa.push(cot.map((c) => (c.khoa === 'tt' ? x.stt : oChu(c.khoa, x))));
   }
+  const tk = thongKeTT(ds);
+  aoa.push([], ['Thống kê tình trạng nhiệm vụ'], ['Tình trạng', 'Số nhiệm vụ', 'Tỷ lệ (%)'], ['Tổng số', tk.tong, 100],
+    ...tk.muc.map((m) => [m.nhan, m.so, phanTramTK(m.so, tk.tong)]), ['— trong đó hoàn thành đúng hạn', tk.dungHan, phanTramTK(tk.dungHan, tk.tong)], ['— trong đó hoàn thành trễ hạn', tk.tre, phanTramTK(tk.tre, tk.tong)]);
   const giao = phamVi.filter((x) => x.n.trang_thai_giao === 'da_duyet');
   aoa.push([], ['Tỉ lệ theo đơn vị chủ trì'], ['Đơn vị', 'Được giao', 'Tỉ trọng (%)', 'Hoàn thành', 'Đúng hạn', 'Quá hạn', 'Tỉ lệ hoàn thành (%)']);
   for (const d of dv) {
