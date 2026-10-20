@@ -84,7 +84,17 @@ function thongKeTT(ds: Dong[]) {
 const ptTK = (a: number, b: number) => `${String(phanTramTK(a, b)).replace('.', ',')}%`;
 const phanTramTK = (a: number, b: number) => (b ? Math.round((a * 1000) / b) / 10 : 0);
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
-type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'cho_duyet' | 'chua_bct';
+type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'chua_ht' | 'khong_dat' | 'cho_duyet' | 'chua_bct';
+// Chưa đạt / Không đạt: nhiệm vụ có số liệu nhưng chưa đạt mức yêu cầu (tỷ lệ dưới chỉ tiêu, số lượng chưa đủ) và chưa ghi nhận hoàn thành
+const laKhongDat = (x: Dong): boolean => {
+  if (x.con.length || x.tt.loai === 'xong') return false;
+  const dg = x.d.danh_gia ?? goiYDanhGia(x.n);
+  if (dg.kieu === 'ty_le') { const t = tyLeNv(x); return !!t && t.dat === false; }
+  if (dg.kieu === 'so_luong') { const sl = soLieuCua(x); return !!sl && sl.mau > 0 && !tinhDanhGia(dg, sl.tu, sl.mau).dat; }
+  return false;
+};
+// Chưa hoàn thành: chưa xong và tiến độ ghi "Chưa hoàn thành" (đơn vị báo chưa hoàn thành, quá hạn, chưa triển khai, tạm dừng) — trừ nhiệm vụ đã tính ở Chưa đạt / Không đạt
+const laChuaHT = (x: Dong): boolean => !x.con.length && x.tt.loai !== 'xong' && !laKhongDat(x) && tienDo3(x) === 'chua';
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
 type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo };
@@ -162,7 +172,7 @@ export default function DanhMucNhiemVu() {
   // Liên kết từ Tổng quan: ?tab=qua_han|cho_duyet|hoan_thanh, ?q=từ khoá
   const [thamSo] = useSearchParams();
   const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
-  const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
+  const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_ht: 'chua_ht', khong_dat: 'khong_dat', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
   const [locDv, setLocDv] = useState(() => thamSo.get('dv') ?? '');
   const [xemNhu, setXemNhu] = useState('');
   const [chon, setChon] = useState<string | null>(null);
@@ -240,6 +250,8 @@ export default function DanhMucNhiemVu() {
     if (locTT === 'sap_han' && k !== 'sap_han') return false;
     if (locTT === 'chua_xong' && k === 'xong') return false;
     if (locTT === 'xong' && k !== 'xong') return false;
+    if (locTT === 'chua_ht' && !laChuaHT(x)) return false;
+    if (locTT === 'khong_dat' && !laKhongDat(x)) return false;
     if (locTT === 'chua_bct' && !(x.canBct && !x.tuanCn.length)) return false;
     const t = khongDau(tim.trim());
     if (t && !khongDau(`${x.n.ma ?? ''} ${x.n.ten} ${x.n.chu_tri_ten ?? ''} ${x.d.chu_tri_vb ?? ''} ${x.n.san_pham ?? ''} ${x.cn[0]?.noi_dung ?? ''}`).includes(t)) return false;
@@ -1230,6 +1242,7 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
   const o: [LocTT, string, number, string][] = [
     ['tat_ca', 'Tất cả', ds.length, '#6A0F14'], ['qua_han', 'Quá hạn', dem('qua_han'), '#BE123C'], ['sap_han', 'Sắp đến hạn', dem('sap_han'), '#D97706'],
     ['chua_xong', 'Đang thực hiện', ds.length - xong, '#1E3A8A'], ['xong', 'Hoàn thành', xong, '#16A34A'],
+    ['chua_ht', 'Chưa hoàn thành', ds.filter(laChuaHT).length, '#9F1239'], ['khong_dat', 'Chưa đạt / Không đạt', ds.filter(laKhongDat).length, '#B45309'],
     ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, '#92400E'] as [LocTT, string, number, string]] : []),
     ['chua_bct', 'Chưa báo cáo tuần', ds.filter((x) => x.canBct && !x.tuanCn.length).length, '#7C3AED'],
   ];
