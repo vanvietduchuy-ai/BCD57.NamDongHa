@@ -68,6 +68,14 @@ const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
   const t = tyLeNv(x); if (!t) return x.tt;
   return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'xong', nhan: 'Đảm bảo', tyLe: true };
 };
+// Tình trạng ghi tay: suy loại theo chữ (Đạt / Đảm bảo / Hoàn thành -> hoàn thành; Không đạt / Chưa đạt / Chậm -> chưa đạt)
+const loaiTheoChu = (t: string, macDinh: LoaiTT): LoaiTT => {
+  const c = khongDau(t.trim().toLowerCase());
+  if (/(khong|chua) dat|cham/.test(c)) return 'qua_han';
+  if (/^(dat|dam bao|hoan thanh|da hoan thanh)\b/.test(c)) return 'xong';
+  return macDinh;
+};
+const chuanTTTay = (t: { loai: LoaiTT; nhan: string }): TinhTrang => ({ loai: loaiTheoChu(t.nhan, t.loai), nhan: t.nhan });
 // Tình trạng dùng để thống kê: Đạt / Đảm bảo -> hoàn thành; Không đạt giữ tình trạng theo hạn (không tự tính là quá hạn khi chưa đến hạn)
 const ttThongKe = (x: Dong): TinhTrang => { const h = ttHienThi(x); return h.tyLe && h.loai === 'xong' ? { loai: 'xong', nhan: h.nhan } : x.tt; };
 // Cột "Kết quả thực hiện" chỉ ghi phần lời; số liệu (Kết quả: a/b …) và trạng thái tiến độ đã có ở cột Tiến độ / Tình trạng
@@ -92,6 +100,7 @@ type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'dang' | 'xong' | 
 // Chưa đạt / Không đạt: nhiệm vụ có số liệu nhưng chưa đạt mức yêu cầu (tỷ lệ dưới chỉ tiêu, số lượng chưa đủ) và chưa ghi nhận hoàn thành
 const laKhongDat = (x: Dong): boolean => {
   if (x.con.length || x.tt.loai === 'xong') return false;
+  if (x.d.tt_tay) return /(không|chưa) đạt/i.test(x.d.tt_tay.nhan);
   const dg = x.d.danh_gia ?? goiYDanhGia(x.n);
   if (dg.kieu === 'ty_le') { const t = tyLeNv(x); return !!t && t.dat === false; }
   if (dg.kieu === 'so_luong') { const sl = soLieuCua(x); return !!sl && sl.mau > 0 && !tinhDanhGia(dg, sl.tu, sl.mau).dat; }
@@ -103,8 +112,8 @@ const laChuaHT = (x: Dong): boolean => !x.con.length && x.tt.loai !== 'xong' && 
 const laDangTH = (x: Dong): boolean => x.tt.loai !== 'xong' && !laChuaHT(x) && !laKhongDat(x);
 const NHOM_CHUA_XONG: LocTT[] = ['dang', 'chua_ht', 'khong_dat'];
 // Đánh giá theo tỷ lệ (cột Tình trạng): Đạt = đạt chỉ tiêu %; Đảm bảo = có số liệu, không đặt chỉ tiêu
-const laDat = (x: Dong) => !x.con.length && !x.d.tt_tay && ttHienThi(x).tyLe === true && ttHienThi(x).nhan === 'Đạt';
-const laDamBao = (x: Dong) => !x.con.length && !x.d.tt_tay && ttHienThi(x).tyLe === true && ttHienThi(x).nhan === 'Đảm bảo';
+const laDat = (x: Dong) => !x.con.length && /^đạt$/i.test(ttHienThi(x).nhan.trim());
+const laDamBao = (x: Dong) => !x.con.length && /^đảm bảo$/i.test(ttHienThi(x).nhan.trim());
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
 type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo };
@@ -247,7 +256,7 @@ export default function DanhMucNhiemVu() {
       }
     }
     // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay
-    kq.forEach((x, i) => { x.stt = i + 1; x.ttTD = x.tt; if (x.d.tt_tay) x.tt = x.d.tt_tay;
+    kq.forEach((x, i) => { x.stt = i + 1; x.ttTD = x.tt; if (x.d.tt_tay) x.tt = chuanTTTay(x.d.tt_tay);
       x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || (!['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai) && x.tt.loai !== 'xong')); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1079,8 +1088,9 @@ function TrangThaiNhanh({ x, quanTri, laChuTri, capNhatNv, xong, luuDienGiai }: 
 
 // Tình trạng: tự động (theo hạn, tiến độ) hoặc chọn tay
 const TT_TAY: { loai: LoaiTT; nhan: string }[] = [
-  { loai: 'xong', nhan: 'Hoàn thành' }, { loai: 'dang', nhan: 'Đang thực hiện' }, { loai: 'chua', nhan: 'Chưa triển khai' },
-  { loai: 'qua_han', nhan: 'Chậm tiến độ' }, { loai: 'dung', nhan: 'Tạm dừng' }, { loai: 'dung', nhan: 'Không thực hiện' },
+  { loai: 'xong', nhan: 'Hoàn thành' }, { loai: 'xong', nhan: 'Đạt' }, { loai: 'xong', nhan: 'Đảm bảo' },
+  { loai: 'dang', nhan: 'Đang thực hiện' }, { loai: 'chua', nhan: 'Chưa triển khai' },
+  { loai: 'qua_han', nhan: 'Chậm tiến độ' }, { loai: 'qua_han', nhan: 'Không đạt' }, { loai: 'dung', nhan: 'Tạm dừng' }, { loai: 'dung', nhan: 'Không thực hiện' },
 ];
 function ChonTinhTrang({ x, luu }: { x: Dong; luu: (v: { loai: LoaiTT; nhan: string } | undefined) => void }) {
   const [ghi, setGhi] = useState(x.d.tt_tay?.nhan ?? '');
@@ -1098,8 +1108,8 @@ function ChonTinhTrang({ x, luu }: { x: Dong; luu: (v: { loai: LoaiTT; nhan: str
       </div>
       <div className="flex gap-2">
         <input className={cx(lopO, 'min-h-9 flex-1 text-[0.8125rem]')} placeholder="Hoặc ghi tình trạng khác…" value={ghi} onChange={(e) => setGhi(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && ghi.trim()) luu({ loai: x.ttTD.loai, nhan: ghi.trim() }); }} />
-        <Nut disabled={!ghi.trim()} onClick={() => luu({ loai: x.ttTD.loai, nhan: ghi.trim() })}>Lưu</Nut>
+          onKeyDown={(e) => { if (e.key === 'Enter' && ghi.trim()) luu({ loai: loaiTheoChu(ghi, x.ttTD.loai), nhan: ghi.trim() }); }} />
+        <Nut disabled={!ghi.trim()} onClick={() => luu({ loai: loaiTheoChu(ghi, x.ttTD.loai), nhan: ghi.trim() })}>Lưu</Nut>
       </div>
     </div>
   );
