@@ -172,7 +172,10 @@ export default function DanhMucNhiemVu() {
   // Liên kết từ Tổng quan: ?tab=qua_han|cho_duyet|hoan_thanh, ?q=từ khoá
   const [thamSo] = useSearchParams();
   const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
-  const [locTT, setLocTT] = useState<LocTT>(() => ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_ht: 'chua_ht', khong_dat: 'khong_dat', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? ''] ?? 'tat_ca');
+  // Lọc tình trạng: chọn được nhiều mục một lúc (hiện nhiệm vụ thuộc BẤT KỲ mục nào đã chọn); rỗng = Tất cả
+  const [locs, setLocs] = useState<LocTT[]>(() => { const l = ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_ht: 'chua_ht', khong_dat: 'khong_dat', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? '']; return l ? [l] : []; });
+  const setLocTT = (l: LocTT) => setLocs(l === 'tat_ca' ? [] : [l]);   // chọn đúng một mục (liên kết, Bỏ lọc…)
+  const batTatLoc = (l: LocTT) => setLocs((c) => (l === 'tat_ca' ? [] : c.includes(l) ? c.filter((y) => y !== l) : [...c, l]));
   const [locDv, setLocDv] = useState(() => thamSo.get('dv') ?? '');
   const [xemNhu, setXemNhu] = useState('');
   const [chon, setChon] = useState<string | null>(null);
@@ -245,14 +248,10 @@ export default function DanhMucNhiemVu() {
   const hienLa = phamVi.filter((x) => {
     if (!dvXem && locDv && x.n.chu_tri_don_vi_id !== locDv) return false;
     const k = x.tt.loai;
-    if (locTT === 'cho_duyet' && x.n.trang_thai_giao !== 'de_xuat') return false;
-    if (locTT === 'qua_han' && k !== 'qua_han') return false;
-    if (locTT === 'sap_han' && k !== 'sap_han') return false;
-    if (locTT === 'chua_xong' && k === 'xong') return false;
-    if (locTT === 'xong' && k !== 'xong') return false;
-    if (locTT === 'chua_ht' && !laChuaHT(x)) return false;
-    if (locTT === 'khong_dat' && !laKhongDat(x)) return false;
-    if (locTT === 'chua_bct' && !(x.canBct && !x.tuanCn.length)) return false;
+    const khop = (l: LocTT) => l === 'cho_duyet' ? x.n.trang_thai_giao === 'de_xuat' : l === 'qua_han' ? k === 'qua_han' : l === 'sap_han' ? k === 'sap_han'
+      : l === 'chua_xong' ? k !== 'xong' : l === 'xong' ? k === 'xong' : l === 'chua_ht' ? laChuaHT(x) : l === 'khong_dat' ? laKhongDat(x)
+      : l === 'chua_bct' ? x.canBct && !x.tuanCn.length : true;
+    if (locs.length && !locs.some(khop)) return false;
     const t = khongDau(tim.trim());
     if (t && !khongDau(`${x.n.ma ?? ''} ${x.n.ten} ${x.n.chu_tri_ten ?? ''} ${x.d.chu_tri_vb ?? ''} ${x.n.san_pham ?? ''} ${x.cn[0]?.noi_dung ?? ''}`).includes(t)) return false;
     return true;
@@ -298,7 +297,7 @@ export default function DanhMucNhiemVu() {
         <span className="flex-1">{thongBao.loi ?? thongBao.ok}</span><button aria-label="Đóng" onClick={() => setThongBao(null)}><X className="h-4 w-4" /></button></div>}
 
       {/* Thanh lọc gọn: tình trạng (đếm) + tìm, đơn vị, xem như, thu phóng */}
-      <ThanhLoc ds={viecLa} loc={locTT} datLoc={setLocTT} choDuyet={donVi ? null : viecLa.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
+      <ThanhLoc ds={viecLa} loc={locs} datLoc={batTatLoc} choDuyet={donVi ? null : viecLa.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
         moTk={moTk} datMoTk={setMoTk} soHien={hien.length}
         congCu={<>
           <label className="relative min-w-[200px] flex-[1_1_100%] sm:flex-1 sm:max-w-[340px]">
@@ -322,12 +321,12 @@ export default function DanhMucNhiemVu() {
               <option value="">Xem: toàn bộ</option>{data.dv.map((d) => <option key={d.id} value={d.id}>Xem như: {tenNgan(d.ten)}</option>)}
             </select>
           )}
-          {(tim || locDv || locTT !== 'tat_ca') && <button className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
+          {(tim || locDv || locs.length > 0) && <button className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
           <span className="flex-1" />
           <Zoom z={rieng.zoom} dat={(z) => setRieng({ ...rieng, zoom: z })} />
         </>} />
       <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem || !locDv || x.n.chu_tri_don_vi_id === locDv))} ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
-        loc={locTT === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)} />
+        loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length)} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
@@ -1235,7 +1234,7 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap }: { ds: Dong[]
 
 // ---------- Thanh lọc: một khối gọn — hàng 1 lọc theo tình trạng (có số đếm) + vòng tỉ lệ hoàn thành; hàng 2 công cụ
 function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: {
-  ds: Dong[]; loc: LocTT; datLoc: (l: LocTT) => void; choDuyet: number | null; moTk: boolean; datMoTk: (v: boolean) => void; soHien: number; congCu: ReactNode;
+  ds: Dong[]; loc: LocTT[]; datLoc: (l: LocTT) => void; choDuyet: number | null; moTk: boolean; datMoTk: (v: boolean) => void; soHien: number; congCu: ReactNode;
 }) {
   const dem = (k: LoaiTT) => ds.filter((x) => x.tt.loai === k).length;
   const xong = dem('xong'), tl = phanTram(xong, ds.length);
@@ -1252,11 +1251,13 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
       <div className="flex items-center gap-2 border-b border-[#F1EEE7] px-2 py-1.5">
         <div role="group" aria-label="Lọc theo tình trạng" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
           {o.map(([k, nhan, so, mau]) => {
-            const chon = loc === k;
+            const chon = k === 'tat_ca' ? !loc.length : loc.includes(k);
             return (
-              <button key={k} onClick={() => datLoc(chon && k !== 'tat_ca' ? 'tat_ca' : k)} aria-pressed={chon}
+              <button key={k} onClick={() => datLoc(k)} aria-pressed={chon} title={k === 'tat_ca' ? 'Bỏ chọn tất cả bộ lọc' : chon ? 'Bấm để bỏ chọn' : 'Bấm để chọn thêm — chọn được nhiều mục cùng lúc'}
                 className={cx('relative flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[0.8125rem] transition', chon ? 'bg-nen font-semibold text-den' : 'text-mo-2 hover:bg-nen-2', so === 0 && k !== 'tat_ca' && !chon && 'opacity-55')}>
-                <span className="h-2 w-2 rounded-full" style={{ background: mau }} />
+                {chon && k !== 'tat_ca'
+                  ? <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[4px] text-[10px] font-bold leading-none text-white" style={{ background: mau }}>✓</span>
+                  : <span className="h-2 w-2 rounded-full" style={{ background: mau }} />}
                 <span className="whitespace-nowrap">{nhan}</span>
                 <span className="mono rounded-md px-1.5 text-[0.75rem] font-bold" style={{ color: mau, background: chon ? 'white' : 'transparent' }}>{so}</span>
               </button>
