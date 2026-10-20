@@ -21,8 +21,8 @@ export const COT_MINH_CHUNG = 'van_ban_id, so_ky_hieu, ngay_ban_hanh, trich_yeu,
 
 type KetQua = { van_ban_id: string; so: { loai_so: 'di' | 'den'; so_thu_tu: number; don_vi: string }[] };
 
-export default function MinhChungVanBan({ nhiemVuId, ds, suaDuoc, xoaDuoc, xong }: {
-  nhiemVuId: string; ds: MinhChung[]; suaDuoc: boolean; xoaDuoc: boolean; xong: () => void;
+export default function MinhChungVanBan({ nhiemVuId, ds, suaDuoc, xoaDuoc, xong, gon = false }: {
+  nhiemVuId: string; ds: MinhChung[]; suaDuoc: boolean; xoaDuoc: boolean; xong: () => void; gon?: boolean;   // gon: chỉ hiện nút nhỏ "Tải PDF" (khung chi tiết bảng A4)
 }) {
   const { hoSo } = useAuth();
   const macDinh = (): MetaVb => ({ ...META_TRONG, loai: 'khac', co_quan_ban_hanh: hoSo?.don_vi?.ten ?? '' });
@@ -58,8 +58,8 @@ export default function MinhChungVanBan({ nhiemVuId, ds, suaDuoc, xoaDuoc, xong 
   };
 
   return (
-    <div className="flex flex-col gap-2.5">
-      {tb && <div role="status" className="rounded-xl bg-[#DCFCE7] px-3 py-2 text-[0.8125rem] text-[#166534]">{tb}</div>}
+    <div className={gon ? 'contents' : 'flex flex-col gap-2.5'}>
+      {tb && !gon && <div role="status" className="rounded-xl bg-[#DCFCE7] px-3 py-2 text-[0.8125rem] text-[#166534]">{tb}</div>}
       {ds.map((m) => (
         <div key={m.van_ban_id} className="flex gap-3 rounded-xl bg-nen-2 p-3">
           <FileText className="mt-0.5 h-5 w-5 shrink-0 text-xanh" />
@@ -75,7 +75,12 @@ export default function MinhChungVanBan({ nhiemVuId, ds, suaDuoc, xoaDuoc, xong 
           </div>
         </div>
       ))}
-      {suaDuoc && (
+      {suaDuoc && gon && (
+        <button type="button" onClick={moHop} title="Tải văn bản PDF đã ký — tự đọc số, ngày ban hành; tự vào sổ văn bản"
+          className="flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed border-vien-2 px-2 text-[0.8125rem] font-semibold text-mo-2 hover:border-[#8E1B22] hover:text-[#8E1B22]">
+          <FileUp className="h-4 w-4" />Tải PDF lên</button>
+      )}
+      {suaDuoc && !gon && (
         <button type="button" onClick={moHop} className="flex min-h-14 items-center gap-3 rounded-xl border border-dashed border-vien-2 bg-white px-3 py-2.5 text-left hover:bg-nen-2">
           <FileUp className="h-5 w-5 shrink-0 text-xanh" />
           <span className="flex min-w-0 flex-col">
