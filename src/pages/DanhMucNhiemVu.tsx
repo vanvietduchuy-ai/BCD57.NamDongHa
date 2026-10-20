@@ -15,6 +15,7 @@ import {
 import { moTepDrive } from '../components/TepDrive';
 import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, DAU_RUT, gioHan, KHOA_BCT, laBaoCaoTuanBatKy, laRutBaoCao, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
+import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
 
@@ -22,12 +23,15 @@ const MM = 96 / 25.4;
 const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
 type DonVi = { id: string; ten: string; loai: string | null };
 type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
-type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null };
+type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null; ngay_ban_hanh?: string | null };
 // cha / con: nhiệm vụ lớn gồm các nhiệm vụ con (vd: 15. Nhóm nhiệm vụ ĐA06 -> 15.1 … 15.10); nhiệm vụ lớn tự tổng hợp tiến độ từ nhiệm vụ con
 // tuanCn: các lần báo cáo tuần này (tiền tố "Báo cáo tuần NN/YYYY:"); canBct: nhiệm vụ phải báo cáo tuần
 type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; tienTo: string; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: MinhChungO[]; d: DongA4; vb: VbCanCu | null };
 // Minh chứng của nhiệm vụ: văn bản (kho) hoặc tệp đính kèm — bấm để xem
-type MinhChungO = { ten: string; loai: 'van_ban' | 'tep'; id: string; ten_tep: string; url: string | null };
+type MinhChungO = { ten: string; loai: 'van_ban' | 'tep'; id: string; ten_tep: string; url: string | null; trich_yeu?: string };
+// Nội dung minh chứng khi in: số, ký hiệu văn bản + ngày ban hành (vd "15/BC-CAP, ngày 20/10/2026")
+const chuMinhChung = (so: string | null, ngayBh: string | null | undefined, duPhong: string) =>
+  so || ngayBh ? `${so ?? 'Không số'}${ngayBh ? `, ngày ${ngayNgan(ngayBh)}` : ''}` : duPhong;
 // Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …")
 function soLieuCua(x: Dong): { tu: number; mau: number } | null {
   const c = x.cn.find((y) => /Kết quả: (?:hoàn thành )?[\d.,]+\/[\d.,]+/.test(y.noi_dung));
@@ -84,7 +88,7 @@ function thongKeTT(ds: Dong[]) {
 const ptTK = (a: number, b: number) => `${String(phanTramTK(a, b)).replace('.', ',')}%`;
 const phanTramTK = (a: number, b: number) => (b ? Math.round((a * 1000) / b) / 10 : 0);
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
-type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'dang' | 'xong' | 'chua_ht' | 'khong_dat' | 'cho_duyet' | 'chua_bct';
+type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'dang' | 'xong' | 'chua_ht' | 'khong_dat' | 'dat' | 'dam_bao' | 'cho_duyet' | 'chua_bct';
 // Chưa đạt / Không đạt: nhiệm vụ có số liệu nhưng chưa đạt mức yêu cầu (tỷ lệ dưới chỉ tiêu, số lượng chưa đủ) và chưa ghi nhận hoàn thành
 const laKhongDat = (x: Dong): boolean => {
   if (x.con.length || x.tt.loai === 'xong') return false;
@@ -98,6 +102,9 @@ const laChuaHT = (x: Dong): boolean => !x.con.length && x.tt.loai !== 'xong' && 
 // Đang thực hiện: chưa xong, không thuộc Chưa hoàn thành / Chưa đạt — Hoàn thành + Đang thực hiện + Chưa hoàn thành + Chưa đạt = Tất cả
 const laDangTH = (x: Dong): boolean => x.tt.loai !== 'xong' && !laChuaHT(x) && !laKhongDat(x);
 const NHOM_CHUA_XONG: LocTT[] = ['dang', 'chua_ht', 'khong_dat'];
+// Đánh giá theo tỷ lệ (cột Tình trạng): Đạt = đạt chỉ tiêu %; Đảm bảo = có số liệu, không đặt chỉ tiêu
+const laDat = (x: Dong) => !x.con.length && !x.d.tt_tay && ttHienThi(x).tyLe === true && ttHienThi(x).nhan === 'Đạt';
+const laDamBao = (x: Dong) => !x.con.length && !x.d.tt_tay && ttHienThi(x).tyLe === true && ttHienThi(x).nhan === 'Đảm bảo';
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
 type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo };
@@ -150,18 +157,18 @@ export default function DanhMucNhiemVu() {
       supabase.from('v_nhiem_vu').select(COT_NV).order('han', { ascending: true, nullsFirst: false }),
       supabase.from('don_vi').select('id, ten, loai').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, phan_tram, trang_thai_moi, luc, boi_ten').order('luc', { ascending: false }).limit(5000),
-      supabase.from('v_minh_chung_nhiem_vu').select('nhiem_vu_id, van_ban_id, so_ky_hieu, trich_yeu, ten_tep, drive_url'),
+      supabase.from('v_minh_chung_nhiem_vu').select('nhiem_vu_id, van_ban_id, so_ky_hieu, ngay_ban_hanh, trich_yeu, ten_tep, drive_url'),
       supabase.from('tep').select('id, nhiem_vu_id, ten').not('nhiem_vu_id', 'is', null),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_BCT).maybeSingle(),
-      supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, drive_url, ten_tep').neq('trang_thai', 'du_thao').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(1000),
+      supabase.from('van_ban').select('id, so_ky_hieu, ngay_ban_hanh, trich_yeu, drive_url, ten_tep').neq('trang_thai', 'du_thao').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(1000),
     ]);
     const cn = new Map<string, CapNhat[]>();
     for (const x of (c.data ?? []) as CapNhat[]) { if (!cn.has(x.nhiem_vu_id)) cn.set(x.nhiem_vu_id, []); cn.get(x.nhiem_vu_id)!.push(x); }
     const mc = new Map<string, MinhChungO[]>();
     const them = (id: string, o: MinhChungO) => { if (!mc.has(id)) mc.set(id, []); mc.get(id)!.push(o); };
-    for (const x of (d.data ?? []) as { nhiem_vu_id: string; van_ban_id: string; so_ky_hieu: string | null; trich_yeu: string; ten_tep: string | null; drive_url: string | null }[])
-      them(x.nhiem_vu_id, { ten: x.so_ky_hieu ? `${x.so_ky_hieu} – ${x.trich_yeu}` : x.ten_tep ?? x.trich_yeu, loai: 'van_ban', id: x.van_ban_id, ten_tep: x.ten_tep ?? `${x.so_ky_hieu ?? 'van-ban'}.pdf`, url: x.drive_url });
+    for (const x of (d.data ?? []) as { nhiem_vu_id: string; van_ban_id: string; so_ky_hieu: string | null; ngay_ban_hanh: string | null; trich_yeu: string; ten_tep: string | null; drive_url: string | null }[])
+      them(x.nhiem_vu_id, { ten: chuMinhChung(x.so_ky_hieu, x.ngay_ban_hanh, x.ten_tep ?? x.trich_yeu), trich_yeu: x.trich_yeu, loai: 'van_ban', id: x.van_ban_id, ten_tep: x.ten_tep ?? `${x.so_ky_hieu ?? 'van-ban'}.pdf`, url: x.drive_url });
     for (const x of (e.data ?? []) as { id: string; nhiem_vu_id: string; ten: string }[]) them(x.nhiem_vu_id, { ten: x.ten, loai: 'tep', id: x.id, ten_tep: x.ten, url: null });
     return {
       nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc, vb: (g.data ?? []) as VbCanCu[],
@@ -176,7 +183,7 @@ export default function DanhMucNhiemVu() {
   const [thamSo] = useSearchParams();
   const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
   // Lọc tình trạng: chọn được nhiều mục một lúc (hiện nhiệm vụ thuộc BẤT KỲ mục nào đã chọn); rỗng = Tất cả
-  const [locs, setLocs] = useState<LocTT[]>(() => { const l = ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'dang', chua: 'chua_ht', chua_ht: 'chua_ht', khong_dat: 'khong_dat', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? '']; return l ? (l === 'chua_xong' ? NHOM_CHUA_XONG : [l]) : []; });
+  const [locs, setLocs] = useState<LocTT[]>(() => { const l = ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'dang', chua: 'chua_ht', chua_ht: 'chua_ht', khong_dat: 'khong_dat', dat: 'dat', dam_bao: 'dam_bao', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? '']; return l ? (l === 'chua_xong' ? NHOM_CHUA_XONG : [l]) : []; });
   const setLocTT = (l: LocTT) => setLocs(l === 'tat_ca' ? [] : l === 'chua_xong' ? NHOM_CHUA_XONG : [l]);   // chọn đúng một mục (liên kết, Bỏ lọc…)
   const batTatLoc = (l: LocTT) => setLocs((c) => (l === 'tat_ca' ? [] : c.includes(l) ? c.filter((y) => y !== l) : [...c, l]));
   const [locDv, setLocDv] = useState(() => thamSo.get('dv') ?? '');
@@ -252,7 +259,7 @@ export default function DanhMucNhiemVu() {
     if (!dvXem && locDv && x.n.chu_tri_don_vi_id !== locDv) return false;
     const k = x.tt.loai;
     const khop = (l: LocTT) => l === 'cho_duyet' ? x.n.trang_thai_giao === 'de_xuat' : l === 'qua_han' ? k === 'qua_han' : l === 'sap_han' ? k === 'sap_han'
-      : l === 'chua_xong' ? k !== 'xong' : l === 'dang' ? laDangTH(x) : l === 'xong' ? k === 'xong' : l === 'chua_ht' ? laChuaHT(x) : l === 'khong_dat' ? laKhongDat(x)
+      : l === 'chua_xong' ? k !== 'xong' : l === 'dang' ? laDangTH(x) : l === 'xong' ? k === 'xong' : l === 'chua_ht' ? laChuaHT(x) : l === 'khong_dat' ? laKhongDat(x) : l === 'dat' ? laDat(x) : l === 'dam_bao' ? laDamBao(x)
       : l === 'chua_bct' ? x.canBct && !x.tuanCn.length : true;
     if (locs.length && !locs.some(khop)) return false;
     const t = khongDau(tim.trim());
@@ -384,7 +391,7 @@ export default function DanhMucNhiemVu() {
               if (error) { setThongBao({ loi: loiDe(error) }); return; }
               setChon(null); void taiLai();
             }}
-            moTrang={() => nav(`/nhiem-vu/${dongChon.n.id}#tep`)} />
+            moTrang={() => nav(`/nhiem-vu/${dongChon.n.id}#tep`)} taiLai={() => void taiLai()} />
         )}
       </div>
 
@@ -719,8 +726,8 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
       }
       case 'minh_chung': return x.mc.length
         ? <span className="flex flex-col gap-0.5">{x.mc.map((t, i) => (
-          <button key={i} type="button" title={`Xem: ${t.ten}`} onClick={(e) => { e.stopPropagation(); void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url); }}
-            className="text-left text-[#1E4F86] underline-offset-2 hover:underline">▸ {t.ten}</button>))}</span>
+          <button key={i} type="button" title={`Xem: ${t.ten}${t.trich_yeu ? ` – ${t.trich_yeu}` : ''}`} onClick={(e) => { e.stopPropagation(); void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url); }}
+            className="text-left text-[#1E4F86] underline-offset-2 hover:underline">{t.ten}</button>))}</span>
         : <span className="text-[#8D8486]">—</span>;
       case 'tinh_trang': { const h = ttHienThi(x); const m = MAU_TT[h.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : h.tyLe ? 'Theo tỷ lệ so với chỉ tiêu' : 'Tình trạng tự động theo hạn và tiến độ'}>{h.nhan}{x.d.tt_tay && ' ✎'}</span>; }
       case 'lanh_dao': return x.n.lanh_dao_phu_trach;
@@ -808,7 +815,8 @@ const chuTriMacDinh = (x: Dong) => x.n.chu_tri_ten ? `${x.n.chu_tri_ten} chủ t
 
 
 // ---------- Dạng thẻ (điện thoại)
-function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon }: {
+function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon, taiLai }: {
+  taiLai: () => void;
   tienTo: string; x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
   dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void; luuDong: (p: Partial<DongA4>) => void;
   dsCha: Dong[]; chonCha: (id: string | null) => void; themCon: () => void;
@@ -921,13 +929,7 @@ function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, l
             {x.cn.length > 2 && <button className="self-start text-xs font-semibold text-[#8E1B22]" onClick={() => setXemHet(!xemHet)}>{xemHet ? 'Thu gọn' : `Xem cả ${x.cn.length} lần cập nhật`}</button>}
           </section>
 
-          <section className="flex flex-col gap-1">
-            <h3 className="m-0 flex items-center text-[0.8125rem] font-bold">Minh chứng <span className="flex-1" />
-              <button className="flex items-center gap-1 text-xs font-semibold text-[#8E1B22]" onClick={moTrang}><Paperclip className="h-3.5 w-3.5" />Đính kèm</button></h3>
-            {x.mc.length ? x.mc.map((t, i) => (
-              <button key={i} type="button" onClick={() => void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url)} title={`Xem: ${t.ten}`}
-                className="truncate text-left text-[0.8125rem] text-[#1E4F86] hover:underline">▸ {t.ten}</button>)) : <span className="text-[0.8125rem] text-mo">Chưa có.</span>}
-          </section>
+          <NhapMinhChung x={x} duocSua={laChuTri && n.trang_thai_giao === 'da_duyet'} quanTri={quanTri} dsVb={dsVb} moTrang={moTrang} xong={taiLai} />
         </div>
 
         {quanTri && (
@@ -940,6 +942,61 @@ function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, l
         )}
       </aside>
     </>
+  );
+}
+
+// Minh chứng ngay trên khung chi tiết: tải PDF (tự đọc số, ngày) hoặc chọn văn bản có sẵn trong kho; khi in ghi "số, ngày ban hành"
+function NhapMinhChung({ x, duocSua, quanTri, dsVb, moTrang, xong }: { x: Dong; duocSua: boolean; quanTri: boolean; dsVb: VbCanCu[]; moTrang: () => void; xong: () => void }) {
+  const [chonKho, setChonKho] = useState(false);
+  const [tim, setTim] = useState('');
+  const [dang, setDang] = useState<string | null>(null);
+  const [loi, setLoi] = useState<string | null>(null);
+  const daCo = new Set(x.mc.filter((t) => t.loai === 'van_ban').map((t) => t.id));
+  const loc = useMemo(() => { const t = khongDau(tim.trim()); return dsVb.filter((v) => !daCo.has(v.id) && (!t || khongDau(`${tenVb(v)} ${v.ngay_ban_hanh ? ngayNgan(v.ngay_ban_hanh) : ''}`).includes(t))).slice(0, 30); }, [dsVb, tim, x.mc]); // eslint-disable-line react-hooks/exhaustive-deps
+  const gan = async (v: VbCanCu) => {
+    setDang(v.id); setLoi(null);
+    const { error } = await supabase.from('nhiem_vu_van_ban').insert({ nhiem_vu_id: x.n.id, van_ban_id: v.id });
+    setDang(null);
+    if (error) { setLoi(/duplicate|unique/i.test(error.message) ? 'Văn bản này đã là minh chứng của nhiệm vụ.' : `Không gắn được văn bản: ${loiDe(error)}`); return; }
+    setChonKho(false); setTim(''); xong();
+  };
+  const go = async (t: MinhChungO) => {
+    if (!window.confirm(`Gỡ minh chứng "${t.ten}" khỏi nhiệm vụ? Văn bản vẫn còn trong kho và sổ văn bản.`)) return;
+    const { error } = await supabase.from('nhiem_vu_van_ban').delete().eq('nhiem_vu_id', x.n.id).eq('van_ban_id', t.id);
+    if (error) setLoi(loiDe(error)); else xong();
+  };
+  return (
+    <section className="flex flex-col gap-1.5">
+      <h3 className="m-0 flex items-center text-[0.8125rem] font-bold">Minh chứng <span className="ml-1.5 font-normal text-mo">{x.mc.length || ''}</span><span className="flex-1" />
+        <button className="flex items-center gap-1 text-xs font-semibold text-mo hover:text-[#8E1B22]" onClick={moTrang} title="Ảnh, Word, Excel… đính kèm ở trang đầy đủ"><Paperclip className="h-3.5 w-3.5" />Tệp khác</button></h3>
+      {x.mc.length ? x.mc.map((t, i) => (
+        <div key={i} className="flex items-start gap-2 rounded-lg bg-nen-2 px-2.5 py-1.5">
+          <button type="button" onClick={() => void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url)} title="Xem văn bản" className="flex min-w-0 flex-1 flex-col text-left">
+            <span className="mono text-[0.8125rem] font-semibold text-[#1E4F86] hover:underline">{t.ten}</span>
+            {t.trich_yeu && <span className="truncate text-[11.5px] text-mo">{t.trich_yeu}</span>}
+          </button>
+          {t.loai === 'van_ban' && (quanTri || duocSua) && <button type="button" onClick={() => void go(t)} aria-label="Gỡ minh chứng" title="Gỡ khỏi nhiệm vụ" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nguy hover:bg-nguy-nhat"><X className="h-3.5 w-3.5" /></button>}
+        </div>)) : <span className="text-[0.8125rem] text-mo">Chưa có minh chứng.</span>}
+      {duocSua && <>
+        <div className="grid grid-cols-2 gap-1.5">
+          <MinhChungVanBan nhiemVuId={x.n.id} ds={[]} suaDuoc xoaDuoc={false} xong={xong} gon />
+          <button type="button" onClick={() => setChonKho(!chonKho)} aria-pressed={chonKho}
+            className={cx('flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed px-2 text-[0.8125rem] font-semibold', chonKho ? 'border-[#8E1B22] bg-[#FFF3D6] text-[#8E1B22]' : 'border-vien-2 text-mo-2 hover:border-[#8E1B22] hover:text-[#8E1B22]')}>
+            <Search className="h-4 w-4" />Chọn trong kho</button>
+        </div>
+        {chonKho && <div className="flex flex-col gap-1 rounded-xl border border-vien bg-white p-2">
+          <input autoFocus className={cx(lopO, 'min-h-9 text-[0.8125rem]')} placeholder="Tìm số, ký hiệu, trích yếu, ngày…" value={tim} onChange={(e) => setTim(e.target.value)} />
+          <div className="flex max-h-60 flex-col overflow-y-auto">
+            {loc.length ? loc.map((v) => (
+              <button key={v.id} type="button" disabled={!!dang} onClick={() => void gan(v)} className="flex flex-col rounded-lg px-2 py-1.5 text-left hover:bg-nen-2 disabled:opacity-50">
+                <span className="mono text-[0.8125rem] font-semibold">{chuMinhChung(v.so_ky_hieu, v.ngay_ban_hanh, v.ten_tep ?? 'Văn bản')}{dang === v.id ? ' · đang gắn…' : ''}</span>
+                <span className="truncate text-[11.5px] text-mo">{v.trich_yeu}</span>
+              </button>)) : <span className="px-2 py-3 text-center text-xs text-mo">Không thấy văn bản phù hợp.</span>}
+          </div>
+        </div>}
+      </>}
+      {loi && <span className="text-xs text-nguy">{loi}</span>}
+    </section>
   );
 }
 
@@ -1241,11 +1298,12 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
 }) {
   const dem = (k: LoaiTT) => ds.filter((x) => x.tt.loai === k).length;
   const xong = dem('xong'), tl = phanTram(xong, ds.length);
-  // Sắp theo nhóm: (1) kết quả thực hiện — 4 mục cộng lại bằng Tất cả; (2) thời hạn; (3) việc cần xử lý
+  // Sắp theo nhóm: (1) kết quả thực hiện — 4 mục cộng lại bằng Tất cả; (4) đánh giá nhiệm vụ tỷ lệ (Đạt / Đảm bảo, thuộc Hoàn thành); (2) thời hạn; (3) việc cần xử lý
   const o: [LocTT, string, number, string, number][] = [
     ['tat_ca', 'Tất cả', ds.length, '#6A0F14', 0],
     ['xong', 'Hoàn thành', xong, '#16A34A', 1], ['dang', 'Đang thực hiện', ds.filter(laDangTH).length, '#1E3A8A', 1],
     ['chua_ht', 'Chưa hoàn thành', ds.filter(laChuaHT).length, '#9F1239', 1], ['khong_dat', 'Chưa đạt / Không đạt', ds.filter(laKhongDat).length, '#B45309', 1],
+    ['dat', 'Đạt', ds.filter(laDat).length, '#15803D', 4], ['dam_bao', 'Đảm bảo', ds.filter(laDamBao).length, '#0F766E', 4],
     ['sap_han', 'Sắp đến hạn', dem('sap_han'), '#D97706', 2], ['qua_han', 'Quá hạn', dem('qua_han'), '#BE123C', 2],
     ['chua_bct', 'Chưa báo cáo tuần', ds.filter((x) => x.canBct && !x.tuanCn.length).length, '#7C3AED', 3],
     ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, '#92400E', 3] as [LocTT, string, number, string, number]] : []),
