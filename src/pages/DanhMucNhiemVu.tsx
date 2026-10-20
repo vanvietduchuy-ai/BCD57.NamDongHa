@@ -84,7 +84,7 @@ function thongKeTT(ds: Dong[]) {
 const ptTK = (a: number, b: number) => `${String(phanTramTK(a, b)).replace('.', ',')}%`;
 const phanTramTK = (a: number, b: number) => (b ? Math.round((a * 1000) / b) / 10 : 0);
 const tenVb = (v: VbCanCu) => [v.so_ky_hieu, v.trich_yeu].filter(Boolean).join(' – ');
-type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'xong' | 'chua_ht' | 'khong_dat' | 'cho_duyet' | 'chua_bct';
+type LocTT = 'tat_ca' | 'qua_han' | 'sap_han' | 'chua_xong' | 'dang' | 'xong' | 'chua_ht' | 'khong_dat' | 'cho_duyet' | 'chua_bct';
 // Chưa đạt / Không đạt: nhiệm vụ có số liệu nhưng chưa đạt mức yêu cầu (tỷ lệ dưới chỉ tiêu, số lượng chưa đủ) và chưa ghi nhận hoàn thành
 const laKhongDat = (x: Dong): boolean => {
   if (x.con.length || x.tt.loai === 'xong') return false;
@@ -95,6 +95,9 @@ const laKhongDat = (x: Dong): boolean => {
 };
 // Chưa hoàn thành: chưa xong và tiến độ ghi "Chưa hoàn thành" (đơn vị báo chưa hoàn thành, quá hạn, chưa triển khai, tạm dừng) — trừ nhiệm vụ đã tính ở Chưa đạt / Không đạt
 const laChuaHT = (x: Dong): boolean => !x.con.length && x.tt.loai !== 'xong' && !laKhongDat(x) && tienDo3(x) === 'chua';
+// Đang thực hiện: chưa xong, không thuộc Chưa hoàn thành / Chưa đạt — Hoàn thành + Đang thực hiện + Chưa hoàn thành + Chưa đạt = Tất cả
+const laDangTH = (x: Dong): boolean => x.tt.loai !== 'xong' && !laChuaHT(x) && !laKhongDat(x);
+const NHOM_CHUA_XONG: LocTT[] = ['dang', 'chua_ht', 'khong_dat'];
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
 type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
 type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo };
@@ -173,8 +176,8 @@ export default function DanhMucNhiemVu() {
   const [thamSo] = useSearchParams();
   const [tim, setTim] = useState(() => thamSo.get('q') ?? '');
   // Lọc tình trạng: chọn được nhiều mục một lúc (hiện nhiệm vụ thuộc BẤT KỲ mục nào đã chọn); rỗng = Tất cả
-  const [locs, setLocs] = useState<LocTT[]>(() => { const l = ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'chua_xong', chua: 'chua_xong', chua_ht: 'chua_ht', khong_dat: 'khong_dat', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? '']; return l ? [l] : []; });
-  const setLocTT = (l: LocTT) => setLocs(l === 'tat_ca' ? [] : [l]);   // chọn đúng một mục (liên kết, Bỏ lọc…)
+  const [locs, setLocs] = useState<LocTT[]>(() => { const l = ({ qua_han: 'qua_han', cho_duyet: 'cho_duyet', hoan_thanh: 'xong', dang: 'dang', chua: 'chua_ht', chua_ht: 'chua_ht', khong_dat: 'khong_dat', chua_bct: 'chua_bct' } as Record<string, LocTT>)[thamSo.get('tab') ?? '']; return l ? (l === 'chua_xong' ? NHOM_CHUA_XONG : [l]) : []; });
+  const setLocTT = (l: LocTT) => setLocs(l === 'tat_ca' ? [] : l === 'chua_xong' ? NHOM_CHUA_XONG : [l]);   // chọn đúng một mục (liên kết, Bỏ lọc…)
   const batTatLoc = (l: LocTT) => setLocs((c) => (l === 'tat_ca' ? [] : c.includes(l) ? c.filter((y) => y !== l) : [...c, l]));
   const [locDv, setLocDv] = useState(() => thamSo.get('dv') ?? '');
   const [xemNhu, setXemNhu] = useState('');
@@ -249,7 +252,7 @@ export default function DanhMucNhiemVu() {
     if (!dvXem && locDv && x.n.chu_tri_don_vi_id !== locDv) return false;
     const k = x.tt.loai;
     const khop = (l: LocTT) => l === 'cho_duyet' ? x.n.trang_thai_giao === 'de_xuat' : l === 'qua_han' ? k === 'qua_han' : l === 'sap_han' ? k === 'sap_han'
-      : l === 'chua_xong' ? k !== 'xong' : l === 'xong' ? k === 'xong' : l === 'chua_ht' ? laChuaHT(x) : l === 'khong_dat' ? laKhongDat(x)
+      : l === 'chua_xong' ? k !== 'xong' : l === 'dang' ? laDangTH(x) : l === 'xong' ? k === 'xong' : l === 'chua_ht' ? laChuaHT(x) : l === 'khong_dat' ? laKhongDat(x)
       : l === 'chua_bct' ? x.canBct && !x.tuanCn.length : true;
     if (locs.length && !locs.some(khop)) return false;
     const t = khongDau(tim.trim());
@@ -1238,21 +1241,24 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
 }) {
   const dem = (k: LoaiTT) => ds.filter((x) => x.tt.loai === k).length;
   const xong = dem('xong'), tl = phanTram(xong, ds.length);
-  const o: [LocTT, string, number, string][] = [
-    ['tat_ca', 'Tất cả', ds.length, '#6A0F14'], ['qua_han', 'Quá hạn', dem('qua_han'), '#BE123C'], ['sap_han', 'Sắp đến hạn', dem('sap_han'), '#D97706'],
-    ['chua_xong', 'Đang thực hiện', ds.length - xong, '#1E3A8A'], ['xong', 'Hoàn thành', xong, '#16A34A'],
-    ['chua_ht', 'Chưa hoàn thành', ds.filter(laChuaHT).length, '#9F1239'], ['khong_dat', 'Chưa đạt / Không đạt', ds.filter(laKhongDat).length, '#B45309'],
-    ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, '#92400E'] as [LocTT, string, number, string]] : []),
-    ['chua_bct', 'Chưa báo cáo tuần', ds.filter((x) => x.canBct && !x.tuanCn.length).length, '#7C3AED'],
+  // Sắp theo nhóm: (1) kết quả thực hiện — 4 mục cộng lại bằng Tất cả; (2) thời hạn; (3) việc cần xử lý
+  const o: [LocTT, string, number, string, number][] = [
+    ['tat_ca', 'Tất cả', ds.length, '#6A0F14', 0],
+    ['xong', 'Hoàn thành', xong, '#16A34A', 1], ['dang', 'Đang thực hiện', ds.filter(laDangTH).length, '#1E3A8A', 1],
+    ['chua_ht', 'Chưa hoàn thành', ds.filter(laChuaHT).length, '#9F1239', 1], ['khong_dat', 'Chưa đạt / Không đạt', ds.filter(laKhongDat).length, '#B45309', 1],
+    ['sap_han', 'Sắp đến hạn', dem('sap_han'), '#D97706', 2], ['qua_han', 'Quá hạn', dem('qua_han'), '#BE123C', 2],
+    ['chua_bct', 'Chưa báo cáo tuần', ds.filter((x) => x.canBct && !x.tuanCn.length).length, '#7C3AED', 3],
+    ...(choDuyet != null ? [['cho_duyet', 'Chờ duyệt giao', choDuyet, '#92400E', 3] as [LocTT, string, number, string, number]] : []),
   ];
   const r = 15, cv = 2 * Math.PI * r;
   return (
     <div className="flex flex-col rounded-2xl border border-vien bg-white shadow-[0_1px_2px_rgba(40,10,15,.04)]">
       <div className="flex items-center gap-2 border-b border-[#F1EEE7] px-2 py-1.5">
         <div role="group" aria-label="Lọc theo tình trạng" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
-          {o.map(([k, nhan, so, mau]) => {
+          {o.map(([k, nhan, so, mau, nhom], i) => {
             const chon = k === 'tat_ca' ? !loc.length : loc.includes(k);
-            return (
+            return [
+              i > 0 && nhom !== o[i - 1][4] && <span key={`vach-${k}`} aria-hidden className="mx-1 my-2 w-px shrink-0 self-stretch bg-[#E5DFD6]" />,
               <button key={k} onClick={() => datLoc(k)} aria-pressed={chon} title={k === 'tat_ca' ? 'Bỏ chọn tất cả bộ lọc' : chon ? 'Bấm để bỏ chọn' : 'Bấm để chọn thêm — chọn được nhiều mục cùng lúc'}
                 className={cx('relative flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[0.8125rem] transition', chon ? 'bg-nen font-semibold text-den' : 'text-mo-2 hover:bg-nen-2', so === 0 && k !== 'tat_ca' && !chon && 'opacity-55')}>
                 {chon && k !== 'tat_ca'
@@ -1260,8 +1266,8 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
                   : <span className="h-2 w-2 rounded-full" style={{ background: mau }} />}
                 <span className="whitespace-nowrap">{nhan}</span>
                 <span className="mono rounded-md px-1.5 text-[0.75rem] font-bold" style={{ color: mau, background: chon ? 'white' : 'transparent' }}>{so}</span>
-              </button>
-            );
+              </button>,
+            ];
           })}
         </div>
         <button onClick={() => datMoTk(!moTk)} aria-pressed={moTk} title="Xem tỉ lệ hoàn thành theo đơn vị chủ trì"
