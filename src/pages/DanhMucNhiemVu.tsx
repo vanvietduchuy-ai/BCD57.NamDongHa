@@ -58,11 +58,14 @@ const tyLeNv = (x: Dong) => {
   return { tu: sl.tu, mau: sl.mau, tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
 };
 // Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt / Không đạt (so với chỉ tiêu %) hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
+// Đạt và Đảm bảo được tính là HOÀN THÀNH (thống kê, lọc, nhiệm vụ lớn, không phải báo cáo tuần các kỳ sau)
 const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
   if (x.d.tt_tay || x.con.length || (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'ty_le') return x.tt;
   const t = tyLeNv(x); if (!t) return x.tt;
-  return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'dang', nhan: 'Đảm bảo', tyLe: true };
+  return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'xong', nhan: 'Đảm bảo', tyLe: true };
 };
+// Tình trạng dùng để thống kê: Đạt / Đảm bảo -> hoàn thành; Không đạt giữ tình trạng theo hạn (không tự tính là quá hạn khi chưa đến hạn)
+const ttThongKe = (x: Dong): TinhTrang => { const h = ttHienThi(x); return h.tyLe && h.loai === 'xong' ? { loai: 'xong', nhan: h.nhan } : x.tt; };
 // Cột "Kết quả thực hiện" chỉ ghi phần lời; số liệu (Kết quả: a/b …) và trạng thái tiến độ đã có ở cột Tiến độ / Tình trạng
 const loiKetQua = (noiDung: string) => boTienTo(noiDung).replace(/^Kết quả:.*?\.(\s+|$)/, '').replace(/^Tiến độ: chưa hoàn thành\.\s*/, '').trim();
 // Người báo cáo: bỏ phần lặp (vd "Phòng Văn hóa – Xã hội · Phòng Văn hóa – Xã hội")
@@ -188,6 +191,8 @@ export default function DanhMucNhiemVu() {
     const theoId = new Map(ds.map((x) => [x.n.id, x]));
     // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
     for (const x of ds) { const c = x.d.cha ? theoId.get(x.d.cha) : undefined; if (c && c !== x && !c.d.cha && c.nhom === x.nhom) { x.cha = c.n.id; c.con.push(x); } }
+    // Nhiệm vụ tỷ lệ đã Đạt / Đảm bảo: tính là hoàn thành trước khi tổng hợp lên nhiệm vụ lớn
+    for (const x of ds) if (!x.con.length) x.tt = ttThongKe(x);
     const thuTu = (a: Dong, b: Dong) => ((a.d.thu_tu ?? 1e6) - (b.d.thu_tu ?? 1e6))
       || (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc);
     const goc = ds.filter((x) => !x.cha).sort((a, b) => ((thuTuNhom.get(a.nhom) ?? 99) - (thuTuNhom.get(b.nhom) ?? 99)) || thuTu(a, b));
@@ -207,7 +212,7 @@ export default function DanhMucNhiemVu() {
     }
     // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay
     kq.forEach((x, i) => { x.stt = i + 1; x.ttTD = x.tt; if (x.d.tt_tay) x.tt = x.d.tt_tay;
-      x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || !['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai)); });
+      x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || (!['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai) && x.tt.loai !== 'xong')); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1041,9 +1046,12 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
   const ptMoi = kq ? kq.phanTram : p;
   // Gợi ý ghi nhận hoàn thành khi đạt chỉ tiêu / đủ số lượng / 100%
   const datMuc = kq ? kq.dat : ptMoi >= 100;
+  // Nhiệm vụ tỷ lệ: Đạt chỉ tiêu hoặc Đảm bảo (không đặt chỉ tiêu) -> tự đánh dấu "Ghi nhận hoàn thành" (vẫn bỏ chọn được)
+  const goiYXong = laChuTri && dg.kieu === 'ty_le' && !!kq && (!dg.chi_tieu || kq.dat);
+  useEffect(() => { if (goiYXong) setXongNv(true); }, [goiYXong]);
 
   if (!mo) return (
-    <button onClick={() => { setMo(true); setXongNv(false); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-vien-2 px-3 text-left text-[0.8125rem] text-mo hover:border-[#8E1B22] hover:text-[#8E1B22]">
+    <button onClick={() => { setMo(true); setXongNv(goiYXong); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-vien-2 px-3 text-left text-[0.8125rem] text-mo hover:border-[#8E1B22] hover:text-[#8E1B22]">
       <Plus className="h-4 w-4" /><span className="flex-1">{dg.kieu === 'ky' ? 'Báo cáo kết quả kỳ này…' : dg.kieu === 'tien_do' ? 'Cập nhật kết quả, tiến độ…' : 'Cập nhật số liệu kết quả…'}</span>
       {x.d.so_lieu && dg.kieu !== 'tien_do' && <span className="mono text-xs">{soVN(x.d.so_lieu.tu)}/{soVN(x.d.so_lieu.mau)}</span>}
     </button>
