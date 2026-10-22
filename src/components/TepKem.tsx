@@ -1,6 +1,7 @@
 // Tài liệu kèm theo: danh sách tệp (mở / tải qua máy chủ) và ô chọn nhiều tệp trước khi gửi.
 import { FileArchive, FileImage, FileSpreadsheet, FileText, Paperclip, Plus, X } from 'lucide-react';
 import { goiChucNang } from '../lib/supabase';
+import { NHAN_TOI_DA_TEP, QUA_LON } from '../lib/gioiHanTep';
 import { NutTepDrive } from './TepDrive';
 import { cx } from './ui';
 
@@ -8,7 +9,6 @@ export type TepKem = { id: string; ten: string; drive_file_id: string; kich_thuo
 
 export const NHAN_TEP_KEM = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.txt,.csv,.rtf,.jpg,.jpeg,.png,.heic,.webp,.zip,.rar,.7z';
 const DUOI = /\.(pdf|docx?|xlsx?|pptx?|odt|ods|txt|csv|rtf|jpe?g|png|heic|webp|zip|rar|7z)$/i;
-const TOI_DA = 25 * 1024 * 1024;
 
 export const coKb = (n?: number | null) => (n == null ? '' : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`);
 function BieuTuong({ ten }: { ten: string }) {
@@ -48,7 +48,7 @@ export const DemTepKem = ({ n }: { n: number }) => (n > 0 ? <span className="inl
 // Kiểm tra tệp chọn thêm: trả thông báo lỗi hoặc null
 export function kiemTraTepKem(f: File): string | null {
   if (!DUOI.test(f.name)) return `"${f.name}": chỉ nhận PDF, Word, Excel, PowerPoint, ảnh, tệp nén`;
-  if (f.size > TOI_DA) return `"${f.name}" lớn hơn 25 MB`;
+  if (QUA_LON(f.size)) return `"${f.name}" lớn hơn ${NHAN_TOI_DA_TEP}`;
   return null;
 }
 
@@ -63,7 +63,7 @@ export function ChonTepKem({ ds, doi, baoLoi }: { ds: File[]; doi: (ds: File[]) 
   };
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-col gap-0.5"><span className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-mo-2"><Paperclip className="h-4 w-4 shrink-0" />Tài liệu kèm theo (không bắt buộc)</span><span className="text-xs text-mo">Word, Excel, PowerPoint, ảnh, ZIP… tối đa 25 MB mỗi tệp</span></div>
+      <div className="flex flex-col gap-0.5"><span className="flex items-center gap-1.5 text-[0.8125rem] font-semibold text-mo-2"><Paperclip className="h-4 w-4 shrink-0" />Tài liệu kèm theo (không bắt buộc)</span><span className="text-xs text-mo">Word, Excel, PowerPoint, ảnh, ZIP… tối đa {NHAN_TOI_DA_TEP} mỗi tệp</span></div>
       {ds.length > 0 && (
         <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
           {ds.map((f, i) => (

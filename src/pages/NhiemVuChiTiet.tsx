@@ -13,6 +13,7 @@ import TepDinhKem, { type Tep } from '../components/TepDinhKem';
 import MinhChungVanBan, { COT_MINH_CHUNG, type MinhChung } from '../components/MinhChungVanBan';
 import TheoDoiDinhKy, { type KyNv } from '../components/TheoDoiDinhKy';
 import { HanNv, ThanhNv } from '../components/NhanNhiemVu';
+import { ghepCauHinh, KHOA_CAU_HINH, tinhTrangTatCa, type CauHinhA4 } from '../lib/danhMucA4';
 
 type CapNhat = { id: number; noi_dung: string; phan_tram: number | null; trang_thai_moi: TrangThaiNv | null; luc: string; boi_ten: string | null };
 
@@ -26,19 +27,21 @@ export default function NhiemVuChiTiet() {
   const { data, loi, dangTai, taiLai } = useDuLieu(async () => {
     const n = kq(await supabase.from('v_nhiem_vu').select(COT_NV).eq('id', id!).maybeSingle()) as unknown as NhiemVu | null;
     if (!n) return null;
-    const [cn, tep, dv, vb, mc, kyNv] = await Promise.all([
+    const [cn, tep, dv, vb, mc, kyNv, chA4] = await Promise.all([
       supabase.from('v_nhiem_vu_cap_nhat').select('id, noi_dung, phan_tram, trang_thai_moi, luc, boi_ten').eq('nhiem_vu_id', id!).order('luc', { ascending: false }),
       supabase.from('tep').select('id, drive_file_id, ten').eq('nhiem_vu_id', id!).order('tai_len_luc'),
       supabase.from('don_vi').select('id, ten'),
       n.can_cu_van_ban_id ? supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, drive_file_id').eq('id', n.can_cu_van_ban_id).maybeSingle() : Promise.resolve({ data: null, error: null }),
       supabase.from('v_minh_chung_nhiem_vu').select(COT_MINH_CHUNG).eq('nhiem_vu_id', id!).order('tao_luc'),
       n.dinh_ky ? supabase.from('nhiem_vu_ky').select('ma_ky, xong_luc, ghi_chu').eq('nhiem_vu_id', id!).order('ma_ky', { ascending: false }).limit(24) : Promise.resolve({ data: [], error: null }),
+      supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
     ]);
     return {
       n, cn: (kq(cn) ?? []) as CapNhat[], tep: (kq(tep) ?? []) as Tep[], dv: (kq(dv) ?? []) as { id: string; ten: string }[],
       vb: vb.data as { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_file_id: string | null } | null,
       mc: (mc.data ?? []) as unknown as MinhChung[],
       ky: (kyNv.data ?? []) as KyNv[],
+      ch: ghepCauHinh((chA4.data as { gia_tri?: Partial<CauHinhA4> } | null)?.gia_tri),
     };
   }, [id]);
 
@@ -53,7 +56,11 @@ export default function NhiemVuChiTiet() {
   if (dangTai && !data) return <DangTai />;
   if (!data) return <Rong>Không tìm thấy nhiệm vụ.</Rong>;
   const { n } = data;
-  const tt = TT_NV[n.trang_thai];
+  // Tình trạng hiển thị cùng cách tính với bảng A4 và Tổng quan: nhiệm vụ đã Đạt / Đảm bảo (hoặc báo cáo 100% hoàn thành) là hoàn thành, không báo quá hạn
+  const ttChung = tinhTrangTatCa([n], new Map([[n.id, data.cn]]), data.ch).get(n.id)!.tt;
+  const xongTheoSoLieu = ttChung.loai === 'xong' && n.trang_thai !== 'hoan_thanh';
+  const nHt = xongTheoSoLieu ? { ...n, trang_thai: 'hoan_thanh' as TrangThaiNv, qua_han: false } : n;
+  const tt = TT_NV[nHt.trang_thai];
   const daGiao = n.trang_thai_giao === 'da_duyet';
   const chuTri = hoSo?.don_vi_id != null && hoSo.don_vi_id === n.chu_tri_don_vi_id;
   const phoiHop = (n.phoi_hop_ids ?? []).includes(hoSo?.don_vi_id ?? '');
@@ -97,9 +104,9 @@ export default function NhiemVuChiTiet() {
       {!daGiao && <div className="rounded-xl bg-cam-nhat px-4 py-3 text-sm text-cam-dam"><b>Chờ Trưởng ban duyệt giao.</b>{thieu.length > 0 && <> Thiếu: {thieu.join(', ')}.</>}</div>}
 
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-2xl bg-gradient-to-br from-[#7C1419] via-ink to-ink-3 px-4 py-3.5 text-white sm:px-5 sm:py-4">
-        <div className="flex flex-col gap-1"><span className="text-[11px] font-semibold tracking-wider text-[#F0C9C4]">TRẠNG THÁI</span><Chip nen={tt.nen} chu={tt.chu}>{tt.nhan}</Chip></div>
-        <div className="flex min-w-[180px] flex-1 flex-col gap-1.5"><span className="text-[11px] font-semibold tracking-wider text-[#F0C9C4]">TIẾN ĐỘ</span><ThanhNv n={n} /></div>
-        <div className="flex flex-col items-start gap-1"><span className="text-[11px] font-semibold tracking-wider text-[#F0C9C4]">{n.dinh_ky ? `${DINH_KY[n.dinh_ky].toUpperCase()} · KỲ ${tenKyNv(n.ky_ma).toUpperCase()}` : `HẠN ${n.han ? ngay(n.han) : ''}`}</span><HanNv n={n} /></div>
+        <div className="flex flex-col gap-1"><span className="text-[11px] font-semibold tracking-wider text-[#F0C9C4]">TRẠNG THÁI</span><Chip nen={tt.nen} chu={tt.chu}>{xongTheoSoLieu ? ttChung.nhan : tt.nhan}</Chip></div>
+        <div className="flex min-w-[180px] flex-1 flex-col gap-1.5"><span className="text-[11px] font-semibold tracking-wider text-[#F0C9C4]">TIẾN ĐỘ</span><ThanhNv n={nHt} /></div>
+        <div className="flex flex-col items-start gap-1"><span className="text-[11px] font-semibold tracking-wider text-[#F0C9C4]">{n.dinh_ky ? `${DINH_KY[n.dinh_ky].toUpperCase()} · KỲ ${tenKyNv(n.ky_ma).toUpperCase()}` : `HẠN ${n.han ? ngay(n.han) : ''}`}</span><HanNv n={nHt} /></div>
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">

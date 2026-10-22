@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Check, FileText, FolderUp, Loader2, ShieldAlert, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
+import { NHAN_TOI_DA_TEP, QUA_LON } from '../lib/gioiHanTep';
 import { docVanBanPdf, soKyHieu, type MetaVb } from '../lib/docPdf';
 import { docVanBanWord } from '../lib/docWord';
 import { khongDau } from '../lib/nhiemVu';
@@ -38,7 +39,7 @@ export default function TaiThuMucHop({ mo, dong, p, dsPhien, xong }: { mo: boole
     if (!fs) return;
     const moi = Array.from(fs).filter((f) => !/^\.|^~\$|thumbs\.db$/i.test(f.name));
     setDs((cu) => [...cu, ...moi.filter((f) => !cu.some((c) => c.f.name === f.name && duongDan(c.f) === duongDan(f) && c.f.size === f.size))
-      .map((f): Dong => !DUOI.test(f.name) ? { f, tt: 'bo', ghi: 'Định dạng không hỗ trợ' } : f.size > 25 * 1024 * 1024 ? { f, tt: 'bo', ghi: 'Lớn hơn 25 MB' } : { f, tt: 'cho' })]);
+      .map((f): Dong => !DUOI.test(f.name) ? { f, tt: 'bo', ghi: 'Định dạng không hỗ trợ' } : QUA_LON(f.size) ? { f, tt: 'bo', ghi: `Lớn hơn ${NHAN_TOI_DA_TEP}` } : { f, tt: 'cho' })]);
   };
   const dat = (i: number, d: Partial<Dong>) => setDs((x) => x.map((y, j) => (j === i ? { ...y, ...d } : y)));
   const soTai = ds.filter((d) => d.tt === 'cho').length;

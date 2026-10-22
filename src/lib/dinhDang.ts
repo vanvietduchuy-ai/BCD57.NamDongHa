@@ -63,7 +63,9 @@ export const hai = (n: number) => String(n).padStart(2, '0');
 export function conLaiNgan(han: string | Date, bayGio = Date.now()): string {
   const c = conLai(han, bayGio);
   if (c.ms <= 0) {
-    const qua = Math.floor(-c.ms / 86400000);
+    // Số ngày quá hạn tính theo ngày lịch (giờ VN) — cùng cách với Tổng quan và bảng A4 (hạn 19/10, hôm nay 22/10 = quá 3 ngày)
+    const theoNgay = (d: Date) => { const [y, m, ng] = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d).split('-').map(Number); return Date.UTC(y, m - 1, ng); };
+    const qua = Math.round((theoNgay(new Date(bayGio)) - theoNgay(new Date(han))) / 86400000);
     return qua >= 1 ? `Quá hạn ${qua} ngày` : 'Quá hạn';
   }
   return c.ngay > 0 ? `${c.ngay} ngày ${hai(c.gio)} giờ` : `${hai(c.gio)}:${hai(c.phut)}:${hai(c.giay)}`;

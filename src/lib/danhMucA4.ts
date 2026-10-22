@@ -1,6 +1,6 @@
 // Danh mục nhiệm vụ dạng bảng A4: cấu hình bảng (lưu ở cau_hinh, khoá 'danh_muc_a4'),
 // tính tình trạng quá hạn / sắp đến hạn, tỉ lệ theo đơn vị, đọc bảng danh mục từ tệp Word (.docx).
-import { khongDau, type NhiemVu } from './nhiemVu';
+import { khongDau, NHOM_NV, type NhiemVu } from './nhiemVu';
 import { homNayVN } from './dinhDang';
 
 export const KHOA_CAU_HINH = 'danh_muc_a4';
@@ -91,6 +91,62 @@ export function tinhTrang(n: NhiemVu, canhBao: number, xongLuc?: string | null):
     if (con <= canhBao) return { loai: 'sap_han', nhan: con === 0 ? 'Đến hạn hôm nay' : `Còn ${con} ngày`, con };
   }
   return n.trang_thai === 'chua_trien_khai' ? { loai: 'chua', nhan: 'Chưa triển khai' } : { loai: 'dang', nhan: n.trang_thai === 'trinh_ky' ? 'Đang trình ký' : 'Đang thực hiện' };
+}
+// ---------- Tình trạng dùng chung cho bảng A4 và Tổng quan (một nguồn duy nhất, để hai nơi luôn cho cùng số liệu)
+// Cập nhật tối thiểu cần để tính: nội dung (đọc "Kết quả: a/b"), thời điểm, trạng thái mới (hoàn thành)
+export type CapNhatTT = { noi_dung: string; luc: string; trang_thai_moi?: string | null };
+// Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …"); cn xếp mới nhất trước
+export function soLieuMoiNhat(cn: CapNhatTT[], d: DongA4): { tu: number; mau: number } | null {
+  const c = cn.find((y) => /Kết quả: (?:hoàn thành )?[\d.,]+\/[\d.,]+/.test(y.noi_dung));
+  const m = c?.noi_dung.match(/Kết quả: (?:hoàn thành )?([\d.,]+)\/([\d.,]+)/);
+  const tuCn = m ? { tu: docSo(m[1]), mau: docSo(m[2]), luc: c!.luc } : null;
+  const a = d.so_lieu;
+  if (a && (!tuCn || a.luc >= tuCn.luc)) return a;
+  return tuCn && Number.isFinite(tuCn.tu) && Number.isFinite(tuCn.mau) ? tuCn : null;
+}
+// Tỷ lệ % của nhiệm vụ đánh giá theo tỷ lệ; dat: so với chỉ tiêu (undefined nếu không đặt chỉ tiêu)
+export function tyLeNhiemVu(n: Pick<NhiemVu, 'san_pham' | 'dinh_ky'>, cn: CapNhatTT[], d: DongA4) {
+  const sl = soLieuMoiNhat(cn, d); if (!sl || !sl.mau) return null;
+  const chiTieu = (d.danh_gia ?? goiYDanhGia(n)).chi_tieu; const tyLe = (sl.tu / sl.mau) * 100;
+  return { tu: sl.tu, mau: sl.mau, tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
+}
+// Tình trạng ghi tay: suy loại theo chữ (Đạt / Đảm bảo / Hoàn thành -> hoàn thành; Không đạt / Chưa đạt / Chậm -> chưa đạt)
+export const loaiTheoChu = (t: string, macDinh: LoaiTT): LoaiTT => {
+  const c = khongDau(t.trim().toLowerCase());
+  if (/(khong|chua) dat|cham/.test(c)) return 'qua_han';
+  if (/^(dat|dam bao|hoan thanh|da hoan thanh)\b/.test(c)) return 'xong';
+  return macDinh;
+};
+export const chuanTTTay = (t: { loai: LoaiTT; nhan: string }): TinhTrang => ({ loai: loaiTheoChu(t.nhan, t.loai), nhan: t.nhan });
+const MUC_XAU: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
+// Tình trạng của MỌI nhiệm vụ: theo hạn và trạng thái; nhiệm vụ tỷ lệ đã Đạt / Đảm bảo là hoàn thành; nhiệm vụ lớn tổng hợp từ nhiệm vụ con;
+// sau cùng áp tình trạng Thường trực sửa tay. tt = tình trạng hiển thị / thống kê, ttTD = tình trạng tự động (trước khi sửa tay)
+export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: CauHinhA4): Map<string, { tt: TinhTrang; ttTD: TinhTrang }> {
+  const hopLe = new Set(ch.nhom.length ? ch.nhom.map((g) => g.id) : Object.keys(NHOM_NV).map((k) => `nv_${k}`));
+  type R = { n: NhiemVu; nhom: string; d: DongA4; cn: CapNhatTT[]; con: R[]; cha: boolean; tt: TinhTrang };
+  const ds: R[] = nv.map((n) => {
+    const d = ch.dong[n.id] ?? {}; const c = cn.get(n.id) ?? [];
+    const g = d.nhom;
+    return { n, d, cn: c, con: [], cha: false, nhom: g && hopLe.has(g) ? g : ch.nhom.length ? '_khac' : `nv_${n.nhom}`,
+      tt: tinhTrang(n, ch.canh_bao_ngay, c.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null) };
+  });
+  const theoId = new Map(ds.map((x) => [x.n.id, x]));
+  // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
+  for (const x of ds) { const c = x.d.cha ? theoId.get(x.d.cha) : undefined; if (c && c !== x && !c.d.cha && c.nhom === x.nhom) { x.cha = true; c.con.push(x); } }
+  for (const x of ds) {
+    if (x.con.length || x.d.tt_tay) continue;
+    const dg = x.d.danh_gia ?? goiYDanhGia(x.n); if (dg.kieu !== 'ty_le') continue;
+    const t = tyLeNhiemVu(x.n, x.cn, x.d);
+    if (t && (!t.chiTieu || t.dat)) x.tt = { loai: 'xong', nhan: t.chiTieu ? 'Đạt' : 'Đảm bảo' };
+  }
+  for (const g of ds) {
+    if (!g.con.length) continue;
+    const xong = g.con.filter((c) => c.tt.loai === 'xong').length;
+    const xau = MUC_XAU.find((m) => g.con.some((c) => c.tt.loai === m)) ?? 'chua';
+    g.tt = xong === g.con.length ? { loai: 'xong', nhan: 'Hoàn thành' }
+      : { loai: xau, nhan: xau === 'qua_han' ? `${g.con.filter((c) => c.tt.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
+  }
+  return new Map(ds.map((x) => [x.n.id, { ttTD: x.tt, tt: x.d.tt_tay ? chuanTTTay(x.d.tt_tay) : x.tt }]));
 }
 export const MAU_TT: Record<LoaiTT, { chu: string; nen: string; vach: string }> = {
   xong: { chu: '#166534', nen: '#DCFCE7', vach: '#16A34A' },

@@ -37,20 +37,29 @@ export const KHOA_ANON = anonKey;
 // Gọi Edge Function kèm JWT người dùng
 export async function goiChucNang<T = unknown>(ten: string, body: BodyInit | object, laForm = false): Promise<T> {
   const token = CHE_DO_THU ? tokenThu() : (await supabase.auth.getSession()).data.session?.access_token;
-  const res = await fetch(`${url}/functions/v1/${ten}`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token ?? anonKey}`,
-      apikey: anonKey,
-      ...(laForm ? {} : { 'Content-Type': 'application/json' }),
-    },
-    body: laForm ? (body as BodyInit) : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${url}/functions/v1/${ten}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token ?? anonKey}`,
+        apikey: anonKey,
+        ...(laForm ? {} : { 'Content-Type': 'application/json' }),
+      },
+      body: laForm ? (body as BodyInit) : JSON.stringify(body),
+    });
+  } catch (e) {
+    // Tệp lớn: máy chủ ngắt kết nối giữa chừng (quá dung lượng / quá thời gian) hoặc mạng yếu
+    if (ten === 'drive-upload') throw new Error('Tải tệp lên bị ngắt giữa chừng (tệp lớn hoặc mạng yếu). Kiểm tra mạng rồi thử lại; nếu vẫn lỗi, nén bớt tệp.');
+    throw e;
+  }
   const text = await res.text();
   let data: unknown = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
-    const msg = (data && typeof data === 'object' && 'loi' in data) ? String((data as { loi: string }).loi) : `Lỗi ${res.status}`;
+    const msg = (data && typeof data === 'object' && 'loi' in data) ? String((data as { loi: string }).loi)
+      : ten === 'drive-upload' && [413, 502, 504, 546].includes(res.status) ? 'Máy chủ không nhận nổi tệp này (quá lớn hoặc xử lý quá lâu). Hãy nén bớt hoặc chia nhỏ tệp rồi tải lại.'
+      : `Lỗi ${res.status}`;
     throw new Error(msg);
   }
   return data as T;

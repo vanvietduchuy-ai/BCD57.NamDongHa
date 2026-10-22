@@ -4,6 +4,7 @@ import { goiChucNang, loiDe, supabase } from '../lib/supabase';
 import { HopLoi, cx } from './ui';
 import { NutTepDrive } from './TepDrive';
 import { NHAN_TEP_KEM } from './TepKem';
+import { NHAN_TOI_DA_TEP, QUA_LON } from '../lib/gioiHanTep';
 
 export type Tep = { id: string; drive_file_id: string; ten: string };
 
@@ -15,6 +16,7 @@ export default function TepDinhKem({ loai, dichId, thuMuc, suaDuoc, tep, xong, x
   const [dangChay, setDangChay] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
   const tai = async (f: File) => {
+    if (QUA_LON(f.size)) { setLoi(`Tệp lớn hơn ${NHAN_TOI_DA_TEP}`); return; }
     setDangChay(true); setLoi(null);
     try {
       const fd = new FormData();

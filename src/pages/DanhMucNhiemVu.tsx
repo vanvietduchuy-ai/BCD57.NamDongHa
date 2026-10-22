@@ -9,7 +9,7 @@ import { laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
 import { COT_NV, khongDau, LINH_VUC, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
-  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrang, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
+  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrangTatCa, soLieuMoiNhat, tyLeNhiemVu, loaiTheoChu, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
@@ -33,14 +33,7 @@ type MinhChungO = { ten: string; loai: 'van_ban' | 'tep'; id: string; ten_tep: s
 const chuMinhChung = (so: string | null, ngayBh: string | null | undefined, duPhong: string) =>
   so || ngayBh ? `${so ?? 'Không số'}${ngayBh ? `, ngày ${ngayNgan(ngayBh)}` : ''}` : duPhong;
 // Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …")
-function soLieuCua(x: Dong): { tu: number; mau: number } | null {
-  const c = x.cn.find((y) => /Kết quả: (?:hoàn thành )?[\d.,]+\/[\d.,]+/.test(y.noi_dung));
-  const m = c?.noi_dung.match(/Kết quả: (?:hoàn thành )?([\d.,]+)\/([\d.,]+)/);
-  const tuCn = m ? { tu: docSo(m[1]), mau: docSo(m[2]), luc: c!.luc } : null;
-  const a = x.d.so_lieu;
-  if (a && (!tuCn || a.luc >= tuCn.luc)) return a;
-  return tuCn && Number.isFinite(tuCn.tu) && Number.isFinite(tuCn.mau) ? tuCn : null;
-}
+const soLieuCua = (x: Dong): { tu: number; mau: number } | null => soLieuMoiNhat(x.cn, x.d);
 // Báo cáo tuần gần nhất còn hiệu lực: tuần này (nếu chưa rút), không thì tuần trước đó
 const baoCaoGanNhat = (x: Dong) => x.tuanCn[0] ?? x.cn.find((c) => laBaoCaoTuanBatKy(c.noi_dung) && !c.noi_dung.startsWith(x.tienTo)) ?? null;
 // Nhiệm vụ đánh giá theo Tiến độ: chỉ ghi Đang thực hiện / Đã hoàn thành / Chưa hoàn thành (không ghi %)
@@ -56,11 +49,7 @@ const tienDo3 = (x: Dong): TienDo3 => {
   return cuoi && boTienTo(cuoi.noi_dung).startsWith(DAU_CHUA_HT) ? 'chua' : 'dang';
 };
 // Tỷ lệ % của nhiệm vụ đánh giá theo tỷ lệ (từ số liệu báo cáo mới nhất); dat: so với chỉ tiêu (undefined nếu không có chỉ tiêu)
-const tyLeNv = (x: Dong) => {
-  const sl = soLieuCua(x); if (!sl || !sl.mau) return null;
-  const chiTieu = (x.d.danh_gia ?? goiYDanhGia(x.n)).chi_tieu; const tyLe = (sl.tu / sl.mau) * 100;
-  return { tu: sl.tu, mau: sl.mau, tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
-};
+const tyLeNv = (x: Dong) => tyLeNhiemVu(x.n, x.cn, x.d);
 // Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt / Không đạt (so với chỉ tiêu %) hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
 // Đạt và Đảm bảo được tính là HOÀN THÀNH (thống kê, lọc, nhiệm vụ lớn, không phải báo cáo tuần các kỳ sau)
 const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
@@ -68,16 +57,6 @@ const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
   const t = tyLeNv(x); if (!t) return x.tt;
   return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'xong', nhan: 'Đảm bảo', tyLe: true };
 };
-// Tình trạng ghi tay: suy loại theo chữ (Đạt / Đảm bảo / Hoàn thành -> hoàn thành; Không đạt / Chưa đạt / Chậm -> chưa đạt)
-const loaiTheoChu = (t: string, macDinh: LoaiTT): LoaiTT => {
-  const c = khongDau(t.trim().toLowerCase());
-  if (/(khong|chua) dat|cham/.test(c)) return 'qua_han';
-  if (/^(dat|dam bao|hoan thanh|da hoan thanh)\b/.test(c)) return 'xong';
-  return macDinh;
-};
-const chuanTTTay = (t: { loai: LoaiTT; nhan: string }): TinhTrang => ({ loai: loaiTheoChu(t.nhan, t.loai), nhan: t.nhan });
-// Tình trạng dùng để thống kê: Đạt / Đảm bảo -> hoàn thành; Không đạt giữ tình trạng theo hạn (không tự tính là quá hạn khi chưa đến hạn)
-const ttThongKe = (x: Dong): TinhTrang => { const h = ttHienThi(x); return h.tyLe && h.loai === 'xong' ? { loai: 'xong', nhan: h.nhan } : x.tt; };
 // Cột "Kết quả thực hiện" chỉ ghi phần lời; số liệu (Kết quả: a/b …) và trạng thái tiến độ đã có ở cột Tiến độ / Tình trạng
 const loiKetQua = (noiDung: string) => boTienTo(noiDung).replace(/^Kết quả:.*?\.(\s+|$)/, '').replace(/^Tiến độ: chưa hoàn thành\.\s*/, '').trim();
 // Người báo cáo: bỏ phần lặp (vd "Phòng Văn hóa – Xã hội · Phòng Văn hóa – Xã hội")
@@ -225,19 +204,17 @@ export default function DanhMucNhiemVu() {
   const tatCa: Dong[] = useMemo(() => {
     if (!data) return [];
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
+    const ttTatCa = tinhTrangTatCa(data.nv, data.cn, ch);   // dùng chung với Tổng quan
     const ds = data.nv.map((n) => {
       const cn = data.cn.get(n.id) ?? [];
-      const xongLuc = cn.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null;
       const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
-      const tt = tinhTrang(n, ch.canh_bao_ngay, xongLuc);
+      const tt = ttTatCa.get(n.id)!.ttTD;
       const tuanCn = baoCaoHieuLuc(cn.filter((y) => y.luc >= tuan.batDau.toISOString()), tuan);   // đã tính lần rút báo cáo
       return { n, tt, ttTD: tt, tuanCn, tienTo: tuan.tienTo, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     const theoId = new Map(ds.map((x) => [x.n.id, x]));
     // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
     for (const x of ds) { const c = x.d.cha ? theoId.get(x.d.cha) : undefined; if (c && c !== x && !c.d.cha && c.nhom === x.nhom) { x.cha = c.n.id; c.con.push(x); } }
-    // Nhiệm vụ tỷ lệ đã Đạt / Đảm bảo: tính là hoàn thành trước khi tổng hợp lên nhiệm vụ lớn
-    for (const x of ds) if (!x.con.length) x.tt = ttThongKe(x);
     const thuTu = (a: Dong, b: Dong) => ((a.d.thu_tu ?? 1e6) - (b.d.thu_tu ?? 1e6))
       || (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc);
     const goc = ds.filter((x) => !x.cha).sort((a, b) => ((thuTuNhom.get(a.nhom) ?? 99) - (thuTuNhom.get(b.nhom) ?? 99)) || thuTu(a, b));
@@ -246,17 +223,12 @@ export default function DanhMucNhiemVu() {
       g.so = String(++so); kq.push(g);
       g.con.sort(thuTu).forEach((c, k) => { c.so = `${g.so}.${k + 1}`; kq.push(c); });
       if (g.con.length) {
-        // Tổng hợp: % bình quân, tình trạng xấu nhất, hạn muộn nhất của nhiệm vụ con
+        // Tổng hợp: % bình quân của nhiệm vụ con (tình trạng tổng hợp do tinhTrangTatCa tính)
         g.pt = Math.round(g.con.reduce((t, c) => t + c.n.phan_tram, 0) / g.con.length);
-        const xong = g.con.filter((c) => c.tt.loai === 'xong').length;
-        const muc: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
-        const xau = muc.find((m) => g.con.some((c) => c.tt.loai === m)) ?? 'chua';
-        g.tt = xong === g.con.length ? { loai: 'xong', nhan: 'Hoàn thành' }
-          : { loai: xau, nhan: xau === 'qua_han' ? `${g.con.filter((c) => c.tt.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
       }
     }
-    // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay
-    kq.forEach((x, i) => { x.stt = i + 1; x.ttTD = x.tt; if (x.d.tt_tay) x.tt = chuanTTTay(x.d.tt_tay);
+    // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay (tinhTrangTatCa đã áp)
+    kq.forEach((x, i) => { x.stt = i + 1; const t = ttTatCa.get(x.n.id)!; x.ttTD = t.ttTD; x.tt = t.tt;
       x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || (!['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai) && x.tt.loai !== 'xong')); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps

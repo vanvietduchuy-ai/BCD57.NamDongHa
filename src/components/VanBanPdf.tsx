@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { FileCheck2, FileText, FileUp, RefreshCw, ScanText, ShieldAlert } from 'lucide-react';
 import { CHE_DO_THU, goiChucNang } from '../lib/supabase';
+import { NHAN_TOI_DA_TEP, QUA_LON } from '../lib/gioiHanTep';
 import { docVanBanPdf, META_TRONG, soKyHieu, type MetaVb } from '../lib/docPdf';
 import { docVanBanWord } from '../lib/docWord';
 import { LOAI_VB, type LoaiVb } from '../lib/vanBan';
@@ -78,7 +79,7 @@ export default function OVanBanPdf({ meta, doiMeta: doiMeta_, tep, chonTep: chon
   const doc = async (f: File) => {
     setLoi(null);
     if (!/\.pdf$/i.test(f.name) && f.type !== 'application/pdf') { setLoi('Chọn tệp PDF'); return; }
-    if (f.size > 25 * 1024 * 1024) { setLoi('Tệp lớn hơn 25 MB'); return; }
+    if (QUA_LON(f.size)) { setLoi(`Tệp lớn hơn ${NHAN_TOI_DA_TEP}`); return; }
     try {
       setDangDoc('Đang đọc PDF…');
       const m = await docVanBanPdf(f, setDangDoc);

@@ -8,14 +8,16 @@ import { supabase } from '../lib/supabase';
 import { kq, useBayGio, useDuLieu } from '../lib/useDuLieu';
 import { useAuth, laQuanTri, type HoSo } from '../lib/auth';
 import { conLaiNgan, hai, mucGap, ngay, ngayGio, ngayGioDu, tenNgan, thuNgay } from '../lib/dinhDang';
-import { type NhiemVu } from '../lib/nhiemVu';
+import { COT_NV, type NhiemVu } from '../lib/nhiemVu';
+import { ghepCauHinh, KHOA_CAU_HINH, tinhTrangTatCa, type CapNhatTT, type CauHinhA4, type TinhTrang } from '../lib/danhMucA4';
 import { HopNhac, type DonViNhac } from '../components/HopNhac';
 import { ChipHan, DangTai, DemSo, DongHo, HopLoi, Rong, The, cx } from '../components/ui';
 import { Chuong } from '../components/KhungTrang';
 
 type KyMo = { ky_id: string; chu_tri_don_vi_id: string | null; don_vi_giao: string | null; ten: string; loai: string; han_nop: string; han_gui_tinh: string | null; so_don_vi: number; da_nop: number; da_duyet: number; can_bo_sung: number; chua_nop: number };
 type Dong = { nop_id: string; ky_id: string; don_vi_id: string; don_vi: string; thu_tu: number; ky: string; loai: string; trang_thai: string; han: string; nop_luc: string | null; dung_han: boolean | null; tre_ngay: number; tu_ngay: string | null };
-type NvChuY = Pick<NhiemVu, 'id' | 'ma' | 'ten' | 'han' | 'qua_han' | 'con_ngay' | 'trang_thai' | 'phan_tram' | 'chu_tri_ten' | 'dinh_ky' | 'ky_han'>;
+// Tình trạng lấy từ tinhTrangTatCa (cùng cách tính với bảng A4) — không dùng cờ qua_han của view vì không biết nhiệm vụ đã hoàn thành qua báo cáo / Đạt / Đảm bảo
+type NvChuY = NhiemVu & { tt: TinhTrang };
 
 const LOAI_KY: Record<string, string> = { thang: 'THÁNG', quy: 'QUÝ', sau_thang: '6 THÁNG', nam: 'NĂM', dot_xuat: 'ĐỘT XUẤT' };
 
@@ -37,27 +39,39 @@ async function tai(chuTri: string | null, donViMinh: string | null, hoSo: HoSo |
   let qKy = supabase.from('v_tinh_hinh_nop').select('ky_id, chu_tri_don_vi_id, don_vi_giao, ten, loai, han_nop, han_gui_tinh, so_don_vi, da_nop, da_duyet, can_bo_sung, chua_nop').eq('trang_thai_ky', 'mo').eq('cap', 'don_vi');
   let qNop = supabase.from('v_theo_doi_nop').select('nop_id, ky_id, don_vi_id, don_vi, thu_tu, ky, loai, trang_thai, han, nop_luc, dung_han, tre_ngay, tu_ngay')
     .eq('cap', 'don_vi').gte('han', `${nam}-01-01T00:00:00+07:00`).lte('han', `${nam}-12-31T23:59:59+07:00`);
-  let qNv = supabase.from('v_nhiem_vu').select('id, ma, ten, han, qua_han, con_ngay, trang_thai, phan_tram, chu_tri_ten, dinh_ky, ky_han')
+  let qNv = supabase.from('v_nhiem_vu').select(COT_NV)
     .eq('trang_thai_giao', 'da_duyet');
   if (chuTri) { qKy = qKy.eq('chu_tri_don_vi_id', chuTri); qNop = qNop.eq('chu_tri_don_vi_id', chuTri); qNv = qNv.eq('chu_tri_don_vi_id', chuTri); }
-  const [a, b, d, f, e] = await Promise.all([
+  const [a, b, d, f, e, g, h] = await Promise.all([
     qKy.order('han_nop'),
     qNop,
     supabase.from('nhiem_vu').select('id', { count: 'exact', head: true }).eq('trang_thai_giao', 'de_xuat'),
     qNv.order('han', { ascending: true, nullsFirst: false }),
     // Thường trực Ban Chỉ đạo cũng nộp báo cáo chuyên đề cho Phòng VH-XH
     !chuTri && donViMinh ? supabase.from('v_viec_can_nop').select('nop_id, ten, han_nop, don_vi_giao').eq('don_vi_id', donViMinh).order('han_nop') : Promise.resolve({ data: [], error: null }),
+    supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
+    supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc, trang_thai_moi').order('luc', { ascending: false }).limit(5000),
   ]);
-  const tatCa = (kq(f) ?? []) as NvChuY[];
-  const nv = tatCa.filter((n) => !['hoan_thanh', 'tam_dung'].includes(n.trang_thai));
-  const quaHan = nv.filter((n) => n.qua_han);
+  // Ngày chốt số liệu của từng kỳ (khác hạn nộp): dòng "Kỳ 15/10 – 14/11" phải hiện đúng ngày chốt, không phải hạn nộp
+  const kyIds = ((kq(a) ?? []) as KyMo[]).map((k) => k.ky_id);
+  const denNgay: Record<string, string | null> = {};
+  if (kyIds.length) for (const x of (((await supabase.from('ky_bao_cao').select('id, den_ngay').in('id', kyIds)).data ?? []) as { id: string; den_ngay: string | null }[])) denNgay[x.id] = x.den_ngay;
+  const tatCa = (kq(f) ?? []) as unknown as NhiemVu[];
+  const cn = new Map<string, CapNhatTT[]>();
+  for (const x of (h.data ?? []) as (CapNhatTT & { nhiem_vu_id: string })[]) { if (!cn.has(x.nhiem_vu_id)) cn.set(x.nhiem_vu_id, []); cn.get(x.nhiem_vu_id)!.push(x); }
+  const ttMap = tinhTrangTatCa(tatCa, cn, ghepCauHinh((g.data as { gia_tri?: Partial<CauHinhA4> } | null)?.gia_tri));
+  const dsTT: NvChuY[] = tatCa.map((n) => ({ ...n, tt: ttMap.get(n.id)!.tt }));
+  const nv = dsTT.filter((n) => !['xong', 'dung'].includes(n.tt.loai));
+  const quaHan = nv.filter((n) => n.tt.loai === 'qua_han');
+  const ngayQua = (n: NvChuY) => n.tt.tre ?? -(n.con_ngay ?? 0);   // số ngày quá hạn (theo ngày lịch, như bảng A4)
+  const conNgay = (n: NvChuY) => (n.tt.loai === 'qua_han' ? -ngayQua(n) : n.tt.con ?? n.con_ngay ?? 99);
   return {
-    nam, kyMo: (kq(a) ?? []) as KyMo[], dong: (kq(b) ?? []) as Dong[], choDuyet: d.count ?? 0,
-    nvTong: tatCa.length, nvXong: tatCa.filter((n) => n.trang_thai === 'hoan_thanh').length,
-    nvChuaTk: tatCa.filter((n) => n.trang_thai === 'chua_trien_khai').length,
+    nam, denNgay, kyMo: (kq(a) ?? []) as KyMo[], dong: (kq(b) ?? []) as Dong[], choDuyet: d.count ?? 0,
+    nvTong: dsTT.length, nvXong: dsTT.filter((n) => n.tt.loai === 'xong').length,
+    nvChuaTk: dsTT.filter((n) => n.tt.loai === 'chua').length,
     nvDang: nv.length, nvQuaHan: quaHan.length,
-    nvQuaLauNhat: quaHan.reduce((m, n) => Math.max(m, -(n.con_ngay ?? 0)), 0),
-    nvChuY: nv.filter((n) => n.qua_han || (n.con_ngay != null && n.con_ngay <= 14)).sort((x, y) => (x.con_ngay ?? 99) - (y.con_ngay ?? 99)).slice(0, 7),
+    nvQuaLauNhat: quaHan.reduce((m, n) => Math.max(m, ngayQua(n)), 0),
+    nvChuY: nv.filter((n) => n.tt.loai === 'qua_han' || n.tt.loai === 'sap_han' || conNgay(n) <= 14).sort((x, y) => conNgay(x) - conNgay(y)).slice(0, 7),
     canNop: ((e as { data: unknown }).data ?? []) as { nop_id: string; ten: string; han_nop: string; don_vi_giao: string | null }[],
     ...(await taiThem(chuTri, hoSo)),
   };
@@ -188,7 +202,7 @@ export default function TongQuan({ chuTri = null, nhung = false }: { chuTri?: st
             <div className="flex flex-col gap-1.5">
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="rounded-md bg-ink-2 px-2.5 py-1 text-[11px] font-bold tracking-[1px] text-[#FCD34D]">{chinh.loai === 'dot_xuat' ? 'ĐỘT XUẤT' : `ĐỊNH KỲ · ${LOAI_KY[chinh.loai] ?? ''}`}</span>
-                {tuNgay && <span className="hidden text-[0.8125rem] text-[#F0C9C4] sm:inline">Kỳ {ngay(tuNgay).replace(/\/\d{4}$/, '')} – {ngay(chinh.han_nop)}</span>}
+                {tuNgay && <span className="hidden text-[0.8125rem] text-[#F0C9C4] sm:inline">Kỳ {ngay(tuNgay).replace(/\/\d{4}$/, '')} – {ngay(data.denNgay[chinh.ky_id] ?? chinh.han_nop)}</span>}
                 <span className="flex-1" />
                 <span className="rounded-full bg-[#FDE68A] px-3 py-1 text-xs font-bold text-ink">Đang mở</span>
               </div>
@@ -318,10 +332,10 @@ export default function TongQuan({ chuTri = null, nhung = false }: { chuTri?: st
                   <Link to={`/nhiem-vu/${n.id}`} className="flex flex-col gap-1.5 text-den">
                     <span className="flex items-baseline gap-3">
                       <span className="min-w-0 flex-1 truncate text-[0.8438rem] font-semibold">{n.ten}</span>
-                      <span className={cx('mono shrink-0 text-[0.75rem] font-bold', n.qua_han ? 'text-nguy' : 'text-xanh')}>{n.phan_tram}%</span>
-                      <span className="shrink-0 text-[0.75rem] text-mo">{(n.ky_han ?? n.han) ? (n.qua_han ? `quá ${-(n.con_ngay ?? 0)} ngày` : `hạn ${ngay((n.ky_han ?? n.han)!).replace(/\/\d{4}$/, '')}`) : 'chưa chốt hạn'}</span>
+                      <span className={cx('mono shrink-0 text-[0.75rem] font-bold', n.tt.loai === 'qua_han' ? 'text-nguy' : 'text-xanh')}>{n.phan_tram}%</span>
+                      <span className="shrink-0 text-[0.75rem] text-mo">{(n.ky_han ?? n.han) ? (n.tt.loai === 'qua_han' ? `quá ${n.tt.tre ?? -(n.con_ngay ?? 0)} ngày` : `hạn ${ngay((n.ky_han ?? n.han)!).replace(/\/\d{4}$/, '')}`) : 'chưa chốt hạn'}</span>
                     </span>
-                    <span className="h-2 overflow-hidden rounded-full bg-[#EEEBE3]"><span className={cx('thanh-chay block h-2 rounded-full', n.qua_han ? 'bg-nguy' : 'bg-xanh')} style={{ width: `${Math.max(2, n.phan_tram)}%` }} /></span>
+                    <span className="h-2 overflow-hidden rounded-full bg-[#EEEBE3]"><span className={cx('thanh-chay block h-2 rounded-full', n.tt.loai === 'qua_han' ? 'bg-nguy' : 'bg-xanh')} style={{ width: `${Math.max(2, n.phan_tram)}%` }} /></span>
                   </Link>
                 </li>
               ))}
