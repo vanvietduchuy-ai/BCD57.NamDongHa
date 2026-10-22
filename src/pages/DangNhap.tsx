@@ -3,9 +3,10 @@ import { ArrowLeft, CheckCircle2, Eye, EyeOff, KeyRound, Lock, Mail, TriangleAle
 import { useAuth } from '../lib/auth';
 import { CHE_DO_THU, taiKhoanThu } from '../lib/supabase';
 import { HopLoi, LogoBcd, Nut, cx } from '../components/ui';
+import FormDangKy from '../components/FormDangKy';
 
 export const TEN_PHAN_MEM = 'Hệ thống điều hành BCĐ 57';
-type CheDo = 'dang_nhap' | 'quen' | 'da_gui' | 'dat';
+type CheDo = 'dang_nhap' | 'quen' | 'da_gui' | 'dat' | 'dang_ky';
 const KHOA_EMAIL = 'bcd57-email';
 const docEmail = () => { try { return localStorage.getItem(KHOA_EMAIL) ?? ''; } catch { return ''; } };
 const ghiEmail = (e: string) => { try { localStorage.setItem(KHOA_EMAIL, e); } catch { /* bỏ qua */ } };
@@ -69,6 +70,7 @@ export default function DangNhap() {
     dang_nhap: ['Đăng nhập', ''],
     quen: ['Quên mật khẩu', 'Nhập email của tài khoản, hệ thống gửi liên kết đặt lại mật khẩu.'],
     da_gui: ['Kiểm tra email', ''],
+    dang_ky: ['Đăng ký tài khoản', 'Điền thông tin, Quản trị hệ thống sẽ duyệt và cấp tài khoản cho bạn.'],
     dat: ['Đặt mật khẩu mới', hoSo?.doi_mat_khau ? 'Lần đầu đăng nhập: đổi mật khẩu tạm thành mật khẩu riêng của bạn.' : 'Mật khẩu dùng cho các lần đăng nhập sau.'],
   };
 
@@ -104,7 +106,7 @@ export default function DangNhap() {
       <main className="flex items-start justify-center px-4 pb-10 pt-8 sm:items-center sm:px-8 lg:py-12">
         <div className="flex w-full max-w-[420px] flex-col gap-6">
           <div className="flex flex-col gap-1.5">
-            {(cheDo === 'quen' || cheDo === 'da_gui') && (
+            {(cheDo === 'quen' || cheDo === 'da_gui' || cheDo === 'dang_ky') && (
               <button type="button" onClick={() => doiCheDo('dang_nhap')} className="-ml-2 mb-2 flex min-h-10 items-center gap-1.5 self-start rounded-lg px-2 text-[0.8125rem] font-semibold text-mo hover:bg-nen-3">
                 <ArrowLeft className="h-4 w-4" />Quay lại đăng nhập
               </button>
@@ -121,6 +123,8 @@ export default function DangNhap() {
                 <Nut key={ten} type="button" kieu="phu" className="justify-start" onClick={() => dangNhapThu(token)}>{ten}</Nut>
               ))}
             </div>
+          ) : cheDo === 'dang_ky' ? (
+            <FormDangKy quayLai={() => doiCheDo('dang_nhap')} />
           ) : cheDo === 'da_gui' ? (
             <div className="flex flex-col items-center gap-3 rounded-3xl border border-vien bg-white p-7 text-center shadow-sm">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-xanh-nhat text-xanh"><Mail className="h-6 w-6" /></span>
@@ -162,7 +166,9 @@ export default function DangNhap() {
             </form>
           )}
 
-          <p className="m-0 text-center text-[0.8125rem] text-mo">Chưa có tài khoản: liên hệ Thường trực Ban Chỉ đạo.</p>
+          {cheDo === 'dang_nhap' && (
+            <p className="m-0 text-center text-[0.8125rem] text-mo">Chưa có tài khoản? <button type="button" onClick={() => doiCheDo('dang_ky')} className="rounded-md font-semibold text-[#8E1B22] hover:underline">Đăng ký tài khoản</button></p>
+          )}
         </div>
       </main>
     </div>

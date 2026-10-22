@@ -11,22 +11,25 @@ import { laAdmin, useAuth } from '../lib/auth';
 import { BCT_MAC_DINH, KHOA_BCT, TEN_THU, type CauHinhBCT } from '../lib/baoCaoTuan';
 import { khongDau } from '../lib/nhiemVu';
 import { HopLienHe, hienSdt, luuLienHe, type LienHe } from '../components/LienHe';
+import YeuCauDangKy from '../components/YeuCauDangKy';
 import TaoTaiKhoanHangLoat, { KHOI_DV, khoiCua, type DvTk } from '../components/TaiKhoanHangLoat';
 
-type Tab = 'tai_khoan' | 'don_vi' | 'lich' | 'cai_dat' | 'luu_tru' | 'nhat_ky';
-const TABS: [Tab, string][] = [['tai_khoan', 'Tài khoản'], ['don_vi', 'Đơn vị'], ['lich', 'Lịch báo cáo định kỳ'], ['cai_dat', 'Cài đặt'], ['luu_tru', 'Lưu trữ & tự động'], ['nhat_ky', 'Nhật ký']];
+type Tab = 'tai_khoan' | 'dang_ky' | 'don_vi' | 'lich' | 'cai_dat' | 'luu_tru' | 'nhat_ky';
+const TABS: [Tab, string][] = [['tai_khoan', 'Tài khoản'], ['dang_ky', 'Yêu cầu đăng ký'], ['don_vi', 'Đơn vị'], ['lich', 'Lịch báo cáo định kỳ'], ['cai_dat', 'Cài đặt'], ['luu_tru', 'Lưu trữ & tự động'], ['nhat_ky', 'Nhật ký']];
 
 export default function QuanTri() {
   const [sp, setSp] = useSearchParams();
   const tab = (TABS.some(([k]) => k === sp.get('tab')) ? sp.get('tab') : 'tai_khoan') as Tab;
   const setTab = (k: Tab) => setSp({ tab: k }, { replace: true });
+  const { data: soCho } = useDuLieu(async () => (await supabase.from('yeu_cau_dang_ky').select('id', { count: 'exact', head: true }).eq('trang_thai', 'cho')).count ?? 0);
   return (
     <>
       <TieuDeTrang tren="Chỉ tài khoản Quản trị hệ thống · tài khoản, đơn vị, lưu trữ, nhật ký" ten="Quản trị hệ thống" />
       <div role="tablist" className="flex gap-1 overflow-x-auto border-b border-vien">
-        {TABS.map(([k, t]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx('h-11 whitespace-nowrap px-4 text-[0.9062rem]', tab === k ? 'border-b-2 border-ink font-bold text-den' : 'font-medium text-mo hover:text-den')}>{t}</button>)}
+        {TABS.map(([k, t]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx('h-11 whitespace-nowrap px-4 text-[0.9062rem]', tab === k ? 'border-b-2 border-ink font-bold text-den' : 'font-medium text-mo hover:text-den')}>{t}{k === 'dang_ky' && !!soCho && <span className="so ml-1.5 rounded-full bg-nguy px-1.5 py-0.5 text-[11px] font-bold text-white">{soCho}</span>}</button>)}
       </div>
       {tab === 'tai_khoan' && <TaiKhoan />}
+      {tab === 'dang_ky' && <YeuCauDangKy />}
       {tab === 'don_vi' && <><DauMoi /><DonVi /></>}
       {tab === 'lich' && <LichTheoDonVi />}
       {tab === 'cai_dat' && <CaiDat />}
