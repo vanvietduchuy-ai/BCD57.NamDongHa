@@ -7,11 +7,12 @@ import { useAuth, laQuanTri } from '../lib/auth';
 import { ngay } from '../lib/dinhDang';
 import { khongDau } from '../lib/nhiemVu';
 import { moTepDrive } from '../components/TepDrive';
-import { COT_VB, linkVb, LOAI_VB, THU_MUC, TT_VB, xoaVanBan, type LoaiVb, type ThuMuc, type VanBan } from '../lib/vanBan';
+import { COT_VB, linkVb, LOAI_VB, NHOM_VB, nhomCuaLoai, THU_MUC, TT_VB, xoaVanBan, type LoaiVb, type NhomVb, type ThuMuc, type VanBan } from '../lib/vanBan';
 import { CHUA_XEP, dinhKemPhien, docHoSoHop, sapXepPhien, suaHoSoHop, THANH_PHAN_HOP, type PhienHopKho } from '../lib/phienHop';
 import { Chip, DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, cx } from '../components/ui';
 import FormVanBan from '../components/FormVanBan';
 import TaiThuMucHop from '../components/TaiThuMucHop';
+import NhapBanGiao from '../components/NhapBanGiao';
 
 export default function KhoVanBan() {
   const { hoSo } = useAuth();
@@ -30,6 +31,7 @@ export default function KhoVanBan() {
   const rong = useManRong();
   const [thuMuc, setThuMuc] = useState<ThuMuc | 'cap_tren' | ''>('');
   const [loai, setLoai] = useState<LoaiVb | ''>('');
+  const [nhom, setNhom] = useState<NhomVb | ''>('');   // thư mục con (nhóm loại văn bản) trong thư mục đang chọn
   const [tim, setTim] = useState('');
   const [phien, setPhien] = useState('');            // phiên họp đang xem trong thư mục Hồ sơ họp BCĐ ('' = cả thư mục)
   const [suaPhien, setSuaPhien] = useState<PhienHopKho | 'moi' | null>(null);
@@ -55,6 +57,7 @@ export default function KhoVanBan() {
     : v.thu_muc === tm && (tm !== 'hop_bcd' || !phien || phienCua(v) === phien));
   const [moKem, setMoKem] = useState(false);
   const [moThuMuc, setMoThuMuc] = useState(false);
+  const [moBanGiao, setMoBanGiao] = useState(false);
   const boKem = async (v: VanBan, pid: string) => {
     try { await dinhKemPhien(pid, [], [v.id]); setTb(`Đã bỏ đính kèm ${v.so_ky_hieu ?? v.trich_yeu} khỏi phiên họp.`); void taiLai(); }
     catch (e) { setTb(loiDe(e)); }
@@ -62,23 +65,35 @@ export default function KhoVanBan() {
   const conHl = (v: VanBan) => hetHl || v.trang_thai !== 'het_hieu_luc';
   const ds = useMemo(() => {
     const t = khongDau(tim.trim());
-    return (data?.vb ?? []).filter((v) => hop(v, thuMuc) && (!loai || v.loai === loai) && conHl(v)
+    return (data?.vb ?? []).filter((v) => hop(v, thuMuc) && (!nhom || nhomCuaLoai(v.loai) === nhom) && (!loai || v.loai === loai) && conHl(v)
       && (!t || khongDau(`${v.so_ky_hieu ?? ''} ${v.trich_yeu} ${v.co_quan_ban_hanh} ${v.nguoi_ky ?? ''} ${v.ghi_chu ?? ''}`).includes(t)));
-  }, [data, thuMuc, phien, loai, tim, hetHl]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cacLoai = useMemo(() => [...new Set((data?.vb ?? []).filter((v) => hop(v, thuMuc) && conHl(v)).map((v) => v.loai))], [data, thuMuc, phien, hetHl]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [data, thuMuc, phien, nhom, loai, tim, hetHl]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cacLoai = useMemo(() => [...new Set((data?.vb ?? []).filter((v) => hop(v, thuMuc) && (!nhom || nhomCuaLoai(v.loai) === nhom) && conHl(v)).map((v) => v.loai))], [data, thuMuc, phien, nhom, hetHl]); // eslint-disable-line react-hooks/exhaustive-deps
   const vbChon = rong ? (ds.find((v) => v.id === chonId) ?? ds[0] ?? null) : null;
 
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
   if (dangTai && !data) return <DangTai />;
 
   const nutTM = (k: ThuMuc | 'cap_tren' | '', ten: string, con = false, ph = '', dem?: number) => (
-    <button key={(k || 'all') + ph} title={ten} onClick={() => { setThuMuc(k); setPhien(ph); setLoai(''); }} aria-pressed={thuMuc === k && phien === ph}
+    <button key={(k || 'all') + ph} title={ten} onClick={() => { setThuMuc(k); setPhien(ph); setLoai(''); setNhom(''); }} aria-pressed={thuMuc === k && phien === ph}
       className={cx('flex min-h-10 shrink-0 items-center gap-2.5 rounded-xl px-3 text-left text-[0.8438rem] lg:w-full', con && 'lg:pl-8',
         thuMuc === k && phien === ph ? 'bg-white font-semibold text-den shadow-sm max-lg:bg-ink max-lg:text-white' : 'bg-white text-mo-2 hover:bg-white/70 lg:bg-transparent')}>
       {ph ? <FolderOpen className="h-4 w-4 shrink-0" strokeWidth={1.8} /> : <Folder className="h-4 w-4 shrink-0" strokeWidth={1.8} />}<span className="min-w-0 flex-1 whitespace-nowrap lg:truncate">{ten}</span>
       {dem !== undefined && <span className="mono text-[0.7188rem] text-mo">{dem}</span>}
     </button>
   );
+  // Thư mục con theo nhóm loại văn bản — chỉ mở ra dưới thư mục đang chọn (trừ Hồ sơ họp BCĐ đã chia theo phiên)
+  const nutNhom = (k: ThuMuc | 'cap_tren' | '') => {
+    if (!k || k === 'hop_bcd' || thuMuc !== k) return null;
+    const vbTM = (data?.vb ?? []).filter((v) => hop(v, k) && conHl(v));
+    return NHOM_VB.map((n) => ({ ...n, dem: vbTM.filter((v) => nhomCuaLoai(v.loai) === n.k).length })).filter((n) => n.dem > 0 || nhom === n.k).map((n) => (
+      <button key={`nhom-${k}-${n.k}`} title={n.ten} onClick={() => { setNhom(nhom === n.k ? '' : n.k); setLoai(''); }} aria-pressed={nhom === n.k}
+        className={cx('flex min-h-9 shrink-0 items-center gap-2.5 rounded-xl px-3 text-left text-[0.8125rem] lg:w-full lg:pl-12',
+          nhom === n.k ? 'bg-white font-semibold text-[#8E1B22] shadow-sm' : 'bg-white text-mo-2 hover:bg-white/70 lg:bg-transparent')}>
+        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" /><span className="min-w-0 flex-1 whitespace-nowrap lg:truncate">{n.ten}</span>
+        <span className="mono text-[0.7188rem] text-mo">{n.dem}</span>
+      </button>));
+  };
   // Hồ sơ họp BCĐ: mỗi phiên họp là một thư mục con
   const dsPhien = sapXepPhien(data?.hh.ds ?? []);
   const vbHop = (data?.vb ?? []).filter((v) => v.thu_muc === 'hop_bcd' && conHl(v));
@@ -114,6 +129,7 @@ export default function KhoVanBan() {
           <Search className="pointer-events-none absolute left-3.5 top-3 h-[18px] w-[18px] text-mo" />
           <input className="h-11 w-full rounded-xl border border-vien bg-white pl-10 pr-3 text-base outline-none focus:border-xanh sm:text-sm" placeholder="Số ký hiệu, trích yếu, nội dung" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm văn bản" />
         </label>
+        {quanTri && <Nut className="shrink-0" icon={<FolderUp className="h-4 w-4" />} onClick={() => setMoBanGiao(true)} ngan="Bàn giao">Nhập hồ sơ bàn giao</Nut>}
         {quanTri && <Nut kieu="chinh" className="shrink-0" icon={<Upload className="h-4 w-4" />} onClick={() => setForm({})} ngan="Tải lên">Tải lên văn bản</Nut>}
         </div>
       </header>
@@ -123,9 +139,9 @@ export default function KhoVanBan() {
         <div className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-6">
           <nav aria-label="Thư mục" className="-mx-3.5 flex gap-1.5 overflow-x-auto px-3.5 pb-1 sm:-mx-4 sm:px-4 lg:mx-0 lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-0">
             {nutTM('', 'Tất cả văn bản')}
-            {nutTM('cap_tren', 'Văn bản cấp trên')}
-            {(['cap_tren_trung_uong', 'cap_tren_tinh', 'cap_tren_cong_an_tinh'] as ThuMuc[]).map((k) => nutTM(k, THU_MUC[k], true))}
-            {(Object.keys(THU_MUC) as ThuMuc[]).filter((k) => !k.startsWith('cap_tren')).map((k) => k === 'hop_bcd' ? <span key={k} className="contents">{thuMucHop}</span> : nutTM(k, THU_MUC[k]))}
+            {nutTM('cap_tren', 'Văn bản cấp trên')}{nutNhom('cap_tren')}
+            {(['cap_tren_trung_uong', 'cap_tren_tinh', 'cap_tren_cong_an_tinh'] as ThuMuc[]).map((k) => <span key={k} className="contents">{nutTM(k, THU_MUC[k], true)}{nutNhom(k)}</span>)}
+            {(Object.keys(THU_MUC) as ThuMuc[]).filter((k) => !k.startsWith('cap_tren')).map((k) => k === 'hop_bcd' ? <span key={k} className="contents">{thuMucHop}</span> : <span key={k} className="contents">{nutTM(k, THU_MUC[k])}{nutNhom(k)}</span>)}
           </nav>
           <div className="hidden rounded-2xl bg-nen-3 px-4 py-3 text-[0.7812rem] leading-relaxed text-mo-2 lg:block">
             Chỉ lưu văn bản thường. Văn bản mật lưu theo quy định bảo vệ bí mật nhà nước, không tải lên hệ thống.
@@ -223,6 +239,7 @@ export default function KhoVanBan() {
       <FormVanBan mo={!!form} dong={() => setForm(null)} vb={form?.vb} dau={thuMuc && thuMuc !== 'cap_tren' ? { thu_muc: thuMuc } : undefined}
         phienDs={data?.hh.ds ?? []} phienDau={form?.vb ? phienCua(form.vb) : thuMuc === 'hop_bcd' ? phien : ''}
         xong={() => { setForm(null); void taiLai(); }} daXoa={() => { setForm(null); setChonId(null); setTb('Đã xoá văn bản.'); void taiLai(); }} />
+      <NhapBanGiao mo={moBanGiao} dong={() => { setMoBanGiao(false); void taiLai(); }} xong={(n) => { setMoBanGiao(false); setTb(`Đã nhập ${n} văn bản bàn giao vào Kho.`); void taiLai(); }} />
       {phienChon && <TaiThuMucHop mo={moThuMuc} p={phienChon} dsPhien={data?.hh.ds ?? []} dong={() => { setMoThuMuc(false); void taiLai(); }}
         xong={(n) => { setMoThuMuc(false); setTb(`Đã tải ${n} văn bản vào ${phienChon.ten}.`); void taiLai(); }} />}
       {phienChon && <ChonVanBanCoSan mo={moKem} dong={() => setMoKem(false)} p={phienChon} ds={(data?.vb ?? []).filter((v) => conHl(v) && !trongPhien(v, phienChon.id))}

@@ -21,6 +21,19 @@ export const LOAI_VB: Record<LoaiVb, string> = {
   thong_bao: 'Thông báo', giay_moi: 'Giấy mời', bien_ban: 'Biên bản', khac: 'Khác',
 };
 
+// Thư mục con trong mỗi thư mục: gom theo nhóm loại văn bản (tính tại giao diện, không lưu thêm cột trong CSDL)
+export type NhomVb = 'quy_pham' | 'quyet_dinh' | 'ke_hoach' | 'cong_van' | 'bao_cao' | 'bien_ban' | 'khac';
+export const NHOM_VB: { k: NhomVb; ten: string; loai: LoaiVb[] }[] = [
+  { k: 'quy_pham', ten: 'Nghị quyết, chỉ thị, quy chế', loai: ['nghi_quyet', 'chi_thi', 'quy_che'] },
+  { k: 'quyet_dinh', ten: 'Quyết định', loai: ['quyet_dinh'] },
+  { k: 'ke_hoach', ten: 'Kế hoạch, chương trình', loai: ['ke_hoach', 'chuong_trinh'] },
+  { k: 'cong_van', ten: 'Công văn, thông báo, kết luận', loai: ['cong_van', 'thong_bao', 'ket_luan'] },
+  { k: 'bao_cao', ten: 'Báo cáo, tờ trình', loai: ['bao_cao', 'to_trinh'] },
+  { k: 'bien_ban', ten: 'Biên bản, giấy mời', loai: ['bien_ban', 'giay_moi'] },
+  { k: 'khac', ten: 'Khác', loai: ['khac'] },
+];
+export const nhomCuaLoai = (l: LoaiVb): NhomVb => NHOM_VB.find((n) => n.loai.includes(l))?.k ?? 'khac';
+
 export const TT_VB: Record<TtVb, { nhan: string; nen: string; chu: string }> = {
   du_thao: { nhan: 'Dự thảo', nen: 'bg-cam-nhat', chu: 'text-cam-dam' },
   ban_hanh: { nhan: 'Ban hành', nen: 'bg-xanh-nhat', chu: 'text-xanh' },
