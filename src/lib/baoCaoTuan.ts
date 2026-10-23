@@ -29,7 +29,7 @@ export function tuanCua(d: Date, ch: CauHinhBCT, lui = 0): Tuan {
   return { so, nam, batDau, ketThuc, han, ten: `Tuần ${so}/${nam} (${dd(thu2)} – ${dd(thu2 + 6 * 86400000)})`, tienTo: `Báo cáo tuần ${so}/${nam}:` };
 }
 
-export type CapNhatTuan = { nhiem_vu_id: string; noi_dung: string; luc: string; phan_tram: number | null; boi_ten: string | null };
+export type CapNhatTuan = { nhiem_vu_id: string; noi_dung: string; luc: string; phan_tram: number | null; boi_ten: string | null; trang_thai_moi?: string | null };
 export const laBaoCaoTuan = (c: CapNhatTuan, t: Tuan) => c.noi_dung.startsWith(t.tienTo);
 export const boTienTo = (s: string) => s.replace(/^Báo cáo tuần \d+\/\d+:\s*/, '');
 // Đơn vị rút báo cáo tuần (báo là chưa báo cáo): ghi một dòng đánh dấu, không xoá lịch sử

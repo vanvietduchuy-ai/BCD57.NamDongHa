@@ -9,7 +9,7 @@ import { laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
 import { COT_NV, khongDau, LINH_VUC, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
-  CAU_HINH_MAC_DINH, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrangTatCa, soLieuMoiNhat, tyLeNhiemVu, loaiTheoChu, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
+  CAU_HINH_MAC_DINH, canBaoCaoTuan, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrangTatCa, soLieuMoiNhat, tyLeNhiemVu, loaiTheoChu, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
@@ -234,7 +234,7 @@ export default function DanhMucNhiemVu() {
     // Xem tuần đã qua: nhiệm vụ hoàn thành SAU tuần đó vẫn phải báo cáo (nộp bù) cho tuần đó
     const xongSauTuan = (x: Dong) => { const l = x.cn.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc; return !!l && l > tuan.ketThuc.toISOString(); };
     kq.forEach((x, i) => { x.stt = i + 1; const t = ttTatCa.get(x.n.id)!; x.ttTD = t.ttTD; x.tt = t.tt;
-      x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || xongSauTuan(x) || (!['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai) && x.tt.loai !== 'xong')); });
+      x.canBct = !x.con.length && canBaoCaoTuan(x.n, x.tt, x.d.danh_gia ?? goiYDanhGia(x.n), x.tuanCn.length > 0, xongSauTuan(x)); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1137,7 +1137,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
   // Gợi ý ghi nhận hoàn thành khi đạt chỉ tiêu / đủ số lượng / 100%
   const datMuc = kq ? kq.dat : ptMoi >= 100;
   // Nhiệm vụ tỷ lệ: Đạt chỉ tiêu hoặc Đảm bảo (không đặt chỉ tiêu) -> tự đánh dấu "Ghi nhận hoàn thành" (vẫn bỏ chọn được)
-  const goiYXong = laChuTri && dg.kieu === 'ty_le' && !!kq && (!dg.chi_tieu || kq.dat);
+  const goiYXong = false;   // Tỷ lệ %: đạt vẫn nhập tiếp ở các kỳ sau, không tự ghi nhận hoàn thành
   useEffect(() => { if (goiYXong) setXongNv(true); }, [goiYXong]);
 
   if (!mo) return (
@@ -1246,7 +1246,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
       <textarea className={cx(lopO, 'min-h-16 bg-white py-2 text-[0.8125rem]')} placeholder={dg.kieu === 'tien_do' ? 'Kết quả đã thực hiện, vướng mắc' : 'Việc đã làm, vướng mắc — không ghi lại số liệu đã nhập ở trên'}
         value={noiDung} onChange={(e) => setNoiDung(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void gui(); if (e.key === 'Escape') setMo(false); }} />
 
-      {!truoc && laChuTri && dg.kieu !== 'tien_do' && !(dg.kieu === 'ky' && n.ky_xong) && (
+      {!truoc && laChuTri && dg.kieu !== 'tien_do' && dg.kieu !== 'ty_le' && !(dg.kieu === 'ky' && n.ky_xong) && (
         <label className={cx('flex items-center gap-2 text-[0.8125rem]', datMuc && !xongNv && 'text-[#166534]')}>
           <input type="checkbox" className="h-4 w-4 accent-[#16A34A]" checked={xongNv} onChange={(e) => setXongNv(e.target.checked)} />
           {dg.kieu === 'ky' ? `Xác nhận hoàn thành kỳ ${tenKyNv(n.ky_ma)}` : 'Ghi nhận hoàn thành nhiệm vụ'}

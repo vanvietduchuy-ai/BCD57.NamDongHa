@@ -140,6 +140,8 @@ export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: 
     const dg = x.d.danh_gia ?? goiYDanhGia(x.n); if (dg.kieu !== 'ty_le') continue;
     const t = tyLeNhiemVu(x.n, x.cn, x.d);
     if (t && (!t.chiTieu || t.dat)) x.tt = { loai: 'xong', nhan: t.chiTieu ? 'Đạt' : 'Đảm bảo' };
+    // Số liệu kỳ mới chưa đạt: không còn coi là hoàn thành (nhiệm vụ cũ đã bị ghi nhận hoàn thành khi từng đạt)
+    else if (t && x.n.trang_thai === 'hoan_thanh') x.tt = tinhTrang({ ...x.n, trang_thai: 'dang_thuc_hien' }, ch.canh_bao_ngay, null);
   }
   for (const g of ds) {
     if (!g.con.length) continue;
@@ -149,6 +151,16 @@ export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: 
       : { loai: xau, nhan: xau === 'qua_han' ? `${g.con.filter((c) => c.tt.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
   }
   return new Map(ds.map((x) => [x.n.id, { ttTD: x.tt, tt: x.d.tt_tay ? chuanTTTay(x.d.tt_tay) : x.tt }]));
+}
+// Nhiệm vụ phải báo cáo tuần (một nguồn duy nhất cho bảng A4 và trang Báo cáo tuần):
+// đã duyệt giao, có đơn vị chủ trì; đã báo cáo tuần đó, hoặc hoàn thành SAU tuần đó (nộp bù), hoặc chưa xong và không tạm dừng;
+// nhiệm vụ tính theo tỷ lệ % (nhập số liệu) vẫn nhập tiếp ở các kỳ sau kể cả khi đã Đạt / Đảm bảo.
+export function canBaoCaoTuan(n: NhiemVu, tt: TinhTrang, dg: DanhGia, daBaoTuan: boolean, xongSauTuan: boolean): boolean {
+  if (n.trang_thai_giao !== 'da_duyet' || !n.chu_tri_don_vi_id) return false;
+  if (daBaoTuan || xongSauTuan) return true;
+  if (n.trang_thai === 'tam_dung') return false;
+  if (dg.kieu === 'ty_le') return true;
+  return n.trang_thai !== 'hoan_thanh' && tt.loai !== 'xong';
 }
 export const MAU_TT: Record<LoaiTT, { chu: string; nen: string; vach: string }> = {
   xong: { chu: '#166534', nen: '#DCFCE7', vach: '#16A34A' },

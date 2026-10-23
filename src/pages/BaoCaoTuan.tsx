@@ -7,15 +7,15 @@ import { loiDe, supabase } from '../lib/supabase';
 import { kq, useBayGio, useDuLieu } from '../lib/useDuLieu';
 import { laAdmin, laQuanTri, useAuth } from '../lib/auth';
 import { ngayGioDu } from '../lib/dinhDang';
-import { type TrangThaiNv } from '../lib/nhiemVu';
-import { ghepCauHinh, KHOA_CAU_HINH } from '../lib/danhMucA4';
+import { COT_NV, type NhiemVu, type TrangThaiNv } from '../lib/nhiemVu';
+import { canBaoCaoTuan, ghepCauHinh, goiYDanhGia, KHOA_CAU_HINH, tinhTrangTatCa, type CapNhatTT } from '../lib/danhMucA4';
 import {
   baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, gioHan, KHOA_BCT, muonMs, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
 } from '../lib/baoCaoTuan';
 import { LienLacDonVi } from '../components/LienLacTrucTiep';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
 
-type NvT = { id: string; ma: string | null; ten: string; chu_tri_don_vi_id: string | null; trang_thai: TrangThaiNv; trang_thai_giao: string; tao_luc: string };
+type NvT = NhiemVu;
 type DonVi = { id: string; ten: string; loai: string | null; thu_tu: number | null };
 type Viec = { n: NvT; tuan: CapNhatTuan[] };
 
@@ -32,28 +32,34 @@ export default function BaoCaoTuan() {
   const { data, loi, dangTai, taiLai } = useDuLieu(async () => {
     const [a, b, c, d] = await Promise.all([
       supabase.from('cau_hinh').select('khoa, gia_tri').in('khoa', [KHOA_BCT, KHOA_CAU_HINH]),
-      supabase.from('v_nhiem_vu').select('id, ma, ten, chu_tri_don_vi_id, trang_thai, trang_thai_giao, tao_luc').eq('trang_thai_giao', 'da_duyet'),
+      supabase.from('v_nhiem_vu').select(COT_NV).eq('trang_thai_giao', 'da_duyet'),
       supabase.from('don_vi').select('id, ten, loai, thu_tu').eq('hoat_dong', true).order('thu_tu'),
-      supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc, phan_tram, boi_ten').order('luc', { ascending: false }).limit(4000),
+      supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc, phan_tram, boi_ten, trang_thai_moi').order('luc', { ascending: false }).limit(4000),
     ]);
     const ch = (kq(a) ?? []) as { khoa: string; gia_tri: unknown }[];
     return {
       bct: { ...BCT_MAC_DINH, ...(ch.find((x) => x.khoa === KHOA_BCT)?.gia_tri as Partial<CauHinhBCT> | undefined) },
       a4: ghepCauHinh(ch.find((x) => x.khoa === KHOA_CAU_HINH)?.gia_tri as never),
-      nv: (kq(b) ?? []) as NvT[], dv: (kq(c) ?? []) as DonVi[], cn: (kq(d) ?? []) as CapNhatTuan[],
+      nv: (kq(b) ?? []) as unknown as NvT[], dv: (kq(c) ?? []) as DonVi[], cn: (kq(d) ?? []) as CapNhatTuan[],
     };
   }, []);
 
   const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH, lui), [data, lui]);
-  // Nhiệm vụ phải báo cáo tuần: đã duyệt giao, chưa xong / tạm dừng (hoặc vừa hoàn thành trong tuần), không phải nhiệm vụ lớn có nhiệm vụ con
+  // Nhiệm vụ phải báo cáo tuần: cùng quy tắc với bảng A4 (canBaoCaoTuan) — đã duyệt giao, không phải nhiệm vụ lớn có nhiệm vụ con
   const viec = useMemo(() => {
     if (!data) return [] as Viec[];
     const cha = new Set(Object.values(data.a4.dong).map((x) => x.cha).filter(Boolean) as string[]);
+    const cnMap = new Map<string, CapNhatTT[]>();
+    for (const c of data.cn) { if (!cnMap.has(c.nhiem_vu_id)) cnMap.set(c.nhiem_vu_id, []); cnMap.get(c.nhiem_vu_id)!.push(c); }   // mới nhất trước
+    const ttMap = tinhTrangTatCa(data.nv, cnMap, data.a4);
+    const ketThuc = tuan.ketThuc.toISOString();
     return data.nv.filter((n) => !cha.has(n.id) && n.chu_tri_don_vi_id).map((n) => {
       // Không chặn mốc đầu/cuối tuần: nộp bù sau Chủ nhật hoặc chuẩn bị trước tuần sau vẫn thuộc đúng tuần (theo tiền tố "Báo cáo tuần NN/YYYY:", đã có năm)
       const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id), tuan);   // đã tính sửa / rút
-      return { n, tuan: trongTuan };
-    }).filter((x) => x.tuan.length > 0 || !['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai))
+      const luaXong = cnMap.get(n.id)?.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc;
+      const can = canBaoCaoTuan(n, ttMap.get(n.id)!.tt, data.a4.dong[n.id]?.danh_gia ?? goiYDanhGia(n), trongTuan.length > 0, !!luaXong && luaXong > ketThuc);
+      return { n, tuan: trongTuan, can };
+    }).filter((x) => x.can).map(({ n, tuan: t }) => ({ n, tuan: t }))
       .sort((a, b) => (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc));
   }, [data, tuan]);
 
