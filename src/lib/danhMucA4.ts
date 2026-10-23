@@ -1,6 +1,7 @@
 // Danh mục nhiệm vụ dạng bảng A4: cấu hình bảng (lưu ở cau_hinh, khoá 'danh_muc_a4'),
 // tính tình trạng quá hạn / sắp đến hạn, tỉ lệ theo đơn vị, đọc bảng danh mục từ tệp Word (.docx).
 import { khongDau, NHOM_NV, type NhiemVu } from './nhiemVu';
+import { khoaTuanHienTai, laBaoCaoTuanSau } from './baoCaoTuan';
 import { homNayVN } from './dinhDang';
 
 export const KHOA_CAU_HINH = 'danh_muc_a4';
@@ -124,8 +125,9 @@ const MUC_XAU: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong']
 export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: CauHinhA4): Map<string, { tt: TinhTrang; ttTD: TinhTrang }> {
   const hopLe = new Set(ch.nhom.length ? ch.nhom.map((g) => g.id) : Object.keys(NHOM_NV).map((k) => `nv_${k}`));
   type R = { n: NhiemVu; nhom: string; d: DongA4; cn: CapNhatTT[]; con: R[]; cha: boolean; tt: TinhTrang };
+  const hienTai = khoaTuanHienTai();   // nội dung chuẩn bị trước cho tuần sau chưa tính vào tiến độ / tình trạng
   const ds: R[] = nv.map((n) => {
-    const d = ch.dong[n.id] ?? {}; const c = cn.get(n.id) ?? [];
+    const d = ch.dong[n.id] ?? {}; const c = (cn.get(n.id) ?? []).filter((y) => !laBaoCaoTuanSau(y.noi_dung, hienTai));
     const g = d.nhom;
     return { n, d, cn: c, con: [], cha: false, nhom: g && hopLe.has(g) ? g : ch.nhom.length ? '_khac' : `nv_${n.nhom}`,
       tt: tinhTrang(n, ch.canh_bao_ngay, c.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null) };

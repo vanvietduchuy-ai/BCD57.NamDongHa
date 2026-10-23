@@ -13,7 +13,7 @@ import {
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
-import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, laBaoCaoTuanBatKy, laRutBaoCao, muonMs, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
+import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, laBaoCaoTuanBatKy, laBaoCaoTuanSau, laRutBaoCao, muonMs, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
@@ -208,10 +208,11 @@ export default function DanhMucNhiemVu() {
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
     const ttTatCa = tinhTrangTatCa(data.nv, data.cn, ch);   // dùng chung với Tổng quan
     const ds = data.nv.map((n) => {
-      const cn = data.cn.get(n.id) ?? [];
+      const cnTatCa = data.cn.get(n.id) ?? [];
+      const cn = cnTatCa.filter((y) => !laBaoCaoTuanSau(y.noi_dung));   // bỏ nội dung chuẩn bị trước cho tuần sau (chưa tính vào tiến độ / tình trạng)
       const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
       const tt = ttTatCa.get(n.id)!.ttTD;
-      const tuanCn = baoCaoHieuLuc(cn, tuan);   // đã tính lần rút báo cáo
+      const tuanCn = baoCaoHieuLuc(cnTatCa, tuan);   // đã tính lần rút báo cáo
       return { n, tt, ttTD: tt, tuanCn, tienTo: tuan.tienTo, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     const theoId = new Map(ds.map((x) => [x.n.id, x]));
@@ -230,8 +231,10 @@ export default function DanhMucNhiemVu() {
       }
     }
     // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay (tinhTrangTatCa đã áp)
+    // Xem tuần đã qua: nhiệm vụ hoàn thành SAU tuần đó vẫn phải báo cáo (nộp bù) cho tuần đó
+    const xongSauTuan = (x: Dong) => { const l = x.cn.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc; return !!l && l > tuan.ketThuc.toISOString(); };
     kq.forEach((x, i) => { x.stt = i + 1; const t = ttTatCa.get(x.n.id)!; x.ttTD = t.ttTD; x.tt = t.tt;
-      x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || (!['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai) && x.tt.loai !== 'xong')); });
+      x.canBct = !x.con.length && x.n.trang_thai_giao === 'da_duyet' && !!x.n.chu_tri_don_vi_id && (x.tuanCn.length > 0 || xongSauTuan(x) || (!['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai) && x.tt.loai !== 'xong')); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -393,7 +396,7 @@ export default function DanhMucNhiemVu() {
                     huy={() => setOSua(null)} xong={() => { setOSua(null); setThongBao({ ok: 'Đã cập nhật kết quả thực hiện.' }); void taiLai(); }} />}
                 </>
               : oSua.khoa === 'ket_qua_tuan'
-                ? <CapNhatNhanh x={x} moSan tienTo={tuan.tienTo} laChuTri={quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id} quanTri={suaDuocBang} luuDong={(pp) => suaDong(x.n.id, pp)}
+                ? <CapNhatNhanh x={x} moSan tienTo={tuan.tienTo} truoc={luiTuan < 0} laChuTri={quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id} quanTri={suaDuocBang} luuDong={(pp) => suaDong(x.n.id, pp)}
                     huy={() => setOSua(null)} xong={() => { setOSua(null); setThongBao({ ok: `Đã báo cáo kết quả ${tuanNgan.toLowerCase()}.` }); void taiLai(); }} />
               : oSua.khoa === 'tinh_trang'
                 ? <ChonTinhTrang x={x} luu={(v) => { suaDong(x.n.id, { tt_tay: v }); setOSua(null); }} />
@@ -1094,7 +1097,7 @@ function ChonTinhTrang({ x, luu }: { x: Dong; luu: (v: { loai: LoaiTT; nhan: str
 // Cập nhật kết quả ngay trong khung bên — ô nhập đổi theo cách đánh giá của nhiệm vụ:
 //   Tỷ lệ: nhập Đạt / Tổng -> % so với chỉ tiêu; Số lượng: số sản phẩm đã xong / yêu cầu; Tiến độ: chọn %; Định kỳ: xác nhận xong kỳ.
 const TEN_DG: Record<KieuDG, string> = { ty_le: 'Tỷ lệ %', so_luong: 'Số lượng', tien_do: 'Tiến độ', ky: 'Theo kỳ' };
-function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy, tienTo }: { x: Dong; laChuTri: boolean; quanTri: boolean; luuDong: (p: Partial<DongA4>) => void; xong: () => void; moSan?: boolean; huy?: () => void; tienTo?: string }) {
+function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy, tienTo, truoc = false }: { x: Dong; laChuTri: boolean; quanTri: boolean; luuDong: (p: Partial<DongA4>) => void; xong: () => void; moSan?: boolean; huy?: () => void; tienTo?: string; truoc?: boolean }) {
   const { n } = x;
   const goiY = goiYDanhGia(n);
   const [dg, setDg] = useState<DanhGia>(x.d.danh_gia ?? goiY);
@@ -1157,15 +1160,15 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
     const ptGhi = xongThat && dg.kieu !== 'ky' ? 100 : ptMoi;
     const { error } = await supabase.from('nhiem_vu_cap_nhat').insert({
       nhiem_vu_id: n.id, noi_dung: tienTo ? `${tienTo} ${nd}` : nd,
-      phan_tram: laChuTri && dg.kieu !== 'ky' && ptGhi !== n.phan_tram ? ptGhi : null, trang_thai_moi: laChuTri && tt !== n.trang_thai ? tt : null,
+      phan_tram: !truoc && laChuTri && dg.kieu !== 'ky' && ptGhi !== n.phan_tram ? ptGhi : null, trang_thai_moi: !truoc && laChuTri && tt !== n.trang_thai ? tt : null,   // chuẩn bị trước cho tuần sau: chỉ lưu nội dung, chưa đổi tiến độ / tình trạng
     });
-    if (!error && dg.kieu === 'ky' && xongNv) {
+    if (!error && !truoc && dg.kieu === 'ky' && xongNv) {
       const r = await supabase.rpc('nhiem_vu_xac_nhan_ky', { p_nv: n.id, p_xong: true, p_ghi_chu: noiDung.trim() || null, p_ma_ky: null });
       if (r.error) { setDang(false); setLoi(loiDe(r.error)); return; }
     }
     setDang(false);
     if (error) { setLoi(loiDe(error)); return; }
-    if (kq && quanTri) luuDong({ so_lieu: { tu: soTu, mau: soMau, luc: new Date().toISOString() }, ...(x.d.danh_gia ? {} : { danh_gia: dg }) });
+    if (kq && quanTri && !truoc) luuDong({ so_lieu: { tu: soTu, mau: soMau, luc: new Date().toISOString() }, ...(x.d.danh_gia ? {} : { danh_gia: dg }) });
     setMo(false); setNoiDung(''); xong();
   };
   const khoaMau = !quanTri && !!dg.tong && !mauDv;   // tổng số do Thường trực đặt -> đơn vị không sửa (trừ nhiệm vụ có mẫu số biến động)
@@ -1243,13 +1246,14 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
       <textarea className={cx(lopO, 'min-h-16 bg-white py-2 text-[0.8125rem]')} placeholder={dg.kieu === 'tien_do' ? 'Kết quả đã thực hiện, vướng mắc' : 'Việc đã làm, vướng mắc — không ghi lại số liệu đã nhập ở trên'}
         value={noiDung} onChange={(e) => setNoiDung(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void gui(); if (e.key === 'Escape') setMo(false); }} />
 
-      {laChuTri && dg.kieu !== 'tien_do' && !(dg.kieu === 'ky' && n.ky_xong) && (
+      {!truoc && laChuTri && dg.kieu !== 'tien_do' && !(dg.kieu === 'ky' && n.ky_xong) && (
         <label className={cx('flex items-center gap-2 text-[0.8125rem]', datMuc && !xongNv && 'text-[#166534]')}>
           <input type="checkbox" className="h-4 w-4 accent-[#16A34A]" checked={xongNv} onChange={(e) => setXongNv(e.target.checked)} />
           {dg.kieu === 'ky' ? `Xác nhận hoàn thành kỳ ${tenKyNv(n.ky_ma)}` : 'Ghi nhận hoàn thành nhiệm vụ'}
           {datMuc && !xongNv && dg.kieu !== 'ky' && <span className="text-xs">(đã đạt mức yêu cầu)</span>}
         </label>
       )}
+      {truoc && <span className="text-[11px] leading-snug text-[#6D28D9]">Chuẩn bị trước cho tuần sau: chỉ lưu nội dung; tiến độ và tình trạng nhiệm vụ chưa thay đổi, sẽ tính khi sang tuần đó.</span>}
       {loi && <span className="text-xs text-nguy">{loi}</span>}
       <div className="flex justify-end gap-2"><Nut onClick={() => setMo(false)}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void gui()}>{daBao ? 'Gửi lại' : 'Gửi'}</Nut></div>
     </div>
@@ -1271,7 +1275,7 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, 
         <b>Báo cáo {ten.toLowerCase()}:</b> <b className="mono">{da}/{ds.length}</b> nhiệm vụ đã báo cáo
         <span className="text-mo-2"> · hạn {hanChu} ({conLai})</span>
         {lui > 0 && <span className="block text-xs font-semibold text-[#B45309]">Đang xem tuần đã qua — nộp bây giờ được ghi nhận là nộp muộn.</span>}
-        {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau — chuẩn bị nội dung trước; nội dung nhập sẽ hiện ngay khi sang tuần mới.</span>}
+        {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau: {ds.length} nhiệm vụ phải báo cáo (chưa hoàn thành, chưa tạm dừng). Nội dung chuẩn bị trước chưa đổi tiến độ / tình trạng.</span>}
         {nhap && !xong && <span className="block text-xs text-mo">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
       </span>
       <span className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white p-0.5 ring-1 ring-vien">

@@ -51,6 +51,9 @@ export function chuTre(ms: number): string {
 }
 // Khoá so sánh tuần của một dòng báo cáo tuần (năm*100 + số tuần); null nếu không phải báo cáo tuần
 export const khoaTuan = (noiDung: string): number | null => { const m = noiDung.match(/^Báo cáo tuần (\d+)\/(\d+):/); return m ? Number(m[2]) * 100 + Number(m[1]) : null; };
+// Báo cáo của tuần SAU tuần hiện tại = nội dung chuẩn bị trước: chưa tính vào tiến độ / tình trạng cho tới khi sang tuần đó
+export const khoaTuanHienTai = () => { const t = tuanCua(new Date(), BCT_MAC_DINH); return t.nam * 100 + t.so; };
+export const laBaoCaoTuanSau = (noiDung: string, hienTai = khoaTuanHienTai()): boolean => { const k = khoaTuan(noiDung); return k !== null && k > hienTai; };
 // Báo cáo tuần gần nhất (mọi tuần) còn hiệu lực — bỏ dòng rút
 export const laBaoCaoTuanBatKy = (noiDung: string) => /^Báo cáo tuần \d+\/\d+:/.test(noiDung) && !laRutBaoCao(noiDung);
 
