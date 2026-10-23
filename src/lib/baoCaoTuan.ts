@@ -41,6 +41,14 @@ export function baoCaoHieuLuc<T extends { noi_dung: string; luc: string }>(ds: T
   const i = cua.findIndex((c) => laRutBaoCao(c.noi_dung));
   return i < 0 ? cua : cua.slice(0, i);
 }
+// Thời điểm gửi đầu tiên (các lần sửa sau không làm tăng độ trễ): ds là các lần còn hiệu lực của một tuần
+export const nopDauTien = (ds: { luc: string }[]): string | null => ds.reduce<string | null>((m, c) => (m === null || c.luc < m ? c.luc : m), null);
+// Số mili giây nộp muộn so với hạn (0 nếu đúng hạn hoặc chưa nộp)
+export const muonMs = (ds: { luc: string }[], han: Date | number): number => { const d = nopDauTien(ds); return d ? Math.max(0, new Date(d).getTime() - new Date(han).getTime()) : 0; };
+export function chuTre(ms: number): string {
+  const p = Math.max(1, Math.round(ms / 60000)), ngay = Math.floor(p / 1440), gio = Math.floor((p % 1440) / 60);
+  return ngay ? `${ngay} ngày${gio ? ` ${gio} giờ` : ''}` : gio ? `${gio} giờ` : `${p} phút`;
+}
 // Báo cáo tuần gần nhất (mọi tuần) còn hiệu lực — bỏ dòng rút
 export const laBaoCaoTuanBatKy = (noiDung: string) => /^Báo cáo tuần \d+\/\d+:/.test(noiDung) && !laRutBaoCao(noiDung);
 

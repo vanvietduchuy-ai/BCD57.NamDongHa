@@ -2,7 +2,7 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarClock, ChevronLeft, ChevronRight, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
@@ -13,7 +13,7 @@ import {
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
-import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, DAU_RUT, gioHan, KHOA_BCT, laBaoCaoTuanBatKy, laRutBaoCao, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
+import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, DAU_RUT, gioHan, KHOA_BCT, laBaoCaoTuanBatKy, laRutBaoCao, muonMs, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
@@ -199,8 +199,9 @@ export default function DanhMucNhiemVu() {
   const nhomDs = ch.nhom.length ? ch.nhom : nhomMacDinh();
   const nhomCua = (n: NhiemVu) => { const g = ch.dong[n.id]?.nhom; return g && nhomDs.some((x) => x.id === g) ? g : ch.nhom.length ? '_khac' : `nv_${n.nhom}`; };
 
-  // Tuần hiện tại (báo cáo tuần nhập ngay trên bảng A4)
-  const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH), [data]);
+  // Tuần báo cáo (nhập ngay trên bảng A4): mặc định tuần hiện tại; lùi 1–3 tuần để nộp bù (ghi nhận nộp muộn)
+  const [luiTuan, setLuiTuan] = useState(0);
+  const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH, luiTuan), [data, luiTuan]);
   const tatCa: Dong[] = useMemo(() => {
     if (!data) return [];
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
@@ -317,7 +318,8 @@ export default function DanhMucNhiemVu() {
           <Zoom z={rieng.zoom} dat={(z) => setRieng({ ...rieng, zoom: z })} />
         </>} />
       <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem || !locDv || x.n.chu_tri_don_vi_id === locDv))} ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
-        loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)} />
+        loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
+        lui={luiTuan} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length)} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
@@ -325,7 +327,7 @@ export default function DanhMucNhiemVu() {
         <div className="min-w-0 flex-1">
           <BangA4 ch={chHien} ds={xem.ds} nhomDs={xem.nhom} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={(id) => { setOSua(null); setChon((c) => (c === id ? null : id)); }} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
-            oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()}
+            oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()} tuanTruoc={luiTuan > 0}
             moO={(x, khoa, o) => {
               const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
               const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && suaDuocBang : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
@@ -492,7 +494,7 @@ type BangProps = {
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
-  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; oDangMo: string | null; hanTuan: number;
+  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; oDangMo: string | null; hanTuan: number; tuanTruoc?: boolean;
 };
 const O_SUA: Partial<Record<KhoaCot, 'nv' | 'dong'>> = { ten: 'nv', san_pham: 'nv', han: 'nv', lanh_dao: 'nv', ma: 'nv', nguon_vb: 'dong', chu_tri: 'dong', tien_do: 'dong' };
 const giaTriSua = (x: Dong, k: KhoaCot): string =>
@@ -573,7 +575,7 @@ function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: K
   );
 }
 
-function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, hanTuan, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, hanTuan, tuanTruoc, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -698,10 +700,11 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
         return <>
           {cuoi && loiKetQua(cuoi.noi_dung) && <span className="block whitespace-pre-wrap">{loiKetQua(cuoi.noi_dung)}</span>}
           {cuoi && <span className={cx('mt-0.5 block font-sans text-[7.5pt]', x.tuanCn.length ? 'text-[#166534]' : 'text-[#6B6B6B]')} title={x.tuanCn.length ? 'Bấm để sửa hoặc rút báo cáo tuần này' : undefined}>
-            {x.tuanCn.length ? '✓ ' : ''}Tuần {tuanCuoi} · {nguoiGon(cuoi.boi_ten)} · {ngayGioDu(cuoi.luc)}{x.tuanCn.length > 1 ? ' (đã sửa)' : ''}</span>}
+            {x.tuanCn.length ? '✓ ' : ''}Tuần {tuanCuoi} · {nguoiGon(cuoi.boi_ten)} · {ngayGioDu(cuoi.luc)}{x.tuanCn.length > 1 ? ' (đã sửa)' : ''}
+            {muonMs(x.tuanCn, hanTuan) > 0 && <b className="text-[#B45309]"> · nộp muộn {chuTre(muonMs(x.tuanCn, hanTuan))}</b>}</span>}
           {x.canBct && (x.tuanCn.length
             ? null
-            : <span className={cx('mt-0.5 block font-sans text-[7.5pt] italic', Date.now() > hanTuan ? 'font-semibold text-[#BE123C]' : 'text-[#8D8486]')}>{Date.now() > hanTuan ? 'Quá hạn chưa báo cáo tuần này' : 'Chưa báo cáo tuần này — bấm để nhập'}</span>)}
+            : <span className={cx('mt-0.5 block font-sans text-[7.5pt] italic', Date.now() > hanTuan ? 'font-semibold text-[#BE123C]' : 'text-[#8D8486]')}>{tuanTruoc ? 'Chưa báo cáo tuần này — bấm để nộp bù (ghi nhận nộp muộn)' : Date.now() > hanTuan ? 'Quá hạn chưa báo cáo tuần này' : 'Chưa báo cáo tuần này — bấm để nhập'}</span>)}
           {!cuoi && !x.canBct && <span className="text-[#8D8486]">—</span>}
         </>;
       }
@@ -1253,8 +1256,8 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 }
 
 // ---------- Dải báo cáo tuần: tiến độ báo cáo tuần này + hạn; một chạm lọc nhiệm vụ chưa báo cáo
-function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap }: { ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean }) {
-  if (!ds.length) return null;
+function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, datLui }: { ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; datLui: (v: number) => void }) {
+  if (!ds.length && !lui) return null;
   const da = ds.filter((x) => x.tuanCn.length).length, con = ds.length - da;
   const p = Math.round((han.getTime() - Date.now()) / 60000), qua = p < 0;
   const conLai = qua ? 'đã quá hạn' : p >= 1440 ? `còn ${Math.floor(p / 1440)} ngày` : p >= 60 ? `còn ${Math.floor(p / 60)} giờ` : `còn ${p} phút`;
@@ -1265,7 +1268,13 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap }: { ds: Dong[]
       <span className="min-w-0 flex-1 text-[0.8125rem] leading-snug">
         <b>Báo cáo {ten.toLowerCase()}:</b> <b className="mono">{da}/{ds.length}</b> nhiệm vụ đã báo cáo
         <span className="text-mo-2"> · hạn {hanChu} ({conLai})</span>
+        {lui > 0 && <span className="block text-xs font-semibold text-[#B45309]">Đang xem tuần đã qua — nộp bây giờ được ghi nhận là nộp muộn.</span>}
         {nhap && !xong && <span className="block text-xs text-mo">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
+      </span>
+      <span className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white p-0.5 ring-1 ring-vien">
+        <button type="button" disabled={lui >= 3} onClick={() => datLui(lui + 1)} aria-label="Tuần trước (nộp bù)" title="Tuần trước (nộp bù)" className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-nen disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
+        <button type="button" disabled={!lui} onClick={() => datLui(0)} className="h-8 rounded-md px-2 text-xs font-semibold hover:bg-nen disabled:opacity-40">Tuần này</button>
+        <button type="button" disabled={!lui} onClick={() => datLui(lui - 1)} aria-label="Tuần sau" title="Tuần sau" className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-nen disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
       </span>
       {!xong && <button onClick={() => datLoc(!loc)} aria-pressed={loc}
         className={cx('h-9 w-full shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold sm:w-auto', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>

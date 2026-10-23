@@ -10,7 +10,7 @@ import { ngayGioDu } from '../lib/dinhDang';
 import { type TrangThaiNv } from '../lib/nhiemVu';
 import { ghepCauHinh, KHOA_CAU_HINH } from '../lib/danhMucA4';
 import {
-  baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, gioHan, KHOA_BCT, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
+  baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, gioHan, KHOA_BCT, muonMs, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
 } from '../lib/baoCaoTuan';
 import { LienLacDonVi } from '../components/LienLacTrucTiep';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
@@ -49,9 +49,10 @@ export default function BaoCaoTuan() {
   const viec = useMemo(() => {
     if (!data) return [] as Viec[];
     const cha = new Set(Object.values(data.a4.dong).map((x) => x.cha).filter(Boolean) as string[]);
-    const tu = tuan.batDau.toISOString(), den = tuan.ketThuc.toISOString();
+    const tu = tuan.batDau.toISOString();
     return data.nv.filter((n) => !cha.has(n.id) && n.chu_tri_don_vi_id).map((n) => {
-      const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id && c.luc >= tu && c.luc <= den), tuan);   // đã tính sửa / rút
+      // Không chặn mốc cuối tuần: báo cáo nộp bù sau Chủ nhật vẫn thuộc tuần đó (theo tiền tố "Báo cáo tuần NN/YYYY:")
+      const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id && c.luc >= tu), tuan);   // đã tính sửa / rút
       return { n, tuan: trongTuan };
     }).filter((x) => x.tuan.length > 0 || !['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai))
       .sort((a, b) => (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc));
@@ -104,9 +105,10 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
   const dong = dv.map((d) => {
     const ds = viec.filter((x) => x.n.chu_tri_don_vi_id === d.id);
     const bao = ds.filter((x) => x.tuan.length);
-    const tre = bao.some((x) => x.tuan.some((c) => new Date(c.luc) > tuan.han));
+    // Trễ tính theo lần gửi ĐẦU TIÊN của từng nhiệm vụ: sửa lại sau hạn không bị tính trễ
+    const muon = Math.max(0, ...bao.map((x) => muonMs(x.tuan, tuan.han)));
     const cuoi = bao.flatMap((x) => x.tuan).sort((a, b) => b.luc.localeCompare(a.luc))[0]?.luc ?? null;
-    return { d, ds, bao, cuoi, tt: tinhTrangTuan(ds.length, bao.length, tre, tuan) };
+    return { d, ds, bao, cuoi, muon, tt: tinhTrangTuan(ds.length, bao.length, muon > 0, tuan) };
   }).filter((x) => x.ds.length);
   const chuaDu = dong.filter((x) => ['chua', 'qua_han', 'thieu'].includes(x.tt));
   const du = dong.filter((x) => x.tt === 'du' || x.tt === 'tre').length;
@@ -119,7 +121,7 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
       </div>
       {dong.length === 0 ? <Rong>Chưa có nhiệm vụ đã duyệt giao nào cần báo cáo tuần. Duyệt giao nhiệm vụ ở trang Nhiệm vụ BCĐ.</Rong> : (
         <The className="overflow-hidden">
-          {dong.map(({ d, ds, bao, cuoi, tt }) => {
+          {dong.map(({ d, ds, bao, cuoi, tt, muon }) => {
             const [nhan, chu, nen] = NHAN_TT_TUAN[tt];
             return (
               <div key={d.id} className="border-b border-[#F1EEE7] last:border-0">
@@ -128,7 +130,7 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
                     <ChevronDown className={cx('h-4 w-4 shrink-0 text-mo transition', mo === d.id && 'rotate-180')} />
                     <span className="min-w-0 text-[0.875rem] font-semibold leading-snug sm:truncate">{d.ten}</span>
                   </button>
-                  <span className="justify-self-end rounded-md px-2 py-0.5 text-xs font-semibold sm:order-3" style={{ color: chu, background: nen }}>{nhan}</span>
+                  <span className="justify-self-end rounded-md px-2 py-0.5 text-xs font-semibold sm:order-3" style={{ color: chu, background: nen }}>{nhan}{muon > 0 && ` · muộn ${chuTre(muon)}`}</span>
                   <div className="col-span-2 flex items-center gap-2 pl-6 sm:order-2 sm:col-span-1 sm:pl-0">
                     <span className="mono text-[0.8125rem]">{bao.length}/{ds.length}</span>
                     <div className="h-1.5 w-full max-w-[80px] flex-1 rounded-full bg-nen-3 sm:w-20 sm:flex-none"><div className="h-1.5 rounded-full" style={{ width: `${(bao.length / ds.length) * 100}%`, background: chu }} /></div>
@@ -145,7 +147,7 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
                       <li key={x.n.id} className="flex flex-col text-[0.8125rem]">
                         <span className="flex items-start gap-2"><span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.tuan.length ? 'bg-[#16A34A]' : 'bg-vien-2')} />
                           <Link to={`/nhiem-vu/${x.n.id}`} className="font-semibold text-den hover:underline">{x.n.ma && <span className="mono mr-1 text-xs text-mo">{x.n.ma}</span>}{x.n.ten}</Link></span>
-                        <span className="pl-4 text-mo-2">{x.tuan.length ? `${boTienTo(x.tuan[0].noi_dung)}${x.tuan.length > 1 ? ' (đã sửa)' : ''}` : <i className="text-mo">Chưa báo cáo tuần này</i>}</span>
+                        <span className="pl-4 text-mo-2">{x.tuan.length ? `${boTienTo(x.tuan[0].noi_dung)}${x.tuan.length > 1 ? ' (đã sửa)' : ''}${muonMs(x.tuan, tuan.han) > 0 ? ` — nộp muộn ${chuTre(muonMs(x.tuan, tuan.han))}` : ''}` : <i className="text-mo">Chưa báo cáo tuần này</i>}</span>
                       </li>
                     ))}
                   </ul>
