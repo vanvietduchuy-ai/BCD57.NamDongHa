@@ -6,7 +6,7 @@ import {
 import { laDauMoi, TEN_VAI_TRO, useAuth, type HoSo, type VaiTro } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { ngayGio } from '../lib/dinhDang';
-import { cx, LogoBcd, Nut } from './ui';
+import { cx, LogoBcd, Nut, nenDong } from './ui';
 import { CaiDatThongBao, GoiYUngDung } from './UngDung';
 import { dongBoDay } from '../lib/ungDung';
 import { CongBatBuocSdt, HopLienHe, useThieuSdt } from './LienHe';
@@ -258,8 +258,8 @@ export default function KhungTrang() {
         }
         cuoi={<Nut kieu="nguy" className="w-full" icon={<LogOut className="h-4 w-4" />} onClick={() => { setMoLienHe(false); void dangXuat(); }}>Đăng xuất</Nut>} />
       {moThem && (
-        <div className="mo-dan fixed inset-0 z-40 bg-ink/40 lg:hidden" onClick={() => setMoThem(false)}>
-          <div role="dialog" aria-label="Mục khác" className="truot-len absolute inset-x-0 bottom-0 flex flex-col gap-1 rounded-t-3xl bg-white p-4 pb-[calc(16px+env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
+        <div className="mo-dan fixed inset-0 z-40 bg-ink/40 lg:hidden" {...nenDong(() => setMoThem(false))}>
+          <div role="dialog" aria-label="Mục khác" className="truot-len absolute inset-x-0 bottom-0 flex flex-col gap-1 rounded-t-3xl bg-white p-4 pb-[calc(16px+env(safe-area-inset-bottom))]">
             {them.map((m) => (
               <NavLink key={m.den} to={m.den} onClick={() => setMoThem(false)}
                 className={({ isActive }) => cx('flex min-h-12 items-center gap-3 rounded-xl px-3 text-[0.9375rem]', isActive ? 'bg-nen font-bold' : '')}>

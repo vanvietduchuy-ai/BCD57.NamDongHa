@@ -149,6 +149,21 @@ export function ThanhTyLe({ tyLe, mauThanh, vachGiao, vachTb, cao = 'h-2' }: { t
   );
 }
 
+// Props cho lớp nền popup: chỉ đóng khi cả lúc nhấn lẫn lúc nhả chuột đều nằm trên nền
+// (tránh bấm trong popup, kéo chuột ra ngoài rồi nhả thì popup tự đóng).
+let nhanTrenNen = false;
+export function nenDong(dong: () => void) {
+  return {
+    onMouseDown: (e: { target: EventTarget; currentTarget: EventTarget }) => { nhanTrenNen = e.target === e.currentTarget; },
+    onTouchStart: (e: { target: EventTarget; currentTarget: EventTarget }) => { nhanTrenNen = e.target === e.currentTarget; },
+    onClick: (e: { target: EventTarget; currentTarget: EventTarget }) => {
+      const hopLe = nhanTrenNen && e.target === e.currentTarget;
+      nhanTrenNen = false;
+      if (hopLe) dong();
+    },
+  };
+}
+
 export function HopThoai({ mo, dong, tieuDe, children, rong = 'max-w-lg' }: { mo: boolean; dong: () => void; tieuDe: string; children: ReactNode; rong?: string }) {
   useEffect(() => {
     if (!mo) return;
@@ -158,8 +173,8 @@ export function HopThoai({ mo, dong, tieuDe, children, rong = 'max-w-lg' }: { mo
   }, [mo, dong]);
   if (!mo) return null;
   return (
-    <div className="mo-dan fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={dong}>
-      <div role="dialog" aria-modal="true" aria-label={tieuDe} onClick={(e) => e.stopPropagation()}
+    <div className="mo-dan fixed inset-0 z-50 flex items-end justify-center bg-ink/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" {...nenDong(dong)}>
+      <div role="dialog" aria-modal="true" aria-label={tieuDe}
         className={cx('hien-hop max-h-[calc(100dvh-env(safe-area-inset-top)-12px)] w-full min-w-0 overflow-y-auto overflow-x-hidden overscroll-contain rounded-t-3xl bg-white px-4 pb-[calc(20px+env(safe-area-inset-bottom))] shadow-xl sm:max-h-[92vh] sm:rounded-3xl sm:px-5 sm:pb-5', rong)}>
         <div className="sticky top-0 z-10 -mx-4 mb-3 flex items-center gap-3 border-b border-[#F1EEE7] bg-white/95 px-4 pb-3 pt-4 backdrop-blur sm:-mx-5 sm:px-5 sm:pt-5">
           <h2 className="m-0 flex-1 text-lg font-bold">{tieuDe}</h2>
@@ -250,8 +265,8 @@ export function MenuThaoTac({ ds, nhan = 'Thao tác', className }: { ds: MucThao
       {mo && (
         <>
           {/* Điện thoại: bảng chọn trượt từ dưới lên (không tràn ra mép màn hình) */}
-          {createPortal(<div ref={refSheet} className="mo-dan fixed inset-0 z-50 bg-ink/40 sm:hidden" onClick={() => setMo(false)}>
-            <div role="menu" aria-label={nhan} className="truot-len absolute inset-x-0 bottom-0 flex flex-col rounded-t-3xl bg-white px-2 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3" onClick={(e) => e.stopPropagation()}>
+          {createPortal(<div ref={refSheet} className="mo-dan fixed inset-0 z-50 bg-ink/40 sm:hidden" {...nenDong(() => setMo(false))}>
+            <div role="menu" aria-label={nhan} className="truot-len absolute inset-x-0 bottom-0 flex flex-col rounded-t-3xl bg-white px-2 pb-[calc(12px+env(safe-area-inset-bottom))] pt-3">
               <div className="px-4 pb-2 text-[0.8125rem] font-semibold text-mo">{nhan}</div>
               {hien.map((m) => (
                 <button key={m.ten} role="menuitem" type="button" onClick={() => { setMo(false); m.bam(); }}
