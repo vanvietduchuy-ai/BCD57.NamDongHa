@@ -8,10 +8,12 @@ import { kq, useBayGio, useDuLieu } from '../lib/useDuLieu';
 import { laAdmin, laQuanTri, useAuth } from '../lib/auth';
 import { ngayGioDu } from '../lib/dinhDang';
 import { COT_NV, type NhiemVu, type TrangThaiNv } from '../lib/nhiemVu';
-import { canBaoCaoTuan, ghepCauHinh, goiYDanhGia, KHOA_CAU_HINH, tinhTrangTatCa, type CapNhatTT } from '../lib/danhMucA4';
+import { ghepCauHinh, KHOA_CAU_HINH } from '../lib/danhMucA4';
 import {
   baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, gioHan, KHOA_BCT, muonMs, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
 } from '../lib/baoCaoTuan';
+import TheoDoiNhieuTuan from '../components/TheoDoiNhieuTuan';
+import { gomCapNhat, viecCuaTuan } from '../lib/chotTuan';
 import { LienLacDonVi } from '../components/LienLacTrucTiep';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
 
@@ -46,22 +48,7 @@ export default function BaoCaoTuan() {
 
   const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH, lui), [data, lui]);
   // Nhiệm vụ phải báo cáo tuần: cùng quy tắc với bảng A4 (canBaoCaoTuan) — đã duyệt giao, không phải nhiệm vụ lớn có nhiệm vụ con
-  const viec = useMemo(() => {
-    if (!data) return [] as Viec[];
-    const cha = new Set(Object.values(data.a4.dong).map((x) => x.cha).filter(Boolean) as string[]);
-    const cnMap = new Map<string, CapNhatTT[]>();
-    for (const c of data.cn) { if (!cnMap.has(c.nhiem_vu_id)) cnMap.set(c.nhiem_vu_id, []); cnMap.get(c.nhiem_vu_id)!.push(c); }   // mới nhất trước
-    const ttMap = tinhTrangTatCa(data.nv, cnMap, data.a4);
-    const ketThuc = tuan.ketThuc.toISOString();
-    return data.nv.filter((n) => !cha.has(n.id) && n.chu_tri_don_vi_id).map((n) => {
-      // Không chặn mốc đầu/cuối tuần: nộp bù sau Chủ nhật hoặc chuẩn bị trước tuần sau vẫn thuộc đúng tuần (theo tiền tố "Báo cáo tuần NN/YYYY:", đã có năm)
-      const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id), tuan);   // đã tính sửa / rút
-      const luaXong = cnMap.get(n.id)?.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc;
-      const can = canBaoCaoTuan(n, ttMap.get(n.id)!.tt, data.a4.dong[n.id]?.danh_gia ?? goiYDanhGia(n), trongTuan.length > 0, !!luaXong && luaXong > ketThuc);
-      return { n, tuan: trongTuan, can };
-    }).filter((x) => x.can).map(({ n, tuan: t }) => ({ n, tuan: t }))
-      .sort((a, b) => (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc));
-  }, [data, tuan]);
+  const viec = useMemo(() => data ? viecCuaTuan(data.nv, data.cn, gomCapNhat(data.cn), data.a4, tuan, lui > 0) : [] as Viec[], [data, tuan, lui]);
 
   // Đơn vị nhập báo cáo tuần ngay trên bảng A4 nhiệm vụ
   if (donVi) return <Navigate to="/nhiem-vu?tab=chua_bct" replace />;
@@ -92,6 +79,7 @@ export default function BaoCaoTuan() {
       </div>
 
       <BangTuan tuan={tuan} viec={viec} dv={data.dv} quanTri={quanTri} daNhac={setThongBao} />
+      {quanTri && <TheoDoiNhieuTuan nv={data.nv} cn={data.cn} a4={data.a4} bct={data.bct} dv={data.dv} />}
       {moCaiDat && <HopCaiDat ch={data.bct} dong={() => setMoCaiDat(false)} xong={() => { setMoCaiDat(false); void taiLai(); }} />}
     </>
   );
