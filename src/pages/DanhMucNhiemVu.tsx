@@ -13,6 +13,7 @@ import {
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
+import { khoaChot, chupTuan, daQuaHan, type AnhChup } from '../lib/chotTuan';
 import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, laBaoCaoTuanBatKy, laBaoCaoTuanSau, laRutBaoCao, muonMs, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import MinhChungVanBan from '../components/MinhChungVanBan';
@@ -26,7 +27,7 @@ type CapNhat = { nhiem_vu_id: string; noi_dung: string; phan_tram: number | null
 type VbCanCu = { id: string; so_ky_hieu: string | null; trich_yeu: string; drive_url: string | null; ten_tep: string | null; ngay_ban_hanh?: string | null };
 // cha / con: nhiệm vụ lớn gồm các nhiệm vụ con (vd: 15. Nhóm nhiệm vụ ĐA06 -> 15.1 … 15.10); nhiệm vụ lớn tự tổng hợp tiến độ từ nhiệm vụ con
 // tuanCn: các lần báo cáo tuần này (tiền tố "Báo cáo tuần NN/YYYY:"); canBct: nhiệm vụ phải báo cáo tuần
-type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; tienTo: string; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; nhom: string; cn: CapNhat[]; mc: MinhChungO[]; d: DongA4; vb: VbCanCu | null };
+type Dong = { n: NhiemVu; tt: TinhTrang; ttTD: TinhTrang; tuanCn: CapNhat[]; tienTo: string; canBct: boolean; stt: number; so: string; cha: string | null; con: Dong[]; pt: number; ptHien: number; ttHien: TrangThaiNv; nhom: string; cn: CapNhat[]; mc: MinhChungO[]; d: DongA4; vb: VbCanCu | null };
 // Minh chứng của nhiệm vụ: văn bản (kho) hoặc tệp đính kèm — bấm để xem
 type MinhChungO = { ten: string; loai: 'van_ban' | 'tep'; id: string; ten_tep: string; url: string | null; trich_yeu?: string };
 // Nội dung minh chứng khi in: số, ký hiệu văn bản + ngày ban hành (vd "15/BC-CAP, ngày 20/10/2026")
@@ -142,7 +143,7 @@ export default function DanhMucNhiemVu() {
   const donVi = hoSo?.vai_tro === 'don_vi';
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
-    const [a, b, c, d, e, f, h, g] = await Promise.all([
+    const [a, b, c, d, e, f, h, g, k] = await Promise.all([
       supabase.from('v_nhiem_vu').select(COT_NV).order('han', { ascending: true, nullsFirst: false }),
       supabase.from('don_vi').select('id, ten, loai').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, phan_tram, trang_thai_moi, luc, boi_ten').order('luc', { ascending: false }).limit(5000),
@@ -151,7 +152,10 @@ export default function DanhMucNhiemVu() {
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_CAU_HINH).maybeSingle(),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', KHOA_BCT).maybeSingle(),
       supabase.from('van_ban').select('id, so_ky_hieu, ngay_ban_hanh, trich_yeu, drive_url, ten_tep').neq('trang_thai', 'du_thao').order('ngay_ban_hanh', { ascending: false, nullsFirst: false }).limit(1000),
+      supabase.from('cau_hinh').select('khoa, gia_tri').in('khoa', [0, 1, 2, 3].map((i) => khoaChot(tuanCua(new Date(), BCT_MAC_DINH, i)))),   // ảnh chụp Chốt tuần của 4 tuần gần nhất
     ]);
+    const chot: Record<string, AnhChup> = {};
+    for (const r of (k.data ?? []) as { khoa: string; gia_tri: AnhChup }[]) chot[r.khoa] = r.gia_tri;
     const cn = new Map<string, CapNhat[]>();
     for (const x of (c.data ?? []) as CapNhat[]) { if (!cn.has(x.nhiem_vu_id)) cn.set(x.nhiem_vu_id, []); cn.get(x.nhiem_vu_id)!.push(x); }
     const mc = new Map<string, MinhChungO[]>();
@@ -160,7 +164,7 @@ export default function DanhMucNhiemVu() {
       them(x.nhiem_vu_id, { ten: chuMinhChung(x.so_ky_hieu, x.ngay_ban_hanh, x.ten_tep ?? x.trich_yeu), trich_yeu: x.trich_yeu, loai: 'van_ban', id: x.van_ban_id, ten_tep: x.ten_tep ?? `${x.so_ky_hieu ?? 'van-ban'}.pdf`, url: x.drive_url });
     for (const x of (e.data ?? []) as { id: string; nhiem_vu_id: string; ten: string }[]) them(x.nhiem_vu_id, { ten: x.ten, loai: 'tep', id: x.id, ten_tep: x.ten, url: null });
     return {
-      nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc, vb: (g.data ?? []) as VbCanCu[],
+      nv: (kq(a) ?? []) as unknown as NhiemVu[], dv: (kq(b) ?? []) as DonVi[], cn, mc, vb: (g.data ?? []) as VbCanCu[], chot,
       ch: ghepCauHinh((f.data as { gia_tri?: Partial<CauHinhA4> } | null)?.gia_tri),
       bct: { ...BCT_MAC_DINH, ...((h.data as { gia_tri?: Partial<CauHinhBCT> } | null)?.gia_tri) },
     };
@@ -194,6 +198,23 @@ export default function DanhMucNhiemVu() {
     const { error } = await supabase.from('cau_hinh').upsert({ khoa: KHOA_CAU_HINH, gia_tri: next, mo_ta: 'Bảng danh mục nhiệm vụ A4' });
     if (error) setThongBao({ loi: `Không lưu được thiết lập bảng: ${loiDe(error)}` });
   }, [setData]);
+  // Chốt tuần: tuần nào đã qua hạn mà chưa có ảnh chụp thì Thường trực mở trang sẽ chốt (lưu cố định, các lần sau chỉ đọc)
+  useEffect(() => {
+    if (!quanTri || !data) return;
+    const thieu = [0, 1, 2, 3].map((i) => tuanCua(new Date(), data.bct, i)).filter((t) => daQuaHan(t) && !data.chot[khoaChot(t)]);
+    if (!thieu.length) return;
+    let huy = false;
+    (async () => {
+      const moi: Record<string, AnhChup> = {};
+      for (const t of thieu) {
+        const a = chupTuan(data.nv, data.cn, ch, t);
+        const { error } = await supabase.from('cau_hinh').upsert({ khoa: khoaChot(t), gia_tri: a, mo_ta: `Chốt tuần ${t.so}/${t.nam}` });
+        if (!error) moi[khoaChot(t)] = a;
+      }
+      if (!huy && Object.keys(moi).length) setData((x) => (x ? { ...x, chot: { ...x.chot, ...moi } } : x));
+    })();
+    return () => { huy = true; };
+  }, [data, quanTri]); // eslint-disable-line react-hooks/exhaustive-deps
   const suaDong = (id: string, p: Partial<DongA4>) => luuCH({ ...ch, dong: { ...ch.dong, [id]: { ...ch.dong[id], ...p } } });
 
   // Nhóm nhiệm vụ: theo thiết lập, nếu chưa có thì theo "Nhóm" của nhiệm vụ
@@ -206,14 +227,17 @@ export default function DanhMucNhiemVu() {
   const tatCa: Dong[] = useMemo(() => {
     if (!data) return [];
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
-    const ttTatCa = tinhTrangTatCa(data.nv, data.cn, ch);   // dùng chung với Tổng quan
+    // Xem tuần đã qua: tiến độ / tình trạng theo ảnh chụp Chốt tuần (chưa chốt thì dựng lại tại hạn của tuần đó)
+    const quaKhu = luiTuan > 0, anh = quaKhu ? data.chot[khoaChot(tuan)] : undefined;
+    const ttTatCa = tinhTrangTatCa(data.nv, data.cn, ch, quaKhu ? tuan.han : undefined);   // dùng chung với Tổng quan
+    const lay = (id: string) => anh?.nv[id] ?? { tt: ttTatCa.get(id)!.tt, ttTD: ttTatCa.get(id)!.ttTD, pt: ttTatCa.get(id)!.nv.phan_tram, ts: ttTatCa.get(id)!.nv.trang_thai };
     const ds = data.nv.map((n) => {
       const cnTatCa = data.cn.get(n.id) ?? [];
       const cn = cnTatCa.filter((y) => !laBaoCaoTuanSau(y.noi_dung));   // bỏ nội dung chuẩn bị trước cho tuần sau (chưa tính vào tiến độ / tình trạng)
       const vb = n.can_cu_van_ban_id ? data.vb.find((v) => v.id === n.can_cu_van_ban_id) ?? { id: n.can_cu_van_ban_id, so_ky_hieu: n.can_cu_so_ky_hieu, trich_yeu: '', drive_url: null, ten_tep: null } : null;
-      const tt = ttTatCa.get(n.id)!.ttTD;
+      const g0 = lay(n.id), tt = g0.ttTD;
       const tuanCn = baoCaoHieuLuc(cnTatCa, tuan);   // đã tính lần rút báo cáo
-      return { n, tt, ttTD: tt, tuanCn, tienTo: tuan.tienTo, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: n.phan_tram, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
+      return { n, tt, ttTD: tt, tuanCn, tienTo: tuan.tienTo, canBct: false, stt: 0, so: '', cha: null as string | null, con: [] as Dong[], pt: g0.pt, ptHien: g0.pt, ttHien: g0.ts, nhom: nhomCua(n), cn, mc: data.mc.get(n.id) ?? [], d: ch.dong[n.id] ?? {}, vb };
     });
     const theoId = new Map(ds.map((x) => [x.n.id, x]));
     // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
@@ -227,13 +251,13 @@ export default function DanhMucNhiemVu() {
       g.con.sort(thuTu).forEach((c, k) => { c.so = `${g.so}.${k + 1}`; kq.push(c); });
       if (g.con.length) {
         // Tổng hợp: % bình quân của nhiệm vụ con (tình trạng tổng hợp do tinhTrangTatCa tính)
-        g.pt = Math.round(g.con.reduce((t, c) => t + c.n.phan_tram, 0) / g.con.length);
+        g.pt = Math.round(g.con.reduce((t, c) => t + c.pt, 0) / g.con.length);
       }
     }
     // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay (tinhTrangTatCa đã áp)
     // Xem tuần đã qua: nhiệm vụ hoàn thành SAU tuần đó vẫn phải báo cáo (nộp bù) cho tuần đó
     const xongSauTuan = (x: Dong) => { const l = x.cn.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc; return !!l && l > tuan.ketThuc.toISOString(); };
-    kq.forEach((x, i) => { x.stt = i + 1; const t = ttTatCa.get(x.n.id)!; x.ttTD = t.ttTD; x.tt = t.tt;
+    kq.forEach((x, i) => { x.stt = i + 1; const t = lay(x.n.id); x.ttTD = t.ttTD; x.tt = t.tt;
       x.canBct = !x.con.length && canBaoCaoTuan(x.n, x.tt, x.d.danh_gia ?? goiYDanhGia(x.n), x.tuanCn.length > 0, xongSauTuan(x)); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -692,7 +716,7 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
             <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(t.tu)}/{soVN(t.mau)}{t.chiTieu ? ` · CT ${soVN(t.chiTieu, 2)}%` : ''}</span></>
           : <span className="font-sans text-[8pt] italic text-[#8D8486]">Chưa có số liệu</span>}
           {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>; }
-        return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.n.trang_thai].nhan} · {x.n.phan_tram}%</span>
+        return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.ttHien].nhan} · {x.ptHien}%</span>
         {sl && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(sl.tu)}/{soVN(sl.mau)}</span>}
         {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>;
       }
@@ -1278,7 +1302,7 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, 
       <span className="min-w-0 flex-1 text-[0.8125rem] leading-snug">
         <b>Báo cáo {ten.toLowerCase()}:</b> <b className="mono">{da}/{ds.length}</b> nhiệm vụ đã báo cáo
         <span className="text-mo-2"> · hạn {hanChu} ({conLai})</span>
-        {lui > 0 && <span className="block text-xs font-semibold text-[#B45309]">Đang xem tuần đã qua — nộp bây giờ được ghi nhận là nộp muộn.</span>}
+        {lui > 0 && <span className="block text-xs font-semibold text-[#B45309]">Đang xem tuần đã qua — cột Tiến độ và Tình trạng là số liệu chốt tại hạn của tuần đó; nộp bây giờ được ghi nhận là nộp muộn.</span>}
         {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau: {ds.length} nhiệm vụ phải báo cáo (chưa hoàn thành, chưa tạm dừng). Nội dung chuẩn bị trước chưa đổi tiến độ / tình trạng.</span>}
         {nhap && !xong && <span className="block text-xs text-mo">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
       </span>
@@ -1538,7 +1562,7 @@ function oChu(c: KhoaCot, x: Dong): string {
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'tien_do') return `${TIEN_DO_3[tienDo3(x)].nhan}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'ty_le') { const t = tyLeNv(x);
         return `${t ? `Tỷ lệ ${soVN(t.tyLe, 2)}%\nĐạt ${soVN(t.tu)}/${soVN(t.mau)}${t.chiTieu ? ` · CT ${soVN(t.chiTieu, 2)}%` : ''}` : 'Chưa có số liệu'}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`; }
-      return `${TT_NV[x.n.trang_thai].nhan} (${x.n.phan_tram}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
+      return `${TT_NV[x.ttHien].nhan} (${x.ptHien}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     }
     case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
       if (x.canBct && !x.tuanCn.length) return 'Chưa báo cáo tuần';   // đơn vị chưa báo cáo tuần này

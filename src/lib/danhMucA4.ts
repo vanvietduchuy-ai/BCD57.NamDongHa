@@ -78,8 +78,7 @@ export const ngayNgan = (s: string | null | undefined) => (s ? `${s.slice(8, 10)
 // ---------- Tình trạng một nhiệm vụ
 export type LoaiTT = 'xong' | 'qua_han' | 'sap_han' | 'dang' | 'chua' | 'dung';
 export type TinhTrang = { loai: LoaiTT; nhan: string; tre?: number; con?: number };
-export function tinhTrang(n: NhiemVu, canhBao: number, xongLuc?: string | null): TinhTrang {
-  const hom = homNayVN();
+export function tinhTrang(n: NhiemVu, canhBao: number, xongLuc?: string | null, hom: string = homNayVN()): TinhTrang {
   const han = n.dinh_ky && n.ky_han && !n.ky_xong ? n.ky_han : n.han;
   if (n.trang_thai === 'hoan_thanh') {
     const tre = n.han && xongLuc ? Math.max(0, soNgay(n.han, xongLuc.slice(0, 10))) : 0;
@@ -95,7 +94,7 @@ export function tinhTrang(n: NhiemVu, canhBao: number, xongLuc?: string | null):
 }
 // ---------- Tình trạng dùng chung cho bảng A4 và Tổng quan (một nguồn duy nhất, để hai nơi luôn cho cùng số liệu)
 // Cập nhật tối thiểu cần để tính: nội dung (đọc "Kết quả: a/b"), thời điểm, trạng thái mới (hoàn thành)
-export type CapNhatTT = { noi_dung: string; luc: string; trang_thai_moi?: string | null };
+export type CapNhatTT = { noi_dung: string; luc: string; trang_thai_moi?: string | null; phan_tram?: number | null };
 // Số liệu kết quả mới nhất: lưu ở bảng hoặc đọc từ lần cập nhật gần nhất ("Kết quả: 34.605/37.070 …"); cn xếp mới nhất trước
 export function soLieuMoiNhat(cn: CapNhatTT[], d: DongA4): { tu: number; mau: number } | null {
   const c = cn.find((y) => /Kết quả: (?:hoàn thành )?[\d.,]+\/[\d.,]+/.test(y.noi_dung));
@@ -122,7 +121,18 @@ export const chuanTTTay = (t: { loai: LoaiTT; nhan: string }): TinhTrang => ({ l
 const MUC_XAU: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
 // Tình trạng của MỌI nhiệm vụ: theo hạn và trạng thái; nhiệm vụ tỷ lệ đã Đạt / Đảm bảo là hoàn thành; nhiệm vụ lớn tổng hợp từ nhiệm vụ con;
 // sau cùng áp tình trạng Thường trực sửa tay. tt = tình trạng hiển thị / thống kê, ttTD = tình trạng tự động (trước khi sửa tay)
-export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: CauHinhA4): Map<string, { tt: TinhTrang; ttTD: TinhTrang }> {
+// Dựng lại nhiệm vụ như lúc `moc` (dùng cho Chốt tuần): bỏ cập nhật sau mốc; % và trạng thái theo cập nhật cuối cùng trước mốc
+export function nvTaiMoc(n: NhiemVu, cn: CapNhatTT[], moc: Date): NhiemVu {
+  const t = moc.getTime(), truoc = cn.filter((y) => new Date(y.luc).getTime() <= t);   // cn: mới nhất trước
+  const pt = truoc.find((y) => y.phan_tram != null)?.phan_tram;
+  const ts = truoc.find((y) => y.trang_thai_moi)?.trang_thai_moi as NhiemVu['trang_thai'] | undefined;
+  const nay = n.trang_thai;
+  return { ...n, phan_tram: pt ?? (ts === 'hoan_thanh' ? 100 : 0), trang_thai: ts ?? (nay === 'hoan_thanh' ? 'dang_thuc_hien' : nay) };
+}
+export function tinhTrangTatCa(nv0: NhiemVu[], cn0: Map<string, CapNhatTT[]>, ch: CauHinhA4, moc?: Date): Map<string, { tt: TinhTrang; ttTD: TinhTrang; nv: NhiemVu }> {
+  const hom = moc ? new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(moc) : undefined;
+  const nv = moc ? nv0.map((n) => nvTaiMoc(n, cn0.get(n.id) ?? [], moc)) : nv0;
+  const cn = moc ? new Map([...cn0].map(([k, v]) => [k, v.filter((y) => new Date(y.luc).getTime() <= moc.getTime())])) : cn0;
   const hopLe = new Set(ch.nhom.length ? ch.nhom.map((g) => g.id) : Object.keys(NHOM_NV).map((k) => `nv_${k}`));
   type R = { n: NhiemVu; nhom: string; d: DongA4; cn: CapNhatTT[]; con: R[]; cha: boolean; tt: TinhTrang };
   const hienTai = khoaTuanHienTai();   // nội dung chuẩn bị trước cho tuần sau chưa tính vào tiến độ / tình trạng
@@ -130,7 +140,7 @@ export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: 
     const d = ch.dong[n.id] ?? {}; const c = (cn.get(n.id) ?? []).filter((y) => !laBaoCaoTuanSau(y.noi_dung, hienTai));
     const g = d.nhom;
     return { n, d, cn: c, con: [], cha: false, nhom: g && hopLe.has(g) ? g : ch.nhom.length ? '_khac' : `nv_${n.nhom}`,
-      tt: tinhTrang(n, ch.canh_bao_ngay, c.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null) };
+      tt: tinhTrang(n, ch.canh_bao_ngay, c.find((x) => x.trang_thai_moi === 'hoan_thanh')?.luc ?? null, hom) };
   });
   const theoId = new Map(ds.map((x) => [x.n.id, x]));
   // Nhiệm vụ con: thuộc một nhiệm vụ lớn cùng nhóm, nhiệm vụ lớn không phải là con của nhiệm vụ khác
@@ -141,7 +151,7 @@ export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: 
     const t = tyLeNhiemVu(x.n, x.cn, x.d);
     if (t && (!t.chiTieu || t.dat)) x.tt = { loai: 'xong', nhan: t.chiTieu ? 'Đạt' : 'Đảm bảo' };
     // Số liệu kỳ mới chưa đạt: không còn coi là hoàn thành (nhiệm vụ cũ đã bị ghi nhận hoàn thành khi từng đạt)
-    else if (t && x.n.trang_thai === 'hoan_thanh') x.tt = tinhTrang({ ...x.n, trang_thai: 'dang_thuc_hien' }, ch.canh_bao_ngay, null);
+    else if (t && x.n.trang_thai === 'hoan_thanh') x.tt = tinhTrang({ ...x.n, trang_thai: 'dang_thuc_hien' }, ch.canh_bao_ngay, null, hom);
   }
   for (const g of ds) {
     if (!g.con.length) continue;
@@ -150,7 +160,7 @@ export function tinhTrangTatCa(nv: NhiemVu[], cn: Map<string, CapNhatTT[]>, ch: 
     g.tt = xong === g.con.length ? { loai: 'xong', nhan: 'Hoàn thành' }
       : { loai: xau, nhan: xau === 'qua_han' ? `${g.con.filter((c) => c.tt.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
   }
-  return new Map(ds.map((x) => [x.n.id, { ttTD: x.tt, tt: x.d.tt_tay ? chuanTTTay(x.d.tt_tay) : x.tt }]));
+  return new Map(ds.map((x) => [x.n.id, { ttTD: x.tt, tt: x.d.tt_tay ? chuanTTTay(x.d.tt_tay) : x.tt, nv: x.n }]));
 }
 // Nhiệm vụ phải báo cáo tuần (một nguồn duy nhất cho bảng A4 và trang Báo cáo tuần):
 // đã duyệt giao, có đơn vị chủ trì; đã báo cáo tuần đó, hoặc hoàn thành SAU tuần đó (nộp bù), hoặc chưa xong và không tạm dừng;
