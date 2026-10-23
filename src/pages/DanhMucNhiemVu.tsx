@@ -699,7 +699,8 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
       case 'ket_qua_tuan': {
         if (x.con.length) { const can = x.con.filter((c) => c.canBct); return can.length ? <span className="font-sans text-[8pt] font-semibold">{can.filter((c) => c.tuanCn.length).length}/{can.length} nhiệm vụ con đã báo cáo</span> : null; }
         // Kết quả thực hiện = báo cáo tuần mới nhất (tự điền khi đơn vị gửi báo cáo tuần)
-        const cuoi = baoCaoGanNhat(x);
+        // Nhiệm vụ phải báo cáo tuần: mỗi tuần một báo cáo riêng — tuần mới bắt đầu trống để nhập (dữ liệu tuần cũ vẫn lưu, xem bằng nút ‹ tuần trước); nhiệm vụ không phải báo cáo thì giữ kết quả gần nhất
+        const cuoi = x.canBct ? x.tuanCn[0] ?? null : baoCaoGanNhat(x);
         const tuanCuoi = cuoi?.noi_dung.match(/^Báo cáo tuần (\d+\/\d+):/)?.[1];
         return <>
           {cuoi && loiKetQua(cuoi.noi_dung) && <span className="block whitespace-pre-wrap">{loiKetQua(cuoi.noi_dung)}</span>}
@@ -1118,8 +1119,11 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
   // Mẫu số biến động: đơn vị chủ trì được sửa tổng số; ô mặc định lấy tổng số báo cáo gần nhất
   const slCu = soLieuCua(x);
   const mauDv = mauDonViSua(dg, n);
-  const [tu, setTu] = useState(slCu ? String(slCu.tu) : '');
-  const [mau, setMau] = useState(() => { const v = !quanTri && dg.tong && !mauDv ? dg.tong : slCu?.mau ?? dg.tong; return v ? String(v) : ''; });
+  // Báo cáo tuần: số đạt của tuần mới bắt đầu trống (không mang số tuần trước sang); đã báo cáo tuần đó thì nạp lại số của chính tuần đó để sửa
+  const mSo = daBao?.noi_dung.match(/Kết quả: (?:hoàn thành )?([\d.,]+)\/([\d.,]+)/);
+  const slTuan = mSo ? { tu: docSo(mSo[1]), mau: docSo(mSo[2]) } : null;
+  const [tu, setTu] = useState(tienTo ? (slTuan && Number.isFinite(slTuan.tu) ? String(slTuan.tu) : '') : slCu ? String(slCu.tu) : '');
+  const [mau, setMau] = useState(() => { const v = !quanTri && dg.tong && !mauDv ? dg.tong : (tienTo && slTuan && Number.isFinite(slTuan.mau) ? slTuan.mau : slCu?.mau) ?? dg.tong; return v ? String(v) : ''; });
   const [p, setP] = useState(n.phan_tram);
   const [xongNv, setXongNv] = useState(false);
   const [td3, setTd3] = useState<TienDo3>(() => tienDo3(x));
