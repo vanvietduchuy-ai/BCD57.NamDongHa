@@ -49,6 +49,8 @@ export function chuTre(ms: number): string {
   const p = Math.max(1, Math.round(ms / 60000)), ngay = Math.floor(p / 1440), gio = Math.floor((p % 1440) / 60);
   return ngay ? `${ngay} ngày${gio ? ` ${gio} giờ` : ''}` : gio ? `${gio} giờ` : `${p} phút`;
 }
+// Khoá so sánh tuần của một dòng báo cáo tuần (năm*100 + số tuần); null nếu không phải báo cáo tuần
+export const khoaTuan = (noiDung: string): number | null => { const m = noiDung.match(/^Báo cáo tuần (\d+)\/(\d+):/); return m ? Number(m[2]) * 100 + Number(m[1]) : null; };
 // Báo cáo tuần gần nhất (mọi tuần) còn hiệu lực — bỏ dòng rút
 export const laBaoCaoTuanBatKy = (noiDung: string) => /^Báo cáo tuần \d+\/\d+:/.test(noiDung) && !laRutBaoCao(noiDung);
 

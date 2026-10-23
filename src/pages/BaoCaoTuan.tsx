@@ -49,10 +49,9 @@ export default function BaoCaoTuan() {
   const viec = useMemo(() => {
     if (!data) return [] as Viec[];
     const cha = new Set(Object.values(data.a4.dong).map((x) => x.cha).filter(Boolean) as string[]);
-    const tu = tuan.batDau.toISOString();
     return data.nv.filter((n) => !cha.has(n.id) && n.chu_tri_don_vi_id).map((n) => {
-      // Không chặn mốc cuối tuần: báo cáo nộp bù sau Chủ nhật vẫn thuộc tuần đó (theo tiền tố "Báo cáo tuần NN/YYYY:")
-      const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id && c.luc >= tu), tuan);   // đã tính sửa / rút
+      // Không chặn mốc đầu/cuối tuần: nộp bù sau Chủ nhật hoặc chuẩn bị trước tuần sau vẫn thuộc đúng tuần (theo tiền tố "Báo cáo tuần NN/YYYY:", đã có năm)
+      const trongTuan = baoCaoHieuLuc(data.cn.filter((c) => c.nhiem_vu_id === n.id), tuan);   // đã tính sửa / rút
       return { n, tuan: trongTuan };
     }).filter((x) => x.tuan.length > 0 || !['hoan_thanh', 'tam_dung'].includes(x.n.trang_thai))
       .sort((a, b) => (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc));
@@ -81,9 +80,9 @@ export default function BaoCaoTuan() {
         <button onClick={() => setLui(lui + 1)} aria-label="Tuần trước" className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-nen"><ChevronLeft className="h-5 w-5" /></button>
         <div className="flex min-w-0 flex-1 flex-col items-center text-center leading-tight">
           <b className="text-[0.9375rem]">{tuan.ten}</b>
-          <span className="flex items-center gap-1 text-xs text-mo"><CalendarClock className="h-3.5 w-3.5 shrink-0" />Hạn {ngayGioDu(tuan.han.toISOString())}{lui === 0 && Date.now() <= tuan.han.getTime() ? ` · còn ${conLaiChu(tuan.han)}` : ''}</span>
+          <span className="flex items-center gap-1 text-xs text-mo"><CalendarClock className="h-3.5 w-3.5 shrink-0" />Hạn {ngayGioDu(tuan.han.toISOString())}{lui === 0 && Date.now() <= tuan.han.getTime() ? ` · còn ${conLaiChu(tuan.han)}` : ''}{lui < 0 ? ' · tuần sau, chuẩn bị trước' : ''}</span>
         </div>
-        <button disabled={lui === 0} onClick={() => setLui(lui - 1)} aria-label="Tuần sau" className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
+        <button disabled={lui <= (quanTri ? -1 : 0)} onClick={() => setLui(lui - 1)} aria-label="Tuần sau" className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ChevronRight className="h-5 w-5" /></button>
       </div>
 
       <BangTuan tuan={tuan} viec={viec} dv={data.dv} quanTri={quanTri} daNhac={setThongBao} />
