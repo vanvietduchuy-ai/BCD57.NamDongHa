@@ -2,7 +2,7 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, CalendarClock, ChevronLeft, ChevronRight, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { laQuanTri, useAuth } from '../lib/auth';
@@ -347,7 +347,7 @@ export default function DanhMucNhiemVu() {
         </>} />
       <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem || !locDv || x.n.chu_tri_don_vi_id === locDv))} ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
         loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
-        lui={luiTuan} chuanBi={quanTri} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
+        lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length)} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
@@ -1329,7 +1329,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 }
 
 // ---------- Dải báo cáo tuần: tiến độ báo cáo tuần này + hạn; một chạm lọc nhiệm vụ chưa báo cáo
-function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui }: { ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void }) {
+function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
   if (!ds.length && !lui) return null;
   const toiDa = chuanBi ? -1 : 0;
   const da = ds.filter((x) => x.tuanCn.length).length, con = ds.length - da;
@@ -1346,11 +1346,10 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, 
         {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau: {ds.length} nhiệm vụ phải báo cáo (chưa hoàn thành, chưa tạm dừng). Nội dung chuẩn bị trước chưa đổi tiến độ / tình trạng.</span>}
         {nhap && !xong && <span className="block text-xs text-mo">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
       </span>
-      <span className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white p-0.5 ring-1 ring-vien">
-        <button type="button" disabled={lui >= 3} onClick={() => datLui(lui + 1)} aria-label="Tuần trước (nộp bù)" title="Tuần trước (nộp bù)" className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-nen disabled:opacity-30"><ChevronLeft className="h-4 w-4" /></button>
-        <button type="button" disabled={!lui} onClick={() => datLui(0)} className="h-8 rounded-md px-2 text-xs font-semibold hover:bg-nen disabled:opacity-40">Tuần này</button>
-        <button type="button" disabled={lui <= toiDa} onClick={() => datLui(lui - 1)} aria-label="Tuần sau" title="Tuần sau" className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-nen disabled:opacity-30"><ChevronRight className="h-4 w-4" /></button>
-      </span>
+      <select value={lui} onChange={(e) => datLui(Number(e.target.value))} aria-label="Chọn tuần báo cáo"
+        className="h-9 w-full shrink-0 rounded-lg border border-vien bg-white px-2 text-[0.8125rem] font-semibold sm:w-auto sm:max-w-[320px]">
+        {Array.from({ length: 3 - toiDa + 1 }, (_, i) => 3 - i).map((v) => <option key={v} value={v}>{nhanTuan(v)}</option>)}
+      </select>
       {!xong && <button onClick={() => datLoc(!loc)} aria-pressed={loc}
         className={cx('h-9 w-full shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold sm:w-auto', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>
         {loc ? 'Hiện tất cả' : `Chưa báo cáo (${con})`}</button>}
@@ -1377,23 +1376,10 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
   const r = 15, cv = 2 * Math.PI * r;
   return (
     <div className="flex flex-col rounded-2xl border border-vien bg-white shadow-[0_1px_2px_rgba(40,10,15,.04)]">
-      <div className="flex items-center gap-2 border-b border-[#F1EEE7] px-2 py-1.5">
-        <div role="group" aria-label="Lọc theo tình trạng" className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto">
-          {o.map(([k, nhan, so, mau, nhom], i) => {
-            const chon = k === 'tat_ca' ? !loc.length : loc.includes(k);
-            return [
-              i > 0 && nhom !== o[i - 1][4] && <span key={`vach-${k}`} aria-hidden className="mx-1 my-2 w-px shrink-0 self-stretch bg-[#E5DFD6]" />,
-              <button key={k} onClick={() => datLoc(k)} aria-pressed={chon} title={k === 'tat_ca' ? 'Bỏ chọn tất cả bộ lọc' : chon ? 'Bấm để bỏ chọn' : 'Bấm để chọn thêm — chọn được nhiều mục cùng lúc'}
-                className={cx('relative flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-[0.8125rem] transition', chon ? 'bg-nen font-semibold text-den' : 'text-mo-2 hover:bg-nen-2', so === 0 && k !== 'tat_ca' && !chon && 'opacity-55')}>
-                {chon && k !== 'tat_ca'
-                  ? <span className="flex h-3.5 w-3.5 items-center justify-center rounded-[4px] text-[10px] font-bold leading-none text-white" style={{ background: mau }}>✓</span>
-                  : <span className="h-2 w-2 rounded-full" style={{ background: mau }} />}
-                <span className="whitespace-nowrap">{nhan}</span>
-                <span className="mono rounded-md px-1.5 text-[0.75rem] font-bold" style={{ color: mau, background: chon ? 'white' : 'transparent' }}>{so}</span>
-              </button>,
-            ];
-          })}
-        </div>
+      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
+        <MenuTinhTrang o={o} loc={loc} datLoc={datLoc} />
+        {congCu}
+        <span className="mono text-[0.75rem] text-mo" title="Đang hiện / tổng số">{soHien}/{ds.length}</span>
         <button onClick={() => datMoTk(!moTk)} aria-pressed={moTk} title="Xem tỉ lệ hoàn thành theo đơn vị chủ trì"
           className={cx('flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-left hover:bg-nen-2', moTk && 'bg-nen')}>
           <svg width="32" height="32" viewBox="0 0 40 40" aria-hidden className="-rotate-90">
@@ -1403,10 +1389,44 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
           <span className="hidden flex-col leading-tight sm:flex"><b className="mono text-[0.875rem]">{pt(tl)}</b><span className="whitespace-nowrap text-[11px] text-mo">hoàn thành {moTk ? '▴' : '▾'}</span></span>
         </button>
       </div>
-      <div className="flex flex-wrap items-center gap-2 px-2 py-1.5">
-        {congCu}
-        <span className="mono text-[0.75rem] text-mo" title="Đang hiện / tổng số">{soHien}/{ds.length}</span>
-      </div>
+    </div>
+  );
+}
+
+// Lọc tình trạng dạng đổ xuống: chọn nhiều mục cùng lúc, có số đếm
+function MenuTinhTrang({ o, loc, datLoc }: { o: [LocTT, string, number, string, number][]; loc: LocTT[]; datLoc: (l: LocTT) => void }) {
+  const [mo, setMo] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mo) return;
+    const d = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setMo(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setMo(false); };
+    document.addEventListener('mousedown', d); document.addEventListener('keydown', k);
+    return () => { document.removeEventListener('mousedown', d); document.removeEventListener('keydown', k); };
+  }, [mo]);
+  const ten = !loc.length ? 'Tất cả' : loc.length === 1 ? (o.find((x) => x[0] === loc[0])?.[1] ?? '') : `${loc.length} mục`;
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button type="button" onClick={() => setMo(!mo)} aria-haspopup="listbox" aria-expanded={mo} aria-label="Lọc theo tình trạng"
+        className={cx('flex h-9 items-center gap-2 rounded-lg border px-3 text-[0.8125rem] hover:bg-nen-2', loc.length ? 'border-[#8E1B22] bg-nen font-semibold' : 'border-vien bg-nen-2')}>
+        <span className="text-mo">Tình trạng:</span><b>{ten}</b><span className="text-mo">▾</span>
+      </button>
+      {mo && (
+        <div role="listbox" aria-multiselectable className="absolute left-0 top-10 z-30 w-64 rounded-xl border border-vien bg-white p-1 shadow-lg">
+          {o.map(([k, nhan, so, mau, nhom], i) => {
+            const chon = k === 'tat_ca' ? !loc.length : loc.includes(k);
+            return [
+              i > 0 && nhom !== o[i - 1][4] && <div key={`v-${k}`} className="my-1 h-px bg-[#EFEAE0]" />,
+              <button key={k} type="button" role="option" aria-selected={chon} onClick={() => datLoc(k)}
+                className={cx('flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-[0.8125rem] hover:bg-nen-2', chon && 'bg-nen font-semibold', so === 0 && k !== 'tat_ca' && !chon && 'opacity-55')}>
+                <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border text-[10px] font-bold leading-none text-white" style={{ background: chon ? mau : 'white', borderColor: mau }}>{chon ? '✓' : ''}</span>
+                <span className="flex-1 whitespace-nowrap">{nhan}</span>
+                <span className="mono text-[0.75rem] font-bold" style={{ color: mau }}>{so}</span>
+              </button>,
+            ];
+          })}
+        </div>
+      )}
     </div>
   );
 }
