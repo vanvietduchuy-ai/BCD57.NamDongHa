@@ -164,14 +164,14 @@ export function tinhTrangTatCa(nv0: NhiemVu[], cn0: Map<string, CapNhatTT[]>, ch
 }
 // Nhiệm vụ phải báo cáo tuần (một nguồn duy nhất cho bảng A4 và trang Báo cáo tuần):
 // đã duyệt giao, có đơn vị chủ trì; đã báo cáo tuần đó, hoặc hoàn thành SAU tuần đó (nộp bù), hoặc chưa xong và không tạm dừng;
-// nhiệm vụ tính theo tỷ lệ % (nhập số liệu) vẫn nhập tiếp ở các kỳ sau kể cả khi đã Đạt / Đảm bảo.
+// nhiệm vụ tính theo tỷ lệ % (nhập số liệu) vẫn nhập tiếp ở các kỳ sau dù tự tính Đạt / Đảm bảo / Chưa đạt, cho tới khi được chọn thủ công là Hoàn thành (trạng thái hoặc tình trạng sửa tay) thì từ tuần sau không thống kê nữa.
 // han = mốc chốt báo cáo của tuần đang xét: nhiệm vụ duyệt giao SAU mốc chốt thì chưa phải báo cáo tuần đó, đưa sang tuần sau (trừ khi đơn vị đã báo cáo).
-export function canBaoCaoTuan(n: NhiemVu, tt: TinhTrang, dg: DanhGia, daBaoTuan: boolean, xongSauTuan: boolean, han?: Date): boolean {
+export function canBaoCaoTuan(n: NhiemVu, tt: TinhTrang, dg: DanhGia, daBaoTuan: boolean, xongSauTuan: boolean, han?: Date, ttTay = false): boolean {
   if (n.trang_thai_giao !== 'da_duyet' || !n.chu_tri_don_vi_id) return false;
   if (!daBaoTuan && han && n.duyet_luc && new Date(n.duyet_luc).getTime() > han.getTime()) return false;
   if (daBaoTuan || xongSauTuan) return true;
   if (n.trang_thai === 'tam_dung') return false;
-  if (dg.kieu === 'ty_le') return true;
+  if (dg.kieu === 'ty_le') return !(ttTay && tt.loai === 'xong') && n.trang_thai !== 'hoan_thanh';
   return n.trang_thai !== 'hoan_thanh' && tt.loai !== 'xong';
 }
 export const MAU_TT: Record<LoaiTT, { chu: string; nen: string; vach: string }> = {
