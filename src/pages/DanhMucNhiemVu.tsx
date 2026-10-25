@@ -560,7 +560,10 @@ function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: K
   const caoToiDa = Math.min(560, window.innerHeight * 0.7);
   const [duoi] = useState(() => { const r = oEl.getBoundingClientRect(); return window.innerHeight - r.bottom - 12 >= caoToiDa || r.top < window.innerHeight - r.bottom; });
   const doc: React.CSSProperties = duoi ? { top: o.bottom + 6 } : { bottom: window.innerHeight - o.top + 6 };
-  const viTri: React.CSSProperties = hep ? { left: 8, right: 8, ...doc } : { left: trai, width: rong, ...doc };
+  // Điện thoại: hộp dạng tấm trượt dán đáy màn hình (không bám ô nên không tràn xuống dưới, nút Gửi luôn thấy được);
+  // máy tính: bám theo ô nhưng kẹp lại để không tràn khỏi màn hình
+  const docKep: React.CSSProperties = duoi ? { top: Math.max(8, Math.min(o.bottom + 6, window.innerHeight - caoToiDa - 8)) } : doc;
+  const viTri: React.CSSProperties = hep ? { left: 8, right: 8, bottom: 8, maxHeight: '82dvh', paddingBottom: 'env(safe-area-inset-bottom)' } : { left: trai, width: rong, ...docKep };
   return (
     <>
       <div className="fixed inset-0 z-40" onClick={dong} />
@@ -629,6 +632,33 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
   const vuaKhung = Math.min(1.6, Math.max(0.3, (rongVo - 8) / pxRong));
   const tiLe = typeof rieng.zoom === 'number' ? rieng.zoom : rieng.zoom === undefined && rongVo < 640 ? Math.max(vuaKhung, 0.62) : vuaKhung;
   useEffect(() => { window.dispatchEvent(new CustomEvent('a4-ti-le', { detail: tiLe })); }, [tiLe]);
+  // Hai ngón tay chụm / mở để thu phóng trang A4 (giữ nguyên điểm giữa hai ngón); cập nhật qua ref để không gắn lại sự kiện mỗi lần đổi tỷ lệ
+  const pinchRef = useRef({ tiLe, rieng, setRieng });
+  pinchRef.current = { tiLe, rieng, setRieng };
+  useEffect(() => {
+    const el = vo.current; if (!el) return;
+    let g: { d0: number; z0: number; tam: number; x0: number } | null = null;
+    const kc = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const bat = (e: TouchEvent) => {
+      if (e.touches.length !== 2) { g = null; return; }
+      const r = el.getBoundingClientRect(); const tam = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
+      g = { d0: kc(e.touches), z0: pinchRef.current.tiLe, tam, x0: (el.scrollLeft + tam) / pinchRef.current.tiLe };
+    };
+    const di = (e: TouchEvent) => {
+      if (!g || e.touches.length !== 2) return;
+      e.preventDefault();
+      const z = Math.round(Math.min(2, Math.max(0.3, g.z0 * (kc(e.touches) / g.d0))) * 100) / 100;
+      if (z === pinchRef.current.tiLe) return;
+      pinchRef.current.setRieng({ ...pinchRef.current.rieng, zoom: z });
+      const { x0, tam } = g;
+      requestAnimationFrame(() => { el.scrollLeft = x0 * z - tam; });
+    };
+    const het = (e: TouchEvent) => { if (e.touches.length < 2) g = null; };
+    el.addEventListener('touchstart', bat, { passive: true });
+    el.addEventListener('touchmove', di, { passive: false });
+    el.addEventListener('touchend', het); el.addEventListener('touchcancel', het);
+    return () => { el.removeEventListener('touchstart', bat); el.removeEventListener('touchmove', di); el.removeEventListener('touchend', het); el.removeEventListener('touchcancel', het); };
+  }, []);
   const soTrang = Math.max(1, Math.ceil((caoGiay - 2) / pxCao));
 
   const rongCot = (k: string, w: number) => (rongTam?.[k] ?? w);
@@ -753,7 +783,7 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
   const [mt, mr, mb, ml] = ch.kho.le;
 
   return (
-    <div ref={vo} className="overflow-x-auto rounded-2xl bg-[#E7E3E4] py-4">
+    <div ref={vo} className="overflow-x-auto rounded-2xl bg-[#E7E3E4] py-4" style={{ touchAction: 'pan-x pan-y' }}>
       <div className="relative mx-auto" style={{ width: pxRong * tiLe, height: Math.max(caoGiay, pxCao) * tiLe }}>
         <div ref={giay} className="absolute left-0 top-0 origin-top-left bg-white text-[#121212] shadow-[0_8px_24px_rgba(40,10,15,.12)]"
           style={{ width: pxRong, minHeight: soTrang * pxCao, transform: `scale(${tiLe})`, padding: `${mt}mm ${mr}mm ${mb}mm ${ml}mm`, fontFamily: FONT_A4, fontSize: `${ch.kho.co_chu}pt`, lineHeight: 1.25 }}>
