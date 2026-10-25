@@ -724,7 +724,7 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
         ? <span onPointerDown={(e) => batDauKeo(e, x)} title="Kéo để đưa nhiệm vụ lên, xuống" className={cx('-mx-[2pt] inline-flex cursor-grab touch-none select-none items-center whitespace-nowrap active:cursor-grabbing', x.so.length > 3 && 'text-[0.85em]')}><GripVertical className="h-[0.9em] w-[0.9em] shrink-0 text-[#B9A9AC]" />{x.so}</span>
         : <span className={cx('whitespace-nowrap', x.so.length > 3 && 'text-[0.85em]')}>{x.so}</span>}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
         className="absolute -bottom-1 left-0 z-10 h-2 w-[4000px] cursor-row-resize hover:bg-do/20" /></>;
-      case 'ten': return <span className={cx('block whitespace-pre-wrap', x.cha && 'pl-[8pt]', x.con.length > 0 && 'font-bold')}>{x.n.ten}{x.n.trang_thai_giao === 'de_xuat' && <span className="ml-1 rounded bg-[#FEF3C7] px-1 font-sans text-[7.5pt] font-semibold text-[#92400E]">Chờ duyệt giao</span>}</span>;
+      case 'ten': return <span className={cx('block whitespace-pre-wrap', x.cha && 'ml-[8pt] border-l-[2.5px] border-[#C99A2E] pl-[6pt]', x.con.length > 0 && 'font-bold')}>{x.n.ten}{x.n.trang_thai_giao === 'de_xuat' && <span className="ml-1 rounded bg-[#FEF3C7] px-1 font-sans text-[7.5pt] font-semibold text-[#92400E]">Chờ duyệt giao</span>}</span>;
       case 'chu_tri': return <><span className="whitespace-pre-wrap">{x.d.chu_tri_vb || chuTriMacDinh(x)}</span>
         {x.n.chu_tri_ten && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#7A1A27]" title="Đơn vị được giao chủ trì trên hệ thống">▸ {tenNgan(x.n.chu_tri_ten)}</span>}</>;
       case 'san_pham': return <span className="whitespace-pre-wrap">{x.n.san_pham}</span>;
@@ -801,8 +801,12 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
                 {coDuLieu ? 'Không có nhiệm vụ khớp bộ lọc.' : suaDuoc ? 'Chưa có nhiệm vụ. Bấm “Nhập từ Word” để nạp danh mục, hoặc “Thêm nhiệm vụ”.' : 'Đơn vị chưa được giao chủ trì nhiệm vụ nào.'}</td></tr>}
               {nhomCo.map(([g, arr]) => [
                 <tr key={g.id} data-nhom={g.id}><td colSpan={cot.length} className={cx('border border-[#2B2B2B] bg-[#F1ECEC] px-[4pt] py-[3pt] font-bold', keo?.dich?.nhom === g.id && 'shadow-[inset_0_-3px_0_#C99A2E]')}>{g.ky_hieu ? `${g.ky_hieu}. ` : ''}{g.ten}</td></tr>,
-                ...arr.map((x) => {
+                ...arr.map((x, idx) => {
                   const m = MAU_TT[x.tt.loai]; const cao = caoDong(x);
+                  // Khối nhiệm vụ lớn: hàng cha viền đậm phía trên, các hàng con nối liền bằng viền mảnh, hàng con cuối đóng khối bằng viền đậm
+                  const dauKhoi = x.con.length > 0; const trongKhoi = !!x.cha;
+                  const cuoiKhoi = trongKhoi && !(arr[idx + 1] && arr[idx + 1].cha === x.cha);
+                  const vienKhoi = cx(dauKhoi && 'border-t-[2px] border-b-[#CFC4C6]', trongKhoi && 'border-t-[#CFC4C6]', trongKhoi && !cuoiKhoi && 'border-b-[#CFC4C6]', cuoiKhoi && 'border-b-[2px]');
                   return (
                     <tr key={x.n.id} data-id={x.n.id}
                       // Tô màu nhạt cả hàng theo tình trạng hiển thị: hoàn thành (kể cả hoàn thành trễ hạn) xanh; quá hạn mà chưa hoàn thành đỏ; sắp đến hạn vàng
@@ -817,7 +821,7 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
                             // Bấm ô: mở hộp sửa đúng ô đó (nếu được sửa); ô không sửa được (TT, tình trạng…) mở khung chi tiết
                             onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('button')) return; if (!moO(x, c.khoa, e.currentTarget as HTMLElement)) mo(x.n.id); }}
                             className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-middle [overflow-wrap:anywhere]', ['tt', 'han', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative',
-                              (suaDuoc && O_SUA[c.khoa]) || (suaDuoc && c.khoa === 'tien_do') || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
+                              vienKhoi, (suaDuoc && O_SUA[c.khoa]) || (suaDuoc && c.khoa === 'tien_do') || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
                             style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>{o(x, c)}</td>
                         );
                       })}
