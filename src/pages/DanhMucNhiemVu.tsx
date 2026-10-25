@@ -356,6 +356,7 @@ export default function DanhMucNhiemVu() {
           <BangA4 ch={chHien} ds={xem.ds} nhomDs={xem.nhom} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={(id) => { setOSua(null); setChon((c) => (c === id ? null : id)); }} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
             oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()} lechTuan={luiTuan}
+            luuO={(x, khoa, v) => { setOSua(null); void luuOSua(x, khoa, v, capNhatNv, suaDong); }} dongO={() => setOSua(null)}
             moO={(x, khoa, o) => {
               const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
               const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && suaDuocBang : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
@@ -406,7 +407,7 @@ export default function DanhMucNhiemVu() {
         )}
       </div>
 
-      {oSua && (() => {
+      {oSua && !O_TAI_CHO.includes(oSua.khoa) && (() => {
         const x = tatCa.find((y) => y.n.id === oSua.id); if (!x) return null;
         const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
         return (
@@ -522,8 +523,10 @@ type BangProps = {
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
-  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; oDangMo: string | null; hanTuan: number; lechTuan?: number;
+  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; luuO: (x: Dong, khoa: KhoaCot, v: string) => void; dongO: () => void; oDangMo: string | null; hanTuan: number; lechTuan?: number;
 };
+// Ô sửa thẳng trong bảng (không bật hộp): chữ thường; các ô cần chọn (hạn, nguồn, tiến độ, tình trạng…) vẫn mở hộp nhỏ
+const O_TAI_CHO: KhoaCot[] = ['ten', 'san_pham', 'lanh_dao', 'ma', 'chu_tri'];
 const O_SUA: Partial<Record<KhoaCot, 'nv' | 'dong'>> = { ten: 'nv', san_pham: 'nv', han: 'nv', lanh_dao: 'nv', ma: 'nv', nguon_vb: 'dong', chu_tri: 'dong', tien_do: 'dong' };
 const giaTriSua = (x: Dong, k: KhoaCot): string =>
   k === 'ten' ? x.n.ten : k === 'san_pham' ? x.n.san_pham ?? '' : k === 'han' ? x.n.han ?? '' : k === 'lanh_dao' ? x.n.lanh_dao_phu_trach ?? '' : k === 'ma' ? x.n.ma ?? ''
@@ -534,6 +537,22 @@ async function luuOSua(x: Dong, k: KhoaCot, v: string, capNhatNv: (id: string, p
     if (k === 'ten' && !v.trim()) return;
     await capNhatNv(x.n.id, k === 'ten' ? { ten: v.trim() } : k === 'han' ? { han: v || null } : k === 'lanh_dao' ? { lanh_dao_phu_trach: v.trim() || null } : k === 'ma' ? { ma: v.trim() || null } : { san_pham: v.trim() || null });
   } else suaDong(x.n.id, k === 'chu_tri' ? { chu_tri_vb: v } : k === 'nguon_vb' ? { nguon_vb: v } : { tien_do_vb: v });
+}
+
+// Sửa thẳng trong ô của bảng: Enter / bấm ra ngoài = lưu, Shift+Enter xuống dòng, Esc = bỏ
+function OSuaTaiCho({ dau, luu, huy }: { dau: string; luu: (v: string) => void; huy: () => void }) {
+  const [v, setV] = useState(dau);
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const xong = useRef(false);
+  const chot = (luuLai: boolean) => { if (xong.current) return; xong.current = true; if (luuLai && v !== dau) luu(v); else huy(); };
+  useEffect(() => { const t = ref.current; if (t) { t.focus({ preventScroll: true }); t.setSelectionRange(t.value.length, t.value.length); } }, []);
+  useLayoutEffect(() => { const t = ref.current; if (t) { t.style.height = '0'; t.style.height = `${t.scrollHeight}px`; } }, [v]);
+  return (
+    <textarea ref={ref} value={v} rows={1} aria-label="Sửa nội dung ô" onChange={(e) => setV(e.target.value)} onBlur={() => chot(true)}
+      onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}
+      onKeyDown={(e) => { if (e.key === 'Escape') { e.preventDefault(); chot(false); } else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chot(true); } }}
+      className="block w-full resize-none overflow-hidden rounded-[3px] border-0 bg-white p-[2pt] font-[inherit] leading-[inherit] text-inherit outline outline-2 outline-[#C99A2E]" />
+  );
 }
 
 // Hộp sửa một ô: nổi ngay cạnh ô được bấm (vị trí cố định, không cuộn trang); điện thoại hiện ở cuối màn hình
@@ -606,7 +625,7 @@ function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: K
   );
 }
 
-function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, oDangMo, hanTuan, lechTuan = 0, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, luuO, dongO, oDangMo, hanTuan, lechTuan = 0, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -822,7 +841,8 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
                             onClick={(e) => { if (vuaKeo.current || (e.target as HTMLElement).closest('button')) return; if (!moO(x, c.khoa, e.currentTarget as HTMLElement)) mo(x.n.id); }}
                             className={cx('border border-[#2B2B2B] px-[4pt] py-[3pt] align-middle [overflow-wrap:anywhere]', ['tt', 'han', 'tinh_trang'].includes(c.khoa) && 'text-center', c.khoa === 'tt' && 'relative',
                               vienKhoi, (suaDuoc && O_SUA[c.khoa]) || (suaDuoc && c.khoa === 'tien_do') || c.khoa === 'ket_qua_tuan' || (suaDuoc && c.khoa === 'tinh_trang') ? 'hover:outline hover:outline-1 hover:outline-[#C99A2E]' : '', dangMo && 'outline outline-2 outline-[#C99A2E]')}
-                            style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>{o(x, c)}</td>
+                            style={i === 0 ? { boxShadow: `inset 3px 0 0 ${m.vach}` } : undefined}>
+                            {dangMo && O_TAI_CHO.includes(c.khoa) ? <OSuaTaiCho dau={giaTriSua(x, c.khoa)} luu={(v) => luuO(x, c.khoa, v)} huy={dongO} /> : o(x, c)}</td>
                         );
                       })}
                     </tr>
@@ -923,7 +943,7 @@ function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, l
           <button onClick={dong} title="Đóng (Esc)" aria-label="Đóng" className="flex h-9 w-9 items-center justify-center rounded-lg hover:bg-nen"><X className="h-5 w-5" /></button>
         </div>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-4 py-3.5">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3.5 overflow-x-hidden overflow-y-auto px-4 py-3.5 [&_select]:w-full [&_select]:min-w-0 [&_select]:max-w-full [&_select]:truncate">
           <div className="flex flex-col gap-2">
             <p className="m-0 text-[0.9688rem] font-bold leading-snug">{n.ten}</p>
             <div className="flex flex-wrap items-center gap-2 text-[0.8125rem]">
