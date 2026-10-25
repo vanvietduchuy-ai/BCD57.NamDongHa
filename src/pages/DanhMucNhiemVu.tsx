@@ -97,7 +97,32 @@ const laDat = (x: Dong) => !x.con.length && /^đạt$/i.test(ttHienThi(x).nhan.t
 const laDamBao = (x: Dong) => !x.con.length && /^đảm bảo$/i.test(ttHienThi(x).nhan.trim());
 type NhomTheo = 'nhom' | 'don_vi' | 'linh_vuc' | 'kieu';
 type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
-type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo };
+// Sắp xếp nhiều cấp: tiêu chí đứng trước được ưu tiên, bằng nhau mới xét tiêu chí sau; mỗi tiêu chí chọn chiều tăng / giảm
+type KhoaSap = 'han' | 'tinh_trang' | 'tien_do' | 'don_vi' | 'linh_vuc' | 'ten' | 'cap_nhat';
+type TieuChiSap = { khoa: KhoaSap; giam?: boolean };
+type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo; sapNhieu?: TieuChiSap[] };
+const TIEU_CHI_SAP: Record<KhoaSap, { ten: string; chieu: [string, string] }> = {
+  han: { ten: 'Hạn hoàn thành', chieu: ['Sớm → muộn', 'Muộn → sớm'] },
+  tinh_trang: { ten: 'Tình trạng', chieu: ['Cần xử lý trước', 'Hoàn thành trước'] },
+  tien_do: { ten: 'Tiến độ (%)', chieu: ['Thấp → cao', 'Cao → thấp'] },
+  don_vi: { ten: 'Đơn vị chủ trì', chieu: ['A → Z', 'Z → A'] },
+  linh_vuc: { ten: 'Lĩnh vực', chieu: ['A → Z', 'Z → A'] },
+  ten: { ten: 'Tên nhiệm vụ', chieu: ['A → Z', 'Z → A'] },
+  cap_nhat: { ten: 'Lần cập nhật gần nhất', chieu: ['Mới nhất trước', 'Cũ nhất trước'] },
+};
+const tieuChiCua = (r: Rieng): TieuChiSap[] => r.sapNhieu ?? (r.sapTheo && r.sapTheo !== 'thu_tu' ? [{ khoa: r.sapTheo }] : []);
+const soSanhTieuChi = (k: KhoaSap, a: Dong, b: Dong): number => {
+  const vi = (u: string, v: string) => u.localeCompare(v, 'vi');
+  switch (k) {
+    case 'han': return hanCua(a).localeCompare(hanCua(b));
+    case 'tinh_trang': return THU_TU_TT.indexOf(ttHienThi(a).loai) - THU_TU_TT.indexOf(ttHienThi(b).loai);
+    case 'tien_do': return a.n.phan_tram - b.n.phan_tram;
+    case 'don_vi': return vi(a.n.chu_tri_ten ?? '\uffff', b.n.chu_tri_ten ?? '\uffff');
+    case 'linh_vuc': return vi(LINH_VUC[a.n.linh_vuc as keyof typeof LINH_VUC] ?? '', LINH_VUC[b.n.linh_vuc as keyof typeof LINH_VUC] ?? '');
+    case 'ten': return vi(a.n.ten, b.n.ten);
+    default: return (b.cn[0]?.luc ?? '').localeCompare(a.cn[0]?.luc ?? '');
+  }
+};
 const TEN_NHOM_THEO: Record<NhomTheo, string> = { nhom: 'Nhóm theo danh mục', don_vi: 'Nhóm theo đơn vị chủ trì', linh_vuc: 'Nhóm theo lĩnh vực', kieu: 'Nhóm theo loại đánh giá' };
 const TEN_SAP_THEO: Record<SapTheo, string> = { thu_tu: 'Thứ tự danh mục', han: 'Sắp theo hạn hoàn thành', tinh_trang: 'Sắp theo tình trạng' };
 const TEN_KIEU_NHOM: Record<KieuDG, string> = { ty_le: 'Nhiệm vụ tính theo tỷ lệ %', so_luong: 'Nhiệm vụ tính theo số lượng', tien_do: 'Nhiệm vụ theo tiến độ', ky: 'Nhiệm vụ định kỳ' };
@@ -105,8 +130,8 @@ const LA_MA = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'
 const hanCua = (x: Dong) => (x.n.dinh_ky ? x.n.ky_han : x.n.han) ?? '9999-12-31';
 const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
 // Cách xem bảng: nhóm lại theo đơn vị chủ trì / lĩnh vực / loại đánh giá và sắp theo hạn, tình trạng (chỉ đổi cách xem và bản xuất, không đổi thứ tự danh mục)
-function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, sapTheo: SapTheo): { ds: Dong[]; nhom: NhomA4[] } {
-  if (nhomTheo === 'nhom' && sapTheo === 'thu_tu') return { ds, nhom: nhomGoc };
+function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
+  if (nhomTheo === 'nhom' && !tieuChi.length) return { ds, nhom: nhomGoc };
   const la = ds.filter((x) => !x.con.length);                     // nhiệm vụ lớn (tổng hợp) chỉ hiện ở thứ tự danh mục
   const khoa = (x: Dong) => nhomTheo === 'nhom' ? x.nhom : nhomTheo === 'don_vi' ? (x.n.chu_tri_don_vi_id ?? '_chua_giao')
     : nhomTheo === 'linh_vuc' ? x.n.linh_vuc : (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu;
@@ -117,9 +142,10 @@ function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomThe
     : (Object.entries(TEN_KIEU_NHOM) as [string, string][]).map(([k, v]) => ({ id: k, ky_hieu: '', ten: v }));
   nhom = nhom.filter((g) => ds2.some((x) => x.nhom === g.id));
   if (nhomTheo !== 'nhom') nhom = nhom.map((g, i) => ({ ...g, ky_hieu: LA_MA[i] ?? String(i + 1) }));
-  const ss = (a: Dong, b: Dong) => sapTheo === 'han' ? hanCua(a).localeCompare(hanCua(b)) || a.stt - b.stt
-    : sapTheo === 'tinh_trang' ? THU_TU_TT.indexOf(a.tt.loai) - THU_TU_TT.indexOf(b.tt.loai) || hanCua(a).localeCompare(hanCua(b)) || a.stt - b.stt
-    : a.stt - b.stt;
+  const ss = (a: Dong, b: Dong) => {
+    for (const t of tieuChi) { const c = soSanhTieuChi(t.khoa, a, b); if (c) return t.giam ? -c : c; }
+    return a.stt - b.stt;
+  };
   // Đánh lại số thứ tự liên tục theo thứ tự đang xem (nhóm trước, trong nhóm theo cách sắp)
   ds2.sort(ss);
   let so = 0;
@@ -281,9 +307,9 @@ export default function DanhMucNhiemVu() {
   const hien = hienLa.filter((x) => !x.con.length || coCon.has(x.n.id) || hienLa.some((y) => y.cha === x.n.id))
     .concat(phamVi.filter((x) => x.con.length && coCon.has(x.n.id) && !hienLa.includes(x)));
   hien.sort((a, b) => a.stt - b.stt);
-  const nhomTheo: NhomTheo = rieng.nhomTheo ?? 'nhom', sapTheo: SapTheo = rieng.sapTheo ?? 'thu_tu';
-  const xem = sapXepXem(hien, nhomDs, data?.dv ?? [], nhomTheo, sapTheo);
-  const macDinhXem = nhomTheo === 'nhom' && sapTheo === 'thu_tu';
+  const nhomTheo: NhomTheo = rieng.nhomTheo ?? 'nhom', tieuChi = tieuChiCua(rieng);
+  const xem = sapXepXem(hien, nhomDs, data?.dv ?? [], nhomTheo, tieuChi);
+  const macDinhXem = nhomTheo === 'nhom' && !tieuChi.length;
   const viecLa = phamVi.filter((x) => !x.con.length);
 
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
@@ -327,10 +353,8 @@ export default function DanhMucNhiemVu() {
           <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={nhomTheo} onChange={(e) => setRieng({ ...rieng, nhomTheo: e.target.value as NhomTheo })} aria-label="Nhóm nhiệm vụ theo">
             {(Object.keys(TEN_NHOM_THEO) as NhomTheo[]).filter((k) => !(donVi && k === 'don_vi')).map((k) => <option key={k} value={k}>{TEN_NHOM_THEO[k]}</option>)}
           </select>
-          <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={sapTheo} onChange={(e) => setRieng({ ...rieng, sapTheo: e.target.value as SapTheo })} aria-label="Sắp xếp nhiệm vụ">
-            {(Object.keys(TEN_SAP_THEO) as SapTheo[]).map((k) => <option key={k} value={k}>{TEN_SAP_THEO[k]}</option>)}
-          </select>
-          {!macDinhXem && <button type="button" onClick={() => setRieng({ ...rieng, nhomTheo: 'nhom', sapTheo: 'thu_tu' })} className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-nen" title="Trở về thứ tự danh mục (kéo thả được)">Về mặc định</button>}
+          <MenuSapXep ds={tieuChi} dat={(t) => setRieng({ ...rieng, sapNhieu: t, sapTheo: undefined })} />
+          {!macDinhXem && <button type="button" onClick={() => setRieng({ ...rieng, nhomTheo: 'nhom', sapTheo: 'thu_tu', sapNhieu: [] })} className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-nen" title="Trở về thứ tự danh mục (kéo thả được)">Về mặc định</button>}
           {!donVi && !xemNhu && (
             <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={locDv} onChange={(e) => setLocDv(e.target.value)} aria-label="Lọc theo đơn vị chủ trì">
               <option value="">Mọi đơn vị chủ trì</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}
@@ -1409,6 +1433,56 @@ function ThanhLoc({ ds, loc, datLoc, choDuyet, moTk, datMoTk, soHien, congCu }: 
           <span className="hidden flex-col leading-tight sm:flex"><b className="mono text-[0.875rem]">{pt(tl)}</b><span className="whitespace-nowrap text-[11px] text-mo">hoàn thành {moTk ? '▴' : '▾'}</span></span>
         </button>
       </div>
+    </div>
+  );
+}
+
+// Sắp xếp nhiều cấp dạng đổ xuống: thêm / bớt tiêu chí, đổi thứ tự ưu tiên, chọn chiều tăng giảm
+function MenuSapXep({ ds, dat }: { ds: TieuChiSap[]; dat: (t: TieuChiSap[]) => void }) {
+  const [mo, setMo] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!mo) return;
+    const d = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setMo(false); };
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') setMo(false); };
+    document.addEventListener('mousedown', d); document.addEventListener('keydown', k);
+    return () => { document.removeEventListener('mousedown', d); document.removeEventListener('keydown', k); };
+  }, [mo]);
+  const khoaAll = Object.keys(TIEU_CHI_SAP) as KhoaSap[];
+  const conLai = khoaAll.filter((k) => !ds.some((t) => t.khoa === k));
+  const doi = (i: number, j: number) => { if (j < 0 || j >= ds.length) return; const b = [...ds]; [b[i], b[j]] = [b[j], b[i]]; dat(b); };
+  const ten = !ds.length ? 'Thứ tự danh mục' : `${TIEU_CHI_SAP[ds[0].khoa].ten}${ds.length > 1 ? ` +${ds.length - 1}` : ''}`;
+  const lop = 'h-9 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem]';
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button type="button" onClick={() => setMo(!mo)} aria-haspopup="dialog" aria-expanded={mo} aria-label="Sắp xếp nhiệm vụ"
+        className={cx('flex h-9 items-center gap-2 rounded-lg border px-3 text-[0.8125rem] hover:bg-nen-2', ds.length ? 'border-[#8E1B22] bg-nen font-semibold' : 'border-vien bg-nen-2')}>
+        <span className="text-mo">Sắp xếp:</span><b>{ten}</b><span className="text-mo">▾</span>
+      </button>
+      {mo && (
+        <div role="dialog" aria-label="Sắp xếp nhiều tiêu chí" className="absolute left-0 top-10 z-30 flex w-[min(92vw,380px)] flex-col gap-2 rounded-xl border border-vien bg-white p-3 shadow-lg">
+          <p className="m-0 text-xs text-mo">Tiêu chí ở trên được ưu tiên trước; bằng nhau mới xét tiêu chí kế tiếp, cuối cùng theo thứ tự danh mục.</p>
+          {ds.map((t, i) => (
+            <div key={t.khoa} className="flex items-center gap-1.5">
+              <span className="mono flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-nen text-xs font-bold">{i + 1}</span>
+              <select className={cx(lop, 'min-w-0 flex-1')} value={t.khoa} aria-label={`Tiêu chí ${i + 1}`}
+                onChange={(e) => dat(ds.map((u, j) => (j === i ? { khoa: e.target.value as KhoaSap } : u)))}>
+                {[t.khoa, ...conLai].map((k) => <option key={k} value={k}>{TIEU_CHI_SAP[k].ten}</option>)}
+              </select>
+              <button type="button" className={cx(lop, 'shrink-0 whitespace-nowrap font-semibold')} title="Đổi chiều sắp xếp"
+                onClick={() => dat(ds.map((u, j) => (j === i ? { ...u, giam: !u.giam } : u)))}>{TIEU_CHI_SAP[t.khoa].chieu[t.giam ? 1 : 0]}</button>
+              <button type="button" disabled={i === 0} onClick={() => doi(i, i - 1)} aria-label="Ưu tiên lên" className="flex h-9 w-7 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
+              <button type="button" disabled={i === ds.length - 1} onClick={() => doi(i, i + 1)} aria-label="Ưu tiên xuống" className="flex h-9 w-7 items-center justify-center rounded-lg hover:bg-nen disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button>
+              <button type="button" onClick={() => dat(ds.filter((_, j) => j !== i))} aria-label="Bỏ tiêu chí" className="flex h-9 w-7 items-center justify-center rounded-lg hover:bg-nen"><X className="h-4 w-4" /></button>
+            </div>
+          ))}
+          <div className="flex items-center gap-2">
+            {conLai.length > 0 && <button type="button" onClick={() => dat([...ds, { khoa: conLai[0] }])} className="flex h-9 items-center gap-1.5 rounded-lg border border-dashed border-vien-2 px-3 text-[0.8125rem] font-semibold text-mo-2 hover:border-[#8E1B22] hover:text-[#8E1B22]"><Plus className="h-3.5 w-3.5" />Thêm tiêu chí</button>}
+            <span className="flex-1" />
+            {ds.length > 0 && <button type="button" onClick={() => dat([])} className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-nen">Về thứ tự danh mục</button>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
