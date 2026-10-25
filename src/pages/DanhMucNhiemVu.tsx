@@ -124,7 +124,6 @@ const soSanhTieuChi = (k: KhoaSap, a: Dong, b: Dong): number => {
   }
 };
 const TEN_NHOM_THEO: Record<NhomTheo, string> = { nhom: 'Nhóm theo danh mục', don_vi: 'Nhóm theo đơn vị chủ trì', linh_vuc: 'Nhóm theo lĩnh vực', kieu: 'Nhóm theo loại đánh giá' };
-const TEN_SAP_THEO: Record<SapTheo, string> = { thu_tu: 'Thứ tự danh mục', han: 'Sắp theo hạn hoàn thành', tinh_trang: 'Sắp theo tình trạng' };
 const TEN_KIEU_NHOM: Record<KieuDG, string> = { ty_le: 'Nhiệm vụ tính theo tỷ lệ %', so_luong: 'Nhiệm vụ tính theo số lượng', tien_do: 'Nhiệm vụ theo tiến độ', ky: 'Nhiệm vụ định kỳ' };
 const LA_MA = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
 const hanCua = (x: Dong) => (x.n.dinh_ky ? x.n.ky_han : x.n.han) ?? '9999-12-31';
