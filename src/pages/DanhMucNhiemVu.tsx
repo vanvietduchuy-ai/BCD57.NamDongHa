@@ -52,12 +52,12 @@ const tienDo3 = (x: Dong): TienDo3 => {
 };
 // Tỷ lệ % của nhiệm vụ đánh giá theo tỷ lệ (từ số liệu báo cáo mới nhất); dat: so với chỉ tiêu (undefined nếu không có chỉ tiêu)
 const tyLeNv = (x: Dong) => tyLeNhiemVu(x.n, x.cn, x.d);
-// Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt / Không đạt (so với chỉ tiêu %) hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
+// Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt (so với chỉ tiêu %); chưa đạt chỉ tiêu mà chưa đến hạn = Chưa đạt, quá hạn mà vẫn chưa đạt = Không đạt hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
 // Đạt và Đảm bảo được tính là HOÀN THÀNH (thống kê, lọc, nhiệm vụ lớn, không phải báo cáo tuần các kỳ sau)
 const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
   if (x.d.tt_tay || x.con.length || (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'ty_le') return x.tt;
   const t = tyLeNv(x); if (!t) return x.tt;
-  return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : { loai: 'qua_han', nhan: 'Không đạt', tyLe: true }) : { loai: 'xong', nhan: 'Đảm bảo', tyLe: true };
+  return t.chiTieu ? (t.dat ? { loai: 'xong', nhan: 'Đạt', tyLe: true } : x.tt.loai === 'qua_han' ? { loai: 'qua_han', nhan: 'Không đạt', tyLe: true } : { loai: x.tt.loai === 'sap_han' ? 'sap_han' : 'dang', nhan: 'Chưa đạt', tyLe: true }) : { loai: 'xong', nhan: 'Đảm bảo', tyLe: true };
 };
 // Cột "Kết quả thực hiện" chỉ ghi phần lời; số liệu (Kết quả: a/b …) và trạng thái tiến độ đã có ở cột Tiến độ / Tình trạng
 const loiKetQua = (noiDung: string) => boTienTo(noiDung).replace(/^Kết quả:.*?\.(\s+|$)/, '').replace(/^Tiến độ: chưa hoàn thành\.\s*/, '').trim();
