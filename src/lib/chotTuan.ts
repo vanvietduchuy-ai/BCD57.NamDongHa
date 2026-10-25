@@ -28,7 +28,7 @@ export function viecCuaTuan(nv: NhiemVu[], cn: CapNhatTuan[], cnMap: Map<string,
   return nv.filter((n) => !cha.has(n.id) && n.chu_tri_don_vi_id).map((n) => {
     const trongTuan = baoCaoHieuLuc(cn.filter((c) => c.nhiem_vu_id === n.id), t);   // đã tính sửa / rút
     const luaXong = cnMap.get(n.id)?.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc;
-    const can = canBaoCaoTuan(n, ttMap.get(n.id)!.tt, a4.dong[n.id]?.danh_gia ?? goiYDanhGia(n), trongTuan.length > 0, !!luaXong && luaXong > ketThuc);
+    const can = canBaoCaoTuan(n, ttMap.get(n.id)!.tt, a4.dong[n.id]?.danh_gia ?? goiYDanhGia(n), trongTuan.length > 0, !!luaXong && luaXong > ketThuc, t.han);
     return { n, tuan: trongTuan, can };
   }).filter((x) => x.can).map(({ n, tuan }) => ({ n, tuan }))
     .sort((a, b) => (a.n.ma ?? '').localeCompare(b.n.ma ?? '', 'vi', { numeric: true }) || a.n.tao_luc.localeCompare(b.n.tao_luc));

@@ -165,8 +165,10 @@ export function tinhTrangTatCa(nv0: NhiemVu[], cn0: Map<string, CapNhatTT[]>, ch
 // Nhiệm vụ phải báo cáo tuần (một nguồn duy nhất cho bảng A4 và trang Báo cáo tuần):
 // đã duyệt giao, có đơn vị chủ trì; đã báo cáo tuần đó, hoặc hoàn thành SAU tuần đó (nộp bù), hoặc chưa xong và không tạm dừng;
 // nhiệm vụ tính theo tỷ lệ % (nhập số liệu) vẫn nhập tiếp ở các kỳ sau kể cả khi đã Đạt / Đảm bảo.
-export function canBaoCaoTuan(n: NhiemVu, tt: TinhTrang, dg: DanhGia, daBaoTuan: boolean, xongSauTuan: boolean): boolean {
+// han = mốc chốt báo cáo của tuần đang xét: nhiệm vụ duyệt giao SAU mốc chốt thì chưa phải báo cáo tuần đó, đưa sang tuần sau (trừ khi đơn vị đã báo cáo).
+export function canBaoCaoTuan(n: NhiemVu, tt: TinhTrang, dg: DanhGia, daBaoTuan: boolean, xongSauTuan: boolean, han?: Date): boolean {
   if (n.trang_thai_giao !== 'da_duyet' || !n.chu_tri_don_vi_id) return false;
+  if (!daBaoTuan && han && n.duyet_luc && new Date(n.duyet_luc).getTime() > han.getTime()) return false;
   if (daBaoTuan || xongSauTuan) return true;
   if (n.trang_thai === 'tam_dung') return false;
   if (dg.kieu === 'ty_le') return true;

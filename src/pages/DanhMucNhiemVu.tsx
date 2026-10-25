@@ -258,7 +258,7 @@ export default function DanhMucNhiemVu() {
     // Xem tuần đã qua: nhiệm vụ hoàn thành SAU tuần đó vẫn phải báo cáo (nộp bù) cho tuần đó
     const xongSauTuan = (x: Dong) => { const l = x.cn.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc; return !!l && l > tuan.ketThuc.toISOString(); };
     kq.forEach((x, i) => { x.stt = i + 1; const t = lay(x.n.id); x.ttTD = t.ttTD; x.tt = t.tt;
-      x.canBct = !x.con.length && canBaoCaoTuan(x.n, x.tt, x.d.danh_gia ?? goiYDanhGia(x.n), x.tuanCn.length > 0, xongSauTuan(x)); });
+      x.canBct = !x.con.length && canBaoCaoTuan(x.n, x.tt, x.d.danh_gia ?? goiYDanhGia(x.n), x.tuanCn.length > 0, xongSauTuan(x), tuan.han); });
     return kq;
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
 
