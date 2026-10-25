@@ -968,9 +968,12 @@ function NhapMinhChung({ x, duocSua, quanTri, dsVb, moTrang, xong }: { x: Dong; 
   const loc = useMemo(() => { const t = khongDau(tim.trim()); return dsVb.filter((v) => !daCo.has(v.id) && (!t || khongDau(`${tenVb(v)} ${v.ngay_ban_hanh ? ngayNgan(v.ngay_ban_hanh) : ''}`).includes(t))).slice(0, 30); }, [dsVb, tim, x.mc]); // eslint-disable-line react-hooks/exhaustive-deps
   const gan = async (v: VbCanCu) => {
     setDang(v.id); setLoi(null);
-    const { error } = await supabase.from('nhiem_vu_van_ban').insert({ nhiem_vu_id: x.n.id, van_ban_id: v.id });
+    // Ưu tiên hàm máy chủ (supabase/gan-minh-chung-co-san.sql, kiểm tra quyền trong hàm); chưa cài hàm thì thêm trực tiếp như trước
+    let { error } = await supabase.rpc('nhiem_vu_chon_van_ban', { p_nv: x.n.id, p_van_ban: v.id });
+    if (error && (error.code === 'PGRST202' || error.code === '42883' || /could not find the function|schema cache/i.test(error.message)))
+      ({ error } = await supabase.from('nhiem_vu_van_ban').insert({ nhiem_vu_id: x.n.id, van_ban_id: v.id }));
     setDang(null);
-    if (error) { setLoi(/duplicate|unique/i.test(error.message) ? 'Văn bản này đã là minh chứng của nhiệm vụ.' : `Không gắn được văn bản: ${loiDe(error)}`); return; }
+    if (error) { setLoi(/duplicate|unique/i.test(error.message) ? 'Văn bản này đã là minh chứng của nhiệm vụ.' : /row-level security|permission denied/i.test(error.message) ? 'Chưa có quyền gắn từ kho: cần chạy supabase/gan-minh-chung-co-san.sql trong Supabase SQL Editor.' : `Không gắn được văn bản: ${loiDe(error)}`); return; }
     setChonKho(false); setTim(''); xong();
   };
   const go = async (t: MinhChungO) => {
