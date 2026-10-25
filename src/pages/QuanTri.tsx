@@ -63,6 +63,14 @@ function TaiKhoan() {
     if (sua.vai_tro && !window.confirm(`Đổi vai trò thành "${VT[sua.vai_tro][0]}"?`)) { void taiLai(); return; }
     if (sua.hoat_dong === false && !window.confirm('Khoá tài khoản này?')) return;
     setLoi(null); const { error } = await supabase.from('nguoi_dung').update(sua).eq('id', id); if (error) setLoi(loiDe(error)); else void taiLai(); };
+  const xoaTk = async (nd: Nd) => {
+    if (nd.id === hoSo?.id) { setLoi('Không thể tự xoá tài khoản đang dùng.'); return; }
+    if (!window.confirm(`XOÁ HẲN tài khoản "${nd.ho_ten}" (${nd.email})?\n\nKhông khôi phục được. Tài khoản đã có báo cáo, cập nhật hoặc văn bản sẽ không xoá được — khi đó hãy chọn "Khoá".`)) return;
+    setLoi(null);
+    const { error } = await supabase.rpc('xoa_tai_khoan', { p_id: nd.id });
+    if (error) setLoi(/could not find the function|schema cache/i.test(error.message) ? 'Chưa cài chức năng xoá: chạy supabase/xoa-tai-khoan.sql trong Supabase SQL Editor.' : loiDe(error));
+    else void taiLai();
+  };
   const datLaiMk = async (nd: Nd) => {
     const mk = window.prompt(`Mật khẩu mới cho ${nd.ho_ten} (ít nhất 8 ký tự):`);
     if (!mk) return;
@@ -109,6 +117,7 @@ function TaiKhoan() {
                 <td className="whitespace-nowrap px-4 text-right">
                   <button className="mr-3 font-semibold text-[#8E1B22]" onClick={() => datLaiMk(n)}>Đặt lại MK</button>
                   <button className={cx('font-semibold', n.hoat_dong ? 'text-nguy' : 'text-xanh')} onClick={() => doi(n.id, { hoat_dong: !n.hoat_dong })}>{n.hoat_dong ? 'Khoá' : 'Mở khoá'}</button>
+                  {n.id !== hoSo?.id && <button className="ml-3 font-semibold text-nguy" onClick={() => void xoaTk(n)}>Xoá</button>}
                 </td>
               </tr>
             ))}</tbody>
@@ -134,6 +143,7 @@ function TaiKhoan() {
                 <span className="flex-1" />
                 <button className="min-h-9 px-2 font-semibold text-[#8E1B22]" onClick={() => datLaiMk(n)}>Đặt lại MK</button>
                 <button className={cx('min-h-9 px-2 font-semibold', n.hoat_dong ? 'text-nguy' : 'text-xanh')} onClick={() => doi(n.id, { hoat_dong: !n.hoat_dong })}>{n.hoat_dong ? 'Khoá' : 'Mở khoá'}</button>
+                {n.id !== hoSo?.id && <button className="min-h-9 px-2 font-semibold text-nguy" onClick={() => void xoaTk(n)}>Xoá</button>}
               </div>
             </li>
           ))}
