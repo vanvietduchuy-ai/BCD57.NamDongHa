@@ -12,7 +12,7 @@ import { BCT_MAC_DINH, KHOA_BCT, TEN_THU, type CauHinhBCT } from '../lib/baoCaoT
 import { khongDau } from '../lib/nhiemVu';
 import { HopLienHe, hienSdt, luuLienHe, type LienHe } from '../components/LienHe';
 import YeuCauDangKy from '../components/YeuCauDangKy';
-import TaoTaiKhoanHangLoat, { KHOI_DV, khoiCua, type DvTk } from '../components/TaiKhoanHangLoat';
+import TaoTaiKhoanHangLoat, { KHOI_DV, khoiCua, TaoTaiKhoanTheoDonVi, type DvTk } from '../components/TaiKhoanHangLoat';
 
 type Tab = 'tai_khoan' | 'dang_ky' | 'don_vi' | 'lich' | 'cai_dat' | 'luu_tru' | 'nhat_ky';
 const TABS: [Tab, string][] = [['tai_khoan', 'Tài khoản'], ['dang_ky', 'Yêu cầu đăng ký'], ['don_vi', 'Đơn vị'], ['lich', 'Lịch báo cáo định kỳ'], ['cai_dat', 'Cài đặt'], ['luu_tru', 'Lưu trữ & tự động'], ['nhat_ky', 'Nhật ký']];
@@ -46,6 +46,7 @@ function TaiKhoan() {
   const { hoSo } = useAuth();
   const [mo, setMo] = useState(false);
   const [moNhieu, setMoNhieu] = useState(false);
+  const [moTheoDv, setMoTheoDv] = useState(false);
   const [khoi, setKhoi] = useState('');
   const [sdtCua, setSdtCua] = useState<Nd | null>(null);
   const [loi, setLoi] = useState<string | null>(null);
@@ -103,6 +104,7 @@ function TaiKhoan() {
         <div className="flex justify-end gap-2">
           <Nut icon={<Plus className="h-4 w-4" />} onClick={() => setMo(true)}>Tạo 1 tài khoản</Nut>
           <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setMoNhieu(true)}>Tạo hàng loạt</Nut>
+          <Nut icon={<Plus className="h-4 w-4" />} onClick={() => setMoTheoDv(true)}>Mỗi đơn vị 1 tài khoản</Nut>
           {(() => { const ds = (data?.nd ?? []).filter((x) => x.hoat_dong && !x.doi_mat_khau && x.id !== hoSo?.id); return ds.length > 0 && (
             <Nut onClick={() => void batDoiMk(ds, `Bắt ${ds.length} tài khoản đang hoạt động đổi mật khẩu ở lần đăng nhập tới (trừ tài khoản của bạn)?\n\nTài khoản nào đã tự đổi mật khẩu rồi cũng sẽ phải đổi lại một lần.`)}>Bắt đổi mật khẩu ({ds.length})</Nut>); })()}
         </div>
@@ -165,6 +167,7 @@ function TaiKhoan() {
       )}
       {sdtCua && <HopLienHe key={sdtCua.id} mo dong={() => setSdtCua(null)} nguoiDungId={sdtCua.id} ten={sdtCua.ho_ten} xong={() => void taiLai()} />}
       <TaoTaiKhoan mo={mo} dong={() => setMo(false)} donVi={data?.dv ?? []} xong={() => { setMo(false); void taiLai(); }} />
+      <TaoTaiKhoanTheoDonVi mo={moTheoDv} dong={() => setMoTheoDv(false)} donVi={data?.dv ?? []} daCo={new Set((data?.nd ?? []).map((x) => x.don_vi_id).filter((x): x is string => !!x))} xong={() => void taiLai()} />
       <TaoTaiKhoanHangLoat mo={moNhieu} dong={() => setMoNhieu(false)} donVi={data?.dv ?? []} xong={() => void taiLai()} />
     </>
   );
