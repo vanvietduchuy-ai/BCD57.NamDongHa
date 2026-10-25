@@ -39,7 +39,7 @@ export default function QuanTri() {
   );
 }
 
-type Nd = { id: string; ho_ten: string; email: string | null; chuc_vu: string | null; vai_tro: string; don_vi_id: string | null; hoat_dong: boolean; don_vi: { ten: string; loai: string } | null };
+type Nd = { id: string; ho_ten: string; email: string | null; chuc_vu: string | null; vai_tro: string; don_vi_id: string | null; hoat_dong: boolean; doi_mat_khau?: boolean; don_vi: { ten: string; loai: string } | null };
 const VT: Record<string, [string, string, string]> = { admin: ['Quản trị hệ thống', 'bg-den', 'text-white'], quan_tri: ['Cơ quan Thường trực', 'bg-ink', 'text-white'], lanh_dao: ['Lãnh đạo', 'bg-nguy-nhat', 'text-nguy'], don_vi: ['Đơn vị', 'bg-nen-3', 'text-mo-2'] };
 
 function TaiKhoan() {
@@ -51,7 +51,7 @@ function TaiKhoan() {
   const [loi, setLoi] = useState<string | null>(null);
   const { data, loi: loiTai, dangTai, taiLai } = useDuLieu(async () => {
     const [a, b, c] = await Promise.all([
-      supabase.from('nguoi_dung').select('id, ho_ten, email, chuc_vu, vai_tro, don_vi_id, hoat_dong, don_vi(ten, loai)').order('vai_tro').order('ho_ten'),
+      supabase.from('nguoi_dung').select('id, ho_ten, email, chuc_vu, vai_tro, don_vi_id, hoat_dong, doi_mat_khau, don_vi(ten, loai)').order('vai_tro').order('ho_ten'),
       supabase.from('don_vi').select('id, ma, ten, loai').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('lien_he_nguoi_dung').select('nguoi_dung_id, so_dien_thoai, nhan_zalo, nhan_goi'),
     ]);
@@ -74,8 +74,18 @@ function TaiKhoan() {
   const datLaiMk = async (nd: Nd) => {
     const mk = window.prompt(`Mật khẩu mới cho ${nd.ho_ten} (ít nhất 8 ký tự):`);
     if (!mk) return;
-    try { await goiChucNang('quan-tri-tai-khoan', { hanh_dong: 'dat_lai_mat_khau', id: nd.id, mat_khau: mk }); setLoi(null); window.alert('Đã đặt lại mật khẩu.'); }
+    try { await goiChucNang('quan-tri-tai-khoan', { hanh_dong: 'dat_lai_mat_khau', id: nd.id, mat_khau: mk });
+      // Mật khẩu do quản trị đặt là mật khẩu tạm: người dùng phải đổi sang mật khẩu riêng ở lần đăng nhập kế tiếp
+      await supabase.from('nguoi_dung').update({ doi_mat_khau: true }).eq('id', nd.id);
+      setLoi(null); window.alert('Đã đặt lại mật khẩu. Người dùng sẽ phải đổi mật khẩu ở lần đăng nhập tới.'); void taiLai(); }
     catch (e) { setLoi(loiDe(e)); }
+  };
+  // Bắt đổi mật khẩu ở lần đăng nhập tới: một tài khoản, hoặc mọi tài khoản đang bật (trừ tài khoản đang dùng) chưa bị bắt đổi
+  const batDoiMk = async (ds: Nd[], hoi: string) => {
+    if (!ds.length || !window.confirm(hoi)) return;
+    setLoi(null);
+    const { error } = await supabase.from('nguoi_dung').update({ doi_mat_khau: true }).in('id', ds.map((x) => x.id));
+    if (error) setLoi(loiDe(error)); else void taiLai();
   };
   const nutSdt = (n: Nd) => {
     const l = data?.lh.get(n.id);
@@ -93,6 +103,8 @@ function TaiKhoan() {
         <div className="flex justify-end gap-2">
           <Nut icon={<Plus className="h-4 w-4" />} onClick={() => setMo(true)}>Tạo 1 tài khoản</Nut>
           <Nut kieu="chinh" icon={<Plus className="h-4 w-4" />} onClick={() => setMoNhieu(true)}>Tạo hàng loạt</Nut>
+          {(() => { const ds = (data?.nd ?? []).filter((x) => x.hoat_dong && !x.doi_mat_khau && x.id !== hoSo?.id); return ds.length > 0 && (
+            <Nut onClick={() => void batDoiMk(ds, `Bắt ${ds.length} tài khoản đang hoạt động đổi mật khẩu ở lần đăng nhập tới (trừ tài khoản của bạn)?\n\nTài khoản nào đã tự đổi mật khẩu rồi cũng sẽ phải đổi lại một lần.`)}>Bắt đổi mật khẩu ({ds.length})</Nut>); })()}
         </div>
         <div className="-mx-3.5 flex min-w-0 flex-1 gap-1.5 overflow-x-auto px-3.5 sm:mx-0 sm:px-0">
           {[['', 'Tất cả'], ...KHOI_DV.map(([k, t]) => [k, t])].map(([k, t]) => {
@@ -113,9 +125,10 @@ function TaiKhoan() {
                 <td className="whitespace-nowrap px-2">{nutSdt(n)}</td>
                 <td className="px-2"><select aria-label="Đơn vị" className={cx(lopO, 'min-h-9 w-[200px] text-[0.8125rem]')} value={n.don_vi_id ?? ''} onChange={(e) => doi(n.id, { don_vi_id: e.target.value || null })}><option value="">—</option>{data.dv.map((d) => <option key={d.id} value={d.id}>{d.ten}</option>)}</select></td>
                 <td className="px-2"><select aria-label="Vai trò" className={cx(lopO, 'min-h-9 text-[0.8125rem]')} value={n.vai_tro} onChange={(e) => doi(n.id, { vai_tro: e.target.value })}>{Object.entries(VT).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select></td>
-                <td className="px-2"><Chip nen={n.hoat_dong ? 'bg-xanh-nhat' : 'bg-cam-nhat'} chu={n.hoat_dong ? 'text-xanh' : 'text-cam-dam'}>{n.hoat_dong ? 'Đang hoạt động' : 'Đã khoá'}</Chip></td>
+                <td className="px-2"><Chip nen={n.hoat_dong ? 'bg-xanh-nhat' : 'bg-cam-nhat'} chu={n.hoat_dong ? 'text-xanh' : 'text-cam-dam'}>{n.hoat_dong ? 'Đang hoạt động' : 'Đã khoá'}</Chip>{n.doi_mat_khau && <div className="mt-1 text-[11px] font-semibold text-cam-dam">Chờ đổi mật khẩu</div>}</td>
                 <td className="whitespace-nowrap px-4 text-right">
                   <button className="mr-3 font-semibold text-[#8E1B22]" onClick={() => datLaiMk(n)}>Đặt lại MK</button>
+                  {!n.doi_mat_khau && n.id !== hoSo?.id && <button className="mr-3 font-semibold text-mo-2" title="Bắt đổi mật khẩu ở lần đăng nhập tới" onClick={() => void batDoiMk([n], `Bắt ${n.ho_ten} đổi mật khẩu ở lần đăng nhập tới?`)}>Bắt đổi MK</button>}
                   <button className={cx('font-semibold', n.hoat_dong ? 'text-nguy' : 'text-xanh')} onClick={() => doi(n.id, { hoat_dong: !n.hoat_dong })}>{n.hoat_dong ? 'Khoá' : 'Mở khoá'}</button>
                   {n.id !== hoSo?.id && <button className="ml-3 font-semibold text-nguy" onClick={() => void xoaTk(n)}>Xoá</button>}
                 </td>
@@ -142,6 +155,7 @@ function TaiKhoan() {
                 {nutSdt(n)}
                 <span className="flex-1" />
                 <button className="min-h-9 px-2 font-semibold text-[#8E1B22]" onClick={() => datLaiMk(n)}>Đặt lại MK</button>
+                {!n.doi_mat_khau && n.id !== hoSo?.id && <button className="min-h-9 px-2 font-semibold text-mo-2" onClick={() => void batDoiMk([n], `Bắt ${n.ho_ten} đổi mật khẩu ở lần đăng nhập tới?`)}>Bắt đổi MK</button>}
                 <button className={cx('min-h-9 px-2 font-semibold', n.hoat_dong ? 'text-nguy' : 'text-xanh')} onClick={() => doi(n.id, { hoat_dong: !n.hoat_dong })}>{n.hoat_dong ? 'Khoá' : 'Mở khoá'}</button>
                 {n.id !== hoSo?.id && <button className="min-h-9 px-2 font-semibold text-nguy" onClick={() => void xoaTk(n)}>Xoá</button>}
               </div>
@@ -168,6 +182,7 @@ function TaoTaiKhoan({ mo, dong, donVi, xong }: { mo: boolean; dong: () => void;
     try {
       const { sdt, ...tk } = f;
       const r = await goiChucNang<{ id: string }>('quan-tri-tai-khoan', { hanh_dong: 'tao', ...tk, don_vi_id: f.don_vi_id || null });
+      await supabase.from('nguoi_dung').update({ doi_mat_khau: true }).eq('id', r.id);   // mật khẩu ban đầu là mật khẩu tạm
       if (sdt.trim()) await luuLienHe(r.id, sdt).catch((e) => window.alert(`Đã tạo tài khoản, chưa lưu được SĐT: ${loiDe(e)}`));
       xong(); setF({ email: '', mat_khau: '', ho_ten: '', chuc_vu: '', vai_tro: 'don_vi', don_vi_id: '', sdt: '' });
     }
