@@ -2,9 +2,10 @@
 // Mỗi nhiệm vụ báo cáo = một dòng nhiem_vu_cap_nhat có tiền tố "Báo cáo tuần NN/YYYY:" -> không cần thêm bảng mới.
 // Hạn nộp lưu ở cau_hinh (khoá 'bao_cao_tuan'): thứ trong tuần + giờ.
 export const KHOA_BCT = 'bao_cao_tuan';
-export type CauHinhBCT = { thu: number; gio: number; phut?: number; bat: boolean };   // thu: 1 = thứ Hai … 7 = Chủ nhật
+export type CauHinhBCT = { thu: number; gio: number; phut?: number; bat: boolean };   // thu: 1 = thứ Hai … 7 = Chủ nhật; 8 … 14 = thứ Hai … Chủ nhật của tuần sau (nộp báo cáo tuần N vào tuần N+1)
 export const BCT_MAC_DINH: CauHinhBCT = { thu: 5, gio: 17, bat: true };
-export const TEN_THU: Record<number, string> = { 1: 'thứ Hai', 2: 'thứ Ba', 3: 'thứ Tư', 4: 'thứ Năm', 5: 'thứ Sáu', 6: 'thứ Bảy', 7: 'Chủ nhật' };
+export const TEN_THU: Record<number, string> = { 1: 'thứ Hai', 2: 'thứ Ba', 3: 'thứ Tư', 4: 'thứ Năm', 5: 'thứ Sáu', 6: 'thứ Bảy', 7: 'Chủ nhật',
+  8: 'thứ Hai tuần sau', 9: 'thứ Ba tuần sau', 10: 'thứ Tư tuần sau', 11: 'thứ Năm tuần sau', 12: 'thứ Sáu tuần sau', 13: 'thứ Bảy tuần sau', 14: 'Chủ nhật tuần sau' };
 
 const VN = 7 * 3600 * 1000;
 // Ngày (theo giờ VN) dạng UTC-midnight để tính toán
@@ -15,16 +16,21 @@ export const gioHan = (ch: CauHinhBCT) => `${String(ch.gio).padStart(2, '0')}:${
 export type Tuan = { so: number; nam: number; batDau: Date; ketThuc: Date; han: Date; ten: string; tienTo: string };
 // Tuần chứa ngày d (lui = số tuần lùi lại)
 export function tuanCua(d: Date, ch: CauHinhBCT, lui = 0): Tuan {
-  const n = ngayVN(d) - lui * 7 * 86400000;
-  const thu = ((new Date(n).getUTCDay() + 6) % 7) + 1;               // 1..7
-  const thu2 = n - (thu - 1) * 86400000;                              // thứ Hai 00:00 (VN, dạng UTC)
+  const DAY = 86400000;
+  const n0 = ngayVN(d);
+  const thu = ((new Date(n0).getUTCDay() + 6) % 7) + 1;              // 1..7
+  const sauTuan = Math.floor((ch.thu - 1) / 7);                       // 0: hạn nằm trong tuần; 1: hạn nằm ở tuần sau
+  const hanCua = (t2: number) => t2 + (ch.thu - 1) * DAY + ch.gio * 3600000 + (ch.phut ?? 0) * 60000 - VN;
+  let thu2 = n0 - (thu - 1) * DAY - sauTuan * 7 * DAY;                // thứ Hai 00:00 (VN, dạng UTC) của tuần đang chờ báo cáo
+  if (sauTuan > 0 && hanCua(thu2) < d.getTime()) thu2 += 7 * DAY;     // đã qua hạn tuần trước -> tuần hiện tại là tuần chờ báo cáo kế tiếp
+  thu2 -= lui * 7 * DAY;
   // Số tuần ISO: theo thứ Năm của tuần
   const thu5 = new Date(thu2 + 3 * 86400000);
   const nam = thu5.getUTCFullYear();
   const so = Math.floor((thu5.getTime() - Date.UTC(nam, 0, 1)) / (7 * 86400000)) + 1;
   const batDau = new Date(thu2 - VN);
   const ketThuc = new Date(thu2 + 7 * 86400000 - VN - 1);
-  const han = new Date(thu2 + (ch.thu - 1) * 86400000 + ch.gio * 3600000 + (ch.phut ?? 0) * 60000 - VN);
+  const han = new Date(hanCua(thu2));
   const dd = (x: number) => { const t = new Date(x); return `${String(t.getUTCDate()).padStart(2, '0')}/${String(t.getUTCMonth() + 1).padStart(2, '0')}`; };
   return { so, nam, batDau, ketThuc, han, ten: `Tuần ${so}/${nam} (${dd(thu2)} – ${dd(thu2 + 6 * 86400000)})`, tienTo: `Báo cáo tuần ${so}/${nam}:` };
 }
