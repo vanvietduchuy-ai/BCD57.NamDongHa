@@ -202,7 +202,7 @@ function HopCaiDat({ ch, dong, xong }: { ch: CauHinhBCT; dong: () => void; xong:
           <O nhan="Giờ"><select className={lopO} value={`${g.gio}:${g.phut ?? 0}`} onChange={(e) => { const [h, m] = e.target.value.split(':').map(Number); setG({ ...g, gio: h, phut: m }); }}>
             {Array.from({ length: 24 * 4 }, (_, i) => [Math.floor(i / 4), (i % 4) * 15]).map(([h, m]) => <option key={`${h}:${m}`} value={`${h}:${m}`}>{gioHan({ ...g, gio: h, phut: m })}</option>)}</select></O>
         </div>
-        <p className="m-0 text-xs text-mo">Áp dụng cho tất cả đơn vị chủ trì nhiệm vụ. Tuần tính từ thứ Hai đến Chủ nhật.</p>
+        <p className="m-0 text-xs text-mo">Áp dụng cho tất cả đơn vị chủ trì nhiệm vụ. Số liệu tuần N tính từ hạn nộp tuần N-1 đến hạn nộp tuần N; qua hạn thì chuyển sang kỳ kế tiếp.</p>
         {loi && <HopLoi loi={loi} />}
         <div className="flex justify-end gap-2"><Nut onClick={dong}>Huỷ</Nut><Nut kieu="chinh" dangChay={dang} onClick={() => void luu()}>Lưu</Nut></div>
       </div>
