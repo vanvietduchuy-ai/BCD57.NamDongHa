@@ -805,7 +805,10 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
                   const m = MAU_TT[x.tt.loai]; const cao = caoDong(x);
                   return (
                     <tr key={x.n.id} data-id={x.n.id}
-                      className={cx('cursor-pointer', x.con.length > 0 && 'bg-[#FAF6EE] font-semibold', keo?.id === x.n.id ? 'opacity-40' : chon === x.n.id ? 'bg-[#FFF3D6]' : x.tt.loai === 'qua_han' ? 'bg-[#FFF6F5] hover:bg-[#FDECEA]' : 'hover:bg-[#FBF8F8]')}
+                      // Tô màu nhạt cả hàng theo tình trạng hiển thị: hoàn thành (kể cả hoàn thành trễ hạn) xanh; quá hạn mà chưa hoàn thành đỏ; sắp đến hạn vàng
+                      className={cx('cursor-pointer', x.con.length > 0 && 'font-semibold', keo?.id === x.n.id ? 'opacity-40' : chon === x.n.id ? 'bg-[#FFF3D6]'
+                        : ({ xong: 'bg-[#F0FAF3] hover:bg-[#E4F5EA]', qua_han: 'bg-[#FEF3F1] hover:bg-[#FBE7E4]', sap_han: 'bg-[#FFFBEA] hover:bg-[#FFF6D3]' } as Record<string, string>)[ttHienThi(x).loai]
+                          ?? (x.con.length > 0 ? 'bg-[#FAF6EE]' : 'hover:bg-[#FBF8F8]'), 'print:bg-transparent')}
                       style={{ ...(cao ? { height: cao } : {}), ...(keo?.dich?.id === x.n.id ? { boxShadow: keo.dich.truoc ? 'inset 0 3px 0 #C99A2E' : 'inset 0 -3px 0 #C99A2E' } : {}) }}>
                       {cot.map((c, i) => {
                         const dangMo = oDangMo === `${x.n.id}:${c.khoa}`;
