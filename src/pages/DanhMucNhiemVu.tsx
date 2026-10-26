@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
-import { laQuanTri, useAuth } from '../lib/auth';
+import { dauMoiCds, dauMoiDa06, laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
 import { COT_NV, khongDau, LINH_VUC, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
@@ -100,7 +100,15 @@ type SapTheo = 'thu_tu' | 'han' | 'tinh_trang';
 // Sắp xếp nhiều cấp: tiêu chí đứng trước được ưu tiên, bằng nhau mới xét tiêu chí sau; mỗi tiêu chí chọn chiều tăng / giảm
 type KhoaSap = 'han' | 'tinh_trang' | 'tien_do' | 'don_vi' | 'linh_vuc' | 'ten' | 'cap_nhat';
 type TieuChiSap = { khoa: KhoaSap; giam?: boolean };
-type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo; sapNhieu?: TieuChiSap[] };
+// Thẻ lĩnh vực trên bảng: Chung = tổng cả hai nhóm; Đề án 06; CĐS – KHCN – ĐMST (NQ 57). Mỗi nhiệm vụ thuộc một lĩnh vực chính (trường linh_vuc);
+// nhiệm vụ con theo lĩnh vực của nhiệm vụ lớn chứa nó. Nhiệm vụ lĩnh vực "Chung" chỉ hiện ở thẻ Chung.
+type The = 'chung' | 'da06' | 'cds';
+const THE_NV: { khoa: The; nhan: string }[] = [
+  { khoa: 'chung', nhan: 'Chung' }, { khoa: 'da06', nhan: 'Đề án 06' }, { khoa: 'cds', nhan: 'CĐS – KHCN – ĐMST (NQ57)' },
+];
+const LV_THE_CDS: string[] = ['nq57', 'khcn_dmst', 'chuyen_doi_so'];
+const theCuaLv = (lv: string): The => (lv === 'de_an_06' ? 'da06' : LV_THE_CDS.includes(lv) ? 'cds' : 'chung');
+type Rieng = { cot?: Record<string, number>; cao?: Record<string, number>; zoom?: number | 'vua'; nhomTheo?: NhomTheo; sapTheo?: SapTheo; sapNhieu?: TieuChiSap[]; the?: The };
 const TIEU_CHI_SAP: Record<KhoaSap, { ten: string; chieu: [string, string] }> = {
   han: { ten: 'Hạn hoàn thành', chieu: ['Sớm → muộn', 'Muộn → sớm'] },
   tinh_trang: { ten: 'Tình trạng', chieu: ['Cần xử lý trước', 'Hoàn thành trước'] },
@@ -288,8 +296,17 @@ export default function DanhMucNhiemVu() {
   }, [data, ch, tuan]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Phạm vi xem: đơn vị chỉ thấy nhiệm vụ mình chủ trì (đã duyệt giao); Thường trực có thể "xem như" một đơn vị
+  // Đầu mối lĩnh vực (Tổ CSKV: Đề án 06; Phòng VH-XH: CĐS – KHCN – ĐMST – NQ57) còn xem được mọi nhiệm vụ đã duyệt giao thuộc lĩnh vực của mình — chỉ xem, không sửa kết quả của đơn vị khác
   const dvXem = donVi ? hoSo?.don_vi_id ?? '__' : xemNhu;
-  const phamVi = tatCa.filter((x) => !dvXem || (x.n.chu_tri_don_vi_id === dvXem && x.n.trang_thai_giao === 'da_duyet'));
+  const the: The = rieng.the ?? 'chung';
+  const theoIdDong = useMemo(() => new Map(tatCa.map((x) => [x.n.id, x])), [tatCa]);
+  const theCua = (x: Dong): The => theCuaLv((x.cha ? theoIdDong.get(x.cha) ?? x : x).n.linh_vuc);
+  const phamViGoc = tatCa.filter((x) => !dvXem || (x.n.trang_thai_giao === 'da_duyet' && (x.n.chu_tri_don_vi_id === dvXem
+    || (donVi && ((dauMoiDa06(hoSo) && theCua(x) === 'da06') || (dauMoiCds(hoSo) && theCua(x) === 'cds'))))));
+  const coNgoai = donVi && phamViGoc.some((x) => x.n.chu_tri_don_vi_id !== dvXem);   // phạm vi xem có cả nhiệm vụ đơn vị khác chủ trì
+  const khopThe = (x: Dong) => the === 'chung' || theCua(x) === the;
+  const demThe = (t: The) => phamViGoc.filter((x) => !x.con.length && (t === 'chung' || theCua(x) === t)).length;
+  const phamVi = phamViGoc.filter(khopThe);
   const hienLa = phamVi.filter((x) => {
     if (!dvXem && locDv && x.n.chu_tri_don_vi_id !== locDv) return false;
     const k = x.tt.loai;
@@ -341,6 +358,18 @@ export default function DanhMucNhiemVu() {
       {thongBao && <div className={cx('flex items-start gap-2 rounded-xl px-4 py-2.5 text-sm', thongBao.loi ? 'bg-nguy-nhat text-nguy' : 'bg-[#DCFCE7] text-[#166534]')}>
         <span className="flex-1">{thongBao.loi ?? thongBao.ok}</span><button aria-label="Đóng" onClick={() => setThongBao(null)}><X className="h-4 w-4" /></button></div>}
 
+      {/* 3 thẻ lĩnh vực: Chung (tổng cả hai) · Đề án 06 · CĐS – KHCN – ĐMST (NQ57) */}
+      <div role="tablist" aria-label="Lĩnh vực nhiệm vụ" className="flex flex-wrap gap-1.5">
+        {THE_NV.map((t) => (
+          <button key={t.khoa} type="button" role="tab" aria-selected={the === t.khoa}
+            onClick={() => { setOSua(null); setChon(null); setRieng({ ...rieng, the: t.khoa }); }}
+            className={cx('flex h-10 items-center gap-2 rounded-xl border px-3.5 text-[0.8125rem] font-semibold', the === t.khoa ? 'border-[#6A0F14] bg-[#6A0F14] text-white' : 'border-vien bg-white text-den hover:bg-nen-2')}>
+            {t.nhan}
+            <span className={cx('mono rounded-full px-1.5 text-[0.6875rem]', the === t.khoa ? 'bg-white/20 text-white' : 'bg-nen-3 text-mo')}>{demThe(t.khoa)}</span>
+          </button>
+        ))}
+      </div>
+
       {/* Thanh lọc gọn: tình trạng (đếm) + tìm, đơn vị, xem như, thu phóng */}
       <ThanhLoc ds={viecLa} loc={locs} datLoc={batTatLoc} choDuyet={donVi ? null : viecLa.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
         moTk={moTk} datMoTk={setMoTk} soHien={hien.length}
@@ -368,10 +397,10 @@ export default function DanhMucNhiemVu() {
           <span className="flex-1" />
           <Zoom z={rieng.zoom} dat={(z) => setRieng({ ...rieng, zoom: z })} />
         </>} />
-      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem || !locDv || x.n.chu_tri_don_vi_id === locDv))} ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
+      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
         loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
         lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
-      {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length)} dv={data.dv} dvXem={dvXem} quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
+      {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length && khopThe(x))} dv={data.dv} dvXem={coNgoai ? '' : dvXem}quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
       <div className="flex items-start gap-4">
