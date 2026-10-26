@@ -3,7 +3,9 @@
 // Mỗi nhiệm vụ báo cáo = một dòng nhiem_vu_cap_nhat có tiền tố "Báo cáo tuần NN/YYYY:" -> không cần thêm bảng mới.
 // Hạn nộp lưu ở cau_hinh (khoá 'bao_cao_tuan'): thứ trong tuần + giờ.
 export const KHOA_BCT = 'bao_cao_tuan';
-export type CauHinhBCT = { thu: number; gio: number; phut?: number; bat: boolean };   // thu: 1 = thứ Hai … 7 = Chủ nhật
+export type MocGio = { thu: number; gio: number; phut?: number };
+// mo: bắt đầu nhận báo cáo (trước hạn, vd 7h thứ Hai); dong: kết thúc nhận (sau hạn, vd 11h thứ Tư). Bỏ trống = không giới hạn.
+export type CauHinhBCT = { thu: number; gio: number; phut?: number; bat: boolean; mo?: MocGio | null; dong?: MocGio | null };   // thu: 1 = thứ Hai … 7 = Chủ nhật
 export const BCT_MAC_DINH: CauHinhBCT = { thu: 5, gio: 17, bat: true };
 export const TEN_THU: Record<number, string> = { 1: 'thứ Hai', 2: 'thứ Ba', 3: 'thứ Tư', 4: 'thứ Năm', 5: 'thứ Sáu', 6: 'thứ Bảy', 7: 'Chủ nhật' };
 
@@ -73,4 +75,26 @@ export function tinhTrangTuan(soViec: number, daBao: number, guiTre: boolean, t:
   if (daBao >= soViec) return guiTre ? 'tre' : 'du';
   if (bayGio > t.han.getTime()) return daBao ? 'thieu' : 'qua_han';
   return daBao ? 'thieu' : 'chua';
+}
+
+// ---------- Cửa sổ nhận báo cáo của một kỳ: mốc hạn giữ nguyên (cách tính số liệu, nộp muộn), nhưng đơn vị chỉ nộp được từ `mo` đến `dong`
+const NGAY = 86400000;
+export function cuaSoNop(ch: CauHinhBCT, t: Tuan): { mo: Date | null; dong: Date | null } {
+  const han0 = ngayVN(t.han) - VN;                                   // 00:00 (giờ VN) của ngày hạn
+  const tai = (m: MocGio) => han0 + (m.thu - ch.thu) * NGAY + m.gio * 3600000 + (m.phut ?? 0) * 60000;
+  let mo = ch.mo ? tai(ch.mo) : null; if (mo !== null && mo > t.han.getTime()) mo -= 7 * NGAY;
+  let dong = ch.dong ? tai(ch.dong) : null; if (dong !== null && dong < t.han.getTime()) dong += 7 * NGAY;
+  return { mo: mo === null ? null : new Date(mo), dong: dong === null ? null : new Date(dong) };
+}
+export const nhanMoc = (d: Date) => {
+  const v = new Date(d.getTime() + VN), thu = ((v.getUTCDay() + 6) % 7) + 1;
+  return `${String(v.getUTCHours()).padStart(2, '0')}:${String(v.getUTCMinutes()).padStart(2, '0')} ${TEN_THU[thu]} ${String(v.getUTCDate()).padStart(2, '0')}/${String(v.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+// Trả thông báo nếu bây giờ ngoài thời gian nhận báo cáo của kỳ (lui < 0 = chuẩn bị trước, không áp dụng)
+export function kiemTraCuaSoNop(ch: CauHinhBCT, t: Tuan, lui: number, bayGio = Date.now()): string | null {
+  if (lui < 0) return null;
+  const { mo, dong } = cuaSoNop(ch, t);
+  if (mo && bayGio < mo.getTime()) return `Chưa đến thời gian nhận báo cáo của ${t.ten.split(' (')[0].toLowerCase()} — mở lúc ${nhanMoc(mo)}.`;
+  if (dong && bayGio > dong.getTime()) return `Đã hết thời gian nhận báo cáo của ${t.ten.split(' (')[0].toLowerCase()} — đóng lúc ${nhanMoc(dong)}. Liên hệ Cơ quan Thường trực để nhập thay.`;
+  return null;
 }

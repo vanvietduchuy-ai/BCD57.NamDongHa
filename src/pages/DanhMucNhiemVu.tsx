@@ -14,7 +14,7 @@ import {
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
 import { khoaChot, chupTuan, daQuaHan, type AnhChup } from '../lib/chotTuan';
-import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, laBaoCaoTuanBatKy, laBaoCaoTuanSau, laRutBaoCao, muonMs, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
+import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, cuaSoNop, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, kiemTraCuaSoNop, laBaoCaoTuanBatKy, laBaoCaoTuanSau, laRutBaoCao, muonMs, nhanMoc, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
@@ -259,6 +259,22 @@ export default function DanhMucNhiemVu() {
   // Tuần báo cáo (nhập ngay trên bảng A4): mặc định tuần hiện tại; lùi 1–3 tuần để nộp bù (ghi nhận nộp muộn)
   const [luiTuan, setLuiTuan] = useState(0);
   const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH, luiTuan), [data, luiTuan]);
+  // Thời gian nhận báo cáo (Thường trực cài: bắt đầu / kết thúc nhận): ngoài khoảng này đơn vị không nhập được; Thường trực nhập thay được
+  const loiCuaSo = !quanTri && data ? kiemTraCuaSoNop(data.bct, tuan, luiTuan) : null;
+  const cuaSoChu = useMemo(() => {
+    if (!data || (!data.bct.mo && !data.bct.dong)) return '';
+    const c = cuaSoNop(data.bct, tuan);
+    return `nhận từ ${c.mo ? nhanMoc(c.mo) : 'trước đó'} đến ${c.dong ? nhanMoc(c.dong) : 'khi sang kỳ sau'}`;
+  }, [data, tuan]);
+  // Đơn vị: trong thời gian nhận bù của tuần vừa hết hạn (hạn → kết thúc nhận) thì mở sẵn tuần đó, không phải lùi tay
+  const daChonTuan = useRef(false);
+  useEffect(() => {
+    if (!data || !donVi || daChonTuan.current) return;
+    daChonTuan.current = true;
+    if (!data.bct.dong) return;
+    const t1 = tuanCua(new Date(), data.bct, 1);
+    if (Date.now() > t1.han.getTime() && !kiemTraCuaSoNop(data.bct, t1, 1)) setLuiTuan(1);
+  }, [data, donVi]);
   const tatCa: Dong[] = useMemo(() => {
     if (!data) return [];
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
@@ -417,7 +433,7 @@ export default function DanhMucNhiemVu() {
           {(tim || locDv || locs.length > 0) && <button className="order-1 h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5 sm:order-none" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
           <span className="hidden flex-1 sm:block" />
         </>} />
-      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
+      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`} cuaSo={cuaSoChu} khoa={!!loiCuaSo}
         loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
         lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length && khopThe(x))} dv={data.dv} dvXem={coNgoai ? '' : dvXem}quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
@@ -433,6 +449,7 @@ export default function DanhMucNhiemVu() {
               const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
               const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && suaDuocBang : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
               if (!duoc) return false;
+              if (khoa === 'ket_qua_tuan' && loiCuaSo) { setThongBao({ loi: loiCuaSo }); return false; }
               setOSua({ id: x.n.id, khoa, o }); return true;
             }}
             keoTha={(idKeo, dich) => {
@@ -1421,7 +1438,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 }
 
 // ---------- Dải báo cáo tuần: tiến độ báo cáo tuần này + hạn; một chạm lọc nhiệm vụ chưa báo cáo
-function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
+function DaiBaoCaoTuan({ cuaSo = '', khoa = false, ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { cuaSo?: string; khoa?: boolean; ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
   if (!ds.length && !lui) return null;
   const toiDa = chuanBi ? -1 : 0;
   const da = ds.filter((x) => x.tuanCn.length).length, con = ds.length - da;
@@ -1434,6 +1451,7 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, 
       <span className="min-w-0 flex-[1_1_calc(100%-2.25rem)] text-[0.8125rem] leading-snug sm:flex-1">
         <b>Báo cáo {ten.toLowerCase()}:</b> <b className="mono">{da}/{ds.length}</b> nhiệm vụ đã báo cáo
         <span className="text-mo-2"> · hạn {hanChu} ({conLai})</span>
+        {cuaSo && <span className={cx('block text-xs', khoa ? 'font-semibold text-nguy' : 'text-mo')}>Thời gian {cuaSo}{khoa ? ' — hiện đang đóng' : ''}</span>}
         {lui > 0 && <span className="block text-xs font-semibold text-[#B45309]">Đang xem tuần đã qua — cột Tiến độ và Tình trạng là số liệu chốt tại hạn của tuần đó; nộp bây giờ được ghi nhận là nộp muộn.</span>}
         {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau: {ds.length} nhiệm vụ phải báo cáo (chưa hoàn thành, chưa tạm dừng). Nội dung chuẩn bị trước chưa đổi tiến độ / tình trạng.</span>}
         {nhap && !xong && <span className="hidden text-xs text-mo sm:block">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}

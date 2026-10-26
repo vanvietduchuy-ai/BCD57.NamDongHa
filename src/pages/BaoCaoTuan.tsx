@@ -201,12 +201,32 @@ function HopCaiDat({ ch, dong, xong }: { ch: CauHinhBCT; dong: () => void; xong:
     if (error) setLoi(loiDe(error)); else xong();
   };
   return (
-    <HopThoai mo dong={dong} tieuDe="Hạn nộp báo cáo tuần">
+    <HopThoai mo dong={dong} tieuDe="Hạn nộp & thời gian nhận báo cáo tuần">
       <div className="flex flex-col gap-3">
         <div className="grid grid-cols-2 gap-3">
           <O nhan="Thứ trong tuần"><select className={lopO} value={g.thu} onChange={(e) => setG({ ...g, thu: Number(e.target.value) })}>{Object.entries(TEN_THU).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></O>
           <O nhan="Giờ"><select className={lopO} value={`${g.gio}:${g.phut ?? 0}`} onChange={(e) => { const [h, m] = e.target.value.split(':').map(Number); setG({ ...g, gio: h, phut: m }); }}>
             {Array.from({ length: 24 * 4 }, (_, i) => [Math.floor(i / 4), (i % 4) * 15]).map(([h, m]) => <option key={`${h}:${m}`} value={`${h}:${m}`}>{gioHan({ ...g, gio: h, phut: m })}</option>)}</select></O>
+        </div>
+        <div className="flex flex-col gap-1.5 rounded-xl bg-nen p-3">
+          <b className="text-[0.8125rem]">Bắt đầu nhận báo cáo</b>
+          <div className="grid grid-cols-2 gap-3">
+            <select className={lopO} aria-label="Bắt đầu nhận báo cáo — thứ" value={g.mo?.thu ?? ''} onChange={(e) => setG({ ...g, mo: e.target.value ? { thu: Number(e.target.value), gio: g.mo?.gio ?? 7, phut: g.mo?.phut ?? 0 } : null })}>
+              <option value="">Không giới hạn</option>{Object.entries(TEN_THU).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+            <select className={lopO} aria-label="Bắt đầu nhận báo cáo — giờ" disabled={!g.mo} value={`${g.mo?.gio ?? 7}:${g.mo?.phut ?? 0}`} onChange={(e) => { const [h, m] = e.target.value.split(':').map(Number); if (g.mo) setG({ ...g, mo: { ...g.mo, gio: h, phut: m } }); }}>
+              {Array.from({ length: 24 * 4 }, (_, i) => [Math.floor(i / 4), (i % 4) * 15]).map(([h, m]) => <option key={`${h}:${m}`} value={`${h}:${m}`}>{gioHan({ ...g, gio: h, phut: m })}</option>)}</select>
+          </div>
+          <span className="text-xs text-mo">Từ lúc này đơn vị mới nhập được báo cáo của kỳ (trước hạn). VD: 07:00 thứ Hai.</span>
+        </div>
+        <div className="flex flex-col gap-1.5 rounded-xl bg-nen p-3">
+          <b className="text-[0.8125rem]">Kết thúc nhận báo cáo</b>
+          <div className="grid grid-cols-2 gap-3">
+            <select className={lopO} aria-label="Kết thúc nhận báo cáo — thứ" value={g.dong?.thu ?? ''} onChange={(e) => setG({ ...g, dong: e.target.value ? { thu: Number(e.target.value), gio: g.dong?.gio ?? 11, phut: g.dong?.phut ?? 0 } : null })}>
+              <option value="">Không giới hạn</option>{Object.entries(TEN_THU).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+            <select className={lopO} aria-label="Kết thúc nhận báo cáo — giờ" disabled={!g.dong} value={`${g.dong?.gio ?? 11}:${g.dong?.phut ?? 0}`} onChange={(e) => { const [h, m] = e.target.value.split(':').map(Number); if (g.dong) setG({ ...g, dong: { ...g.dong, gio: h, phut: m } }); }}>
+              {Array.from({ length: 24 * 4 }, (_, i) => [Math.floor(i / 4), (i % 4) * 15]).map(([h, m]) => <option key={`${h}:${m}`} value={`${h}:${m}`}>{gioHan({ ...g, gio: h, phut: m })}</option>)}</select>
+          </div>
+          <span className="text-xs text-mo">Sau lúc này đơn vị không nhập được nữa (sau hạn; nộp sau hạn tính là nộp muộn). VD: 11:00 thứ Tư.</span>
         </div>
         <p className="m-0 text-xs text-mo">Áp dụng cho tất cả đơn vị chủ trì nhiệm vụ. Số liệu tuần N tính từ hạn nộp tuần N-1 đến hạn nộp tuần N; qua hạn thì chuyển sang kỳ kế tiếp.</p>
         {loi && <HopLoi loi={loi} />}
