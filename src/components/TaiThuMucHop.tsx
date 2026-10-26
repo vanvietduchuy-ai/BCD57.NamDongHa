@@ -78,8 +78,14 @@ export default function TaiThuMucHop({ mo, dong, p, dsPhien, xong }: { mo: boole
         if (ins.error) throw ins.error;
         const id = ins.data.id as string;
         ids.push(id);
-        // Tài liệu họp không phải văn bản đi của Thường trực: gỡ khỏi sổ công văn đi nếu hệ thống tự ghi
-        if (khongVaoSo) await supabase.from('so_van_ban').delete().eq('van_ban_id', id);
+                // Hồ sơ họp không tự vào sổ; bỏ tích thì là văn bản Thường trực ban hành -> ghi vào sổ đi (số hệ thống tự cấp)
+        if (!khongVaoSo) {
+          const tt = (await supabase.rpc('don_vi_thuong_truc')).data as string | null;
+          if (tt) {
+            const so = await supabase.from('so_van_ban').insert({ don_vi_id: tt, loai_so: 'di', van_ban_id: id, ngay: m?.ngay_ban_hanh || new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date()) });
+            if (so.error && !/duplicate|unique/i.test(so.error.message)) throw so.error;
+          }
+        }
         dat(i, { tt: 'xong', ghi: m?.trich_yeu ? undefined : 'Không đọc được nội dung — lấy tên tệp làm trích yếu' });
       } catch (e) { dat(i, { tt: 'loi', ghi: loiDe(e) }); }
     }

@@ -56,9 +56,9 @@ export function idTuLinkDrive(s: string): string | null {
   return m ? m[1] : null;
 }
 
-// Thư mục -> sổ công văn của Cơ quan Thường trực
+// Thư mục -> sổ công văn của Cơ quan Thường trực (hồ sơ họp BCĐ không tự vào sổ)
 export const SO_THEO_THU_MUC = (t: ThuMuc): 'den' | 'di' | null =>
-  t.startsWith('cap_tren') ? 'den' : ['bcd_phuong_ban_hanh', 'hop_bcd', 'bao_cao_gui_cap_tren'].includes(t) ? 'di' : null;
+  t.startsWith('cap_tren') ? 'den' : ['bcd_phuong_ban_hanh', 'bao_cao_gui_cap_tren'].includes(t) ? 'di' : null;
 
 // Xoá văn bản trong kho (Thường trực): gỡ khỏi sổ, bỏ liên kết; tệp Google Drive vào thùng rác
 export async function xoaVanBan(id: string) {

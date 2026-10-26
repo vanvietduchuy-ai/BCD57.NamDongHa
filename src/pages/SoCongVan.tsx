@@ -398,6 +398,9 @@ function HopVaoSoBcd({ so, chuSo, dong, xong }: { so: 'den' | 'di'; chuSo: strin
       {taiMoi && <FormVanBan mo dong={() => setTaiMoi(false)} dau={{ thu_muc: den ? 'cap_tren_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
         xong={async (id) => {
           setTaiMoi(false);
+          // Văn bản mới tải từ hộp của Ban Chỉ đạo: hệ thống tự ghi thêm vào sổ Thường trực -> gỡ để hai sổ độc lập
+          const tt = (await supabase.rpc('don_vi_thuong_truc')).data as string | null;
+          if (tt) await supabase.from('so_van_ban').delete().eq('van_ban_id', id).eq('don_vi_id', tt);
           const r = await supabase.from('van_ban').select('id, so_ky_hieu, trich_yeu, co_quan_ban_hanh, ngay_ban_hanh, loai').eq('id', id).maybeSingle();
           if (r.data) chonVb(r.data as VbChon); void ds.taiLai();
         }} />}
