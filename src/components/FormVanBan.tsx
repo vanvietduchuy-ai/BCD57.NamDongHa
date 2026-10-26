@@ -21,9 +21,11 @@ const tuVb = (v?: Partial<VanBan>): G => ({
 
 // Thêm / sửa văn bản trong kho. Tệp đưa lên Google Drive qua Edge Function (thư mục "Kho văn bản/<thư mục>").
 // phienDs: có thì hiện ô chọn phiên họp khi thư mục là "Hồ sơ họp BCĐ" (mỗi phiên họp một bộ hồ sơ)
-export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, phienDau }: {
+export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, phienDau, thuMucChoPhep }: {
   mo: boolean; dong: () => void; vb?: VanBan; dau?: Partial<VanBan>; xong: (id: string) => void; daXoa?: () => void;
   phienDs?: PhienHopKho[]; phienDau?: string;
+  /** Giới hạn các thư mục được chọn (vd. đang ở tab Sổ đi thì chỉ cho chọn thư mục tự vào sổ đi) */
+  thuMucChoPhep?: ThuMuc[];
 }) {
   const [phien, setPhien] = useState(phienDau ?? '');
   const [dangXoa, setDangXoa] = useState(false);
@@ -114,7 +116,7 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
           <O nhan="Loại văn bản"><select className={lopO} value={g.loai} onChange={(e) => dat('loai', e.target.value as LoaiVb)}>
             {Object.entries(LOAI_VB).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></O>
           <O nhan="Thư mục" goiY={SO_THEO_THU_MUC(g.thu_muc) === 'den' ? 'Tự vào sổ công văn đến' : SO_THEO_THU_MUC(g.thu_muc) === 'di' ? 'Tự vào sổ công văn đi' : undefined}><select className={lopO} value={g.thu_muc} onChange={(e) => dat('thu_muc', e.target.value as ThuMuc)}>
-            {Object.entries(THU_MUC).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></O>
+            {Object.entries(THU_MUC).filter(([k]) => !thuMucChoPhep || thuMucChoPhep.includes(k as ThuMuc)).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></O>
           {phienDs && g.thu_muc === 'hop_bcd' && <O nhan="Phiên họp" goiY={phienDs.length ? undefined : 'Chưa có phiên họp — tạo phiên trong thư mục Hồ sơ họp BCĐ'}>
             <select className={lopO} value={phien} onChange={(e) => setPhien(e.target.value)}>
               <option value="">— Chưa xếp phiên họp —</option>

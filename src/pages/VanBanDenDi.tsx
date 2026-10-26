@@ -46,22 +46,24 @@ export default function VanBanDenDi() {
   const [xemBc, setXemBc] = useState<BaoCaoDen | null>(null);
   const [moGui, setMoGui] = useState(false);
   const [tb, setTb] = useState<string | null>(null);
+  // Số dòng tải mỗi lần; bấm "Xem thêm" để tải tiếp, không để văn bản cũ biến mất
+  const [gh, setGh] = useState(200);
 
   const { data, loi, dangTai, taiLai } = useDuLieu(async () => {
     const tt = (await supabase.rpc('don_vi_thuong_truc')).data as string | null;
     const cua = quanTri ? tt : hoSo?.don_vi_id ?? null;               // đơn vị của mình trong luồng gửi nhận
     const [a, b, c, d] = await Promise.all([
-      supabase.from('v_cong_van_nhan').select('*').eq('don_vi_id', cua ?? '').order('gui_luc', { ascending: false }).limit(200),
-      supabase.from('v_cong_van').select('*').eq('tu_don_vi_id', cua ?? '').order('gui_luc', { ascending: false }).limit(200),
+      supabase.from('v_cong_van_nhan').select('*').eq('don_vi_id', cua ?? '').order('gui_luc', { ascending: false }).limit(gh),
+      supabase.from('v_cong_van').select('*').eq('tu_don_vi_id', cua ?? '').order('gui_luc', { ascending: false }).limit(gh),
       quanTri ? supabase.from('don_vi').select('id, ten, loai').eq('hoat_dong', true).order('thu_tu') : Promise.resolve({ data: [], error: null }),
       supabase.from('v_so_van_ban').select('*').eq('don_vi_id', cua ?? '').eq('loai_so', 'den').not('nop_bao_cao_id', 'is', null)
-        .order('tao_luc', { ascending: false }).limit(200),
+        .order('tao_luc', { ascending: false }).limit(gh),
     ]);
     return {
       tt, cua, nhan: (kq(a) ?? []) as Nhan[], gui: (kq(b) ?? []) as Gui[], bc: (kq(d) ?? []) as BaoCaoDen[],
       dv: ((kq(c) ?? []) as { id: string; ten: string; loai: string }[]).filter((d) => d.id !== tt && d.loai !== 'lanh_dao_bcd'),
     };
-  });
+  }, [gh]);
 
   const t = khongDau(tim.trim());
   const hop = (x: VbCot & { ghi_chu: string | null }, them = '') => !t || khongDau(`${x.so_ky_hieu ?? ''} ${x.trich_yeu} ${x.co_quan_ban_hanh} ${x.ghi_chu ?? ''} ${them}`).includes(t);
@@ -71,6 +73,9 @@ export default function VanBanDenDi() {
   ].sort((p, q) => q.luc.localeCompare(p.luc)), [data, t]); // eslint-disable-line react-hooks/exhaustive-deps
   const dsGui = useMemo(() => (data?.gui ?? []).filter((x) => hop(x, x.noi_nhan.map((n) => n.ten).join(' '))), [data, t]); // eslint-disable-line react-hooks/exhaustive-deps
   const chuaNhan = (data?.nhan ?? []).filter((x) => !x.nhan_luc).length;
+  const conNhan = (data?.nhan.length ?? 0) >= gh || (data?.bc.length ?? 0) >= gh;
+  const conGui = (data?.gui.length ?? 0) >= gh;
+  const xemThem = <div className="flex justify-center"><Nut onClick={() => setGh((x) => x + 200)} dangChay={dangTai}>Xem thêm văn bản cũ hơn</Nut></div>;
 
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
   if (dangTai && !data) return <DangTai />;
@@ -153,6 +158,7 @@ export default function VanBanDenDi() {
           </ul>
         </The>
       ))}
+      {tab === 'nhan' && conNhan && xemThem}
 
       {tab === 'gui' && (dsGui.length === 0 ? <Rong>Chưa gửi văn bản nào.</Rong> : (
         <The className="overflow-hidden">
@@ -184,6 +190,7 @@ export default function VanBanDenDi() {
           </ul>
         </The>
       ))}
+      {tab === 'gui' && conGui && xemThem}
 
       <XemNhan x={xemNhan} dong={() => { setXemNhan(null); void taiLai(); }} xong={() => { setXemNhan(null); setTb('Đã xác nhận nhận văn bản.'); void taiLai(); }} />
       <XemBaoCao x={xemBc} dong={() => setXemBc(null)} />

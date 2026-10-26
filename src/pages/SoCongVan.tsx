@@ -8,7 +8,7 @@ import { kq, useDuLieu } from '../lib/useDuLieu';
 import { useAuth, laQuanTri } from '../lib/auth';
 import { ngay } from '../lib/dinhDang';
 import { khongDau } from '../lib/nhiemVu';
-import { COT_VB, LOAI_VB, type LoaiVb, type VanBan } from '../lib/vanBan';
+import { COT_VB, LOAI_VB, SO_THEO_THU_MUC, THU_MUC, type LoaiVb, type ThuMuc, type VanBan } from '../lib/vanBan';
 import { linkXemDrive, ThongTinVanBan, type VanBanDaNop } from '../components/VanBanPdf';
 import { moTepDrive } from '../components/TepDrive';
 import FormVanBan from '../components/FormVanBan';
@@ -65,7 +65,7 @@ export default function SoCongVan() {
   const theoSo = useMemo(() => {
     const t = khongDau(tim.trim());
     return (data?.dong ?? []).filter((d) => d.loai_so === so
-      && (!t || khongDau(`${d.so_ky_hieu ?? ''} ${d.trich_yeu} ${d.noi_gui ?? ''} ${d.noi_nhan ?? ''} ${d.nguoi_ky ?? ''} ${d.ky_ten ?? ''} ${LOAI_VB[d.loai] ?? ''} ${(d.tep ?? []).map((f) => f.ten).join(' ')}`).includes(t)));
+      && (!t || khongDau(`${d.so_thu_tu} ${d.so_ky_hieu ?? ''} ${d.trich_yeu} ${d.noi_gui ?? ''} ${d.noi_nhan ?? ''} ${d.nguoi_ky ?? ''} ${d.ky_ten ?? ''} ${LOAI_VB[d.loai] ?? ''} ${(d.tep ?? []).map((f) => f.ten).join(' ')}`).includes(t)));
   }, [data, so, tim]);
   const demLoai = useMemo(() => {
     const m = new Map<LoaiVb, number>();
@@ -95,7 +95,7 @@ export default function SoCongVan() {
     const ws = XLSX.utils.json_to_sheet(dong);
     ws['!cols'] = [8, 12, 12, 18, 12, 30, 60, 30, 20, 45, 40].map((w) => ({ wch: w }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, so === 'den' ? 'Sổ đến' : 'Sổ đi');
+    XLSX.utils.book_append_sheet(wb, ws, `${so === 'den' ? 'Sổ đến' : 'Sổ đi'} ${cuaSo === 'bcd' ? 'BCĐ' : 'Thường trực'}`);
     // Thống kê số văn bản theo loại (cả sổ đến và sổ đi trong năm)
     const tat = data?.dong ?? [];
     const tk = THU_TU_LOAI.map((k) => {
@@ -108,7 +108,7 @@ export default function SoCongVan() {
     ws2['!cols'] = [22, 10, 10, 10].map((w) => ({ wch: w }));
     XLSX.utils.book_append_sheet(wb, ws2, 'Theo loại');
     const duoi = loai ? `-${khongDau(LOAI_VB[loai]).replace(/\s+/g, '-')}` : '';
-    XLSX.writeFile(wb, `so-cong-van-${so === 'den' ? 'den' : 'di'}${duoi}-${nam}.xlsx`);
+    XLSX.writeFile(wb, `so-cong-van-${cuaSo === 'bcd' ? 'bcd' : 'thuong-truc'}-${so === 'den' ? 'den' : 'di'}${duoi}-${nam}.xlsx`);
   };
 
   if (!duocXem) return <><TieuDeTrang ten="Sổ công văn" /><Rong>Sổ công văn đến, đi do Thường trực Ban Chỉ đạo theo dõi.</Rong></>;
@@ -141,7 +141,7 @@ export default function SoCongVan() {
         </div>
         <label className="relative sm:min-w-52 sm:flex-1">
           <Search className="pointer-events-none absolute left-3 top-3 h-5 w-5 text-mo" />
-          <input className={cx(lopO, 'w-full bg-white pl-10')} placeholder="Tìm số, trích yếu, nơi gửi…" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm trong sổ" />
+          <input className={cx(lopO, 'w-full bg-white pl-10')} placeholder="Tìm số đến/đi, số ký hiệu, trích yếu, nơi gửi…" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm trong sổ" />
         </label>
       </div>
 
@@ -176,6 +176,7 @@ export default function SoCongVan() {
       <ChiTietSo d={chon} cuaSo={cuaSo} dong={() => setChon(null)} xong={() => { setChon(null); void taiLai(); }} />
       {quanTri && cuaSo === 'bcd' && them && <HopVaoSoBcd so={so} chuSo={data?.chuSo ?? ''} dong={() => setThem(false)} xong={() => { setThem(false); void taiLai(); }} />}
       {quanTri && cuaSo === 'cqtt' && <FormVanBan mo={them} dong={() => setThem(false)} dau={{ thu_muc: so === 'den' ? 'cap_tren_cong_an_tinh' : 'bcd_phuong_ban_hanh', loai: 'cong_van' }}
+        thuMucChoPhep={(Object.keys(THU_MUC) as ThuMuc[]).filter((k) => SO_THEO_THU_MUC(k) === so)}
         xong={() => { setThem(false); void taiLai(); }} />}
     </>
   );
@@ -311,7 +312,7 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
             </>} />
           )}
           {!sua && <DsTepKem tep={d.tep} />}
-          {!sua && <O nhan="Ghi chú (xử lý, chuyển…)"><input className={lopO} value={g.ghi_chu} onChange={(e) => setG({ ...g, ghi_chu: e.target.value })} /></O>}
+          {!sua && <O nhan="Ghi chú (xử lý, chuyển…)"><input className={lopO} readOnly={!quanTri} value={g.ghi_chu} onChange={(e) => setG({ ...g, ghi_chu: e.target.value })} /></O>}
           {loi && <HopLoi loi={loi} />}
           <div className="flex flex-wrap items-center justify-end gap-2">
             {quanTri && !sua && <>
@@ -322,7 +323,7 @@ function ChiTietSo({ d, cuaSo, dong, xong }: { d: Dong | null; cuaSo: 'bcd' | 'c
             </>}
             <span className="hidden flex-1 sm:block" />
             <Nut onClick={sua ? () => setSua(false) : dong}>{sua ? 'Huỷ sửa' : 'Đóng'}</Nut>
-            <Nut kieu="chinh" dangChay={dang} onClick={() => void luu()}>{sua ? 'Lưu thay đổi' : 'Lưu ghi chú'}</Nut>
+            {quanTri && <Nut kieu="chinh" dangChay={dang} onClick={() => void luu()}>{sua ? 'Lưu thay đổi' : 'Lưu ghi chú'}</Nut>}
           </div>
         </div>
       </HopThoai>
