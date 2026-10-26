@@ -2,7 +2,7 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { dauMoiCds, dauMoiDa06, laQuanTri, useAuth } from '../lib/auth';
@@ -103,8 +103,8 @@ type TieuChiSap = { khoa: KhoaSap; giam?: boolean };
 // Thẻ lĩnh vực trên bảng: Chung = tổng cả hai nhóm; Đề án 06; CĐS – KHCN – ĐMST (NQ 57). Mỗi nhiệm vụ thuộc một lĩnh vực chính (trường linh_vuc);
 // nhiệm vụ con theo lĩnh vực của nhiệm vụ lớn chứa nó. Nhiệm vụ lĩnh vực "Chung" chỉ hiện ở thẻ Chung.
 type The = 'chung' | 'da06' | 'cds';
-const THE_NV: { khoa: The; nhan: string }[] = [
-  { khoa: 'chung', nhan: 'Chung' }, { khoa: 'da06', nhan: 'Đề án 06' }, { khoa: 'cds', nhan: 'CĐS – KHCN – ĐMST (NQ57)' },
+const THE_NV: { khoa: The; nhan: string; ngan?: string }[] = [
+  { khoa: 'chung', nhan: 'Chung' }, { khoa: 'da06', nhan: 'Đề án 06' }, { khoa: 'cds', nhan: 'CĐS – KHCN – ĐMST (NQ57)', ngan: 'CĐS – NQ57' },
 ];
 const LV_THE_CDS: string[] = ['nq57', 'khcn_dmst', 'chuyen_doi_so'];
 const theCuaLv = (lv: string): The => (lv === 'de_an_06' ? 'da06' : LV_THE_CDS.includes(lv) ? 'cds' : 'chung');
@@ -220,6 +220,7 @@ export default function DanhMucNhiemVu() {
   const [moThem, setMoThem] = useState(false);
   const [themCon, setThemCon] = useState<string | null>(null);   // thêm nhiệm vụ con vào nhiệm vụ lớn (id)
   const [moTk, setMoTk] = useState(false);
+  const [moLoc, setMoLoc] = useState(false); // điện thoại: thu gọn các tuỳ chọn lọc phụ
   const [oSua, setOSua] = useState<{ id: string; khoa: KhoaCot; o: HTMLElement } | null>(null);
   const [sua, setSua] = useState<NhiemVu | null>(null);
   const [thongBao, setThongBao] = useState<{ loi?: string; ok?: string } | null>(null);
@@ -359,13 +360,13 @@ export default function DanhMucNhiemVu() {
         <span className="flex-1">{thongBao.loi ?? thongBao.ok}</span><button aria-label="Đóng" onClick={() => setThongBao(null)}><X className="h-4 w-4" /></button></div>}
 
       {/* 3 thẻ lĩnh vực: Chung (tổng cả hai) · Đề án 06 · CĐS – KHCN – ĐMST (NQ57) */}
-      <div role="tablist" aria-label="Lĩnh vực nhiệm vụ" className="flex flex-wrap gap-1.5">
+      <div role="tablist" aria-label="Lĩnh vực nhiệm vụ" className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-wrap">
         {THE_NV.map((t) => (
           <button key={t.khoa} type="button" role="tab" aria-selected={the === t.khoa}
             onClick={() => { setOSua(null); setChon(null); setRieng({ ...rieng, the: t.khoa }); }}
-            className={cx('flex h-10 items-center gap-2 rounded-xl border px-3.5 text-[0.8125rem] font-semibold', the === t.khoa ? 'border-[#6A0F14] bg-[#6A0F14] text-white' : 'border-vien bg-white text-den hover:bg-nen-2')}>
-            {t.nhan}
-            <span className={cx('mono rounded-full px-1.5 text-[0.6875rem]', the === t.khoa ? 'bg-white/20 text-white' : 'bg-nen-3 text-mo')}>{demThe(t.khoa)}</span>
+            className={cx('flex h-10 min-w-0 items-center justify-center gap-1 rounded-xl border px-1.5 text-[0.75rem] font-semibold sm:justify-start sm:gap-2 sm:px-3.5 sm:text-[0.8125rem]', the === t.khoa ? 'border-[#6A0F14] bg-[#6A0F14] text-white' : 'border-vien bg-white text-den hover:bg-nen-2')}>
+            <span className="truncate"><span className={t.ngan ? 'hidden sm:inline' : ''}>{t.nhan}</span>{t.ngan && <span className="sm:hidden">{t.ngan}</span>}</span>
+            <span className={cx('mono shrink-0 rounded-full px-1.5 text-[0.6875rem]', the === t.khoa ? 'bg-white/20 text-white' : 'bg-nen-3 text-mo')}>{demThe(t.khoa)}</span>
           </button>
         ))}
       </div>
@@ -374,10 +375,13 @@ export default function DanhMucNhiemVu() {
       <ThanhLoc ds={viecLa} loc={locs} datLoc={batTatLoc} choDuyet={donVi ? null : viecLa.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
         moTk={moTk} datMoTk={setMoTk} soHien={hien.length}
         congCu={<>
-          <label className="relative min-w-[200px] flex-[1_1_100%] sm:flex-1 sm:max-w-[340px]">
+          <label className="relative order-1 min-w-[200px] flex-[1_1_100%] sm:order-none sm:flex-1 sm:max-w-[340px]">
             <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-mo" />
             <input className="h-9 w-full rounded-lg border border-vien bg-nen-2 pl-8 pr-2 text-[0.8125rem] outline-none focus:border-xanh focus:bg-white" placeholder="Tìm nội dung, đơn vị, kết quả" value={tim} onChange={(e) => setTim(e.target.value)} aria-label="Tìm nhiệm vụ" />
           </label>
+          <button type="button" onClick={() => setMoLoc(!moLoc)} aria-expanded={moLoc} className={cx('flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-[0.8125rem] font-semibold sm:hidden', moLoc ? 'border-[#8E1B22] bg-nen' : 'border-vien bg-nen-2')}>
+            <SlidersHorizontal className="h-4 w-4" />Bộ lọc</button>
+          <div className={cx('order-2 basis-full flex-wrap items-center gap-2 border-t border-vien pt-2 sm:order-none sm:contents', moLoc ? 'flex' : 'hidden')}>
           <select className="h-9 min-w-[140px] flex-1 rounded-lg border border-vien bg-nen-2 px-2 text-[0.8125rem] sm:max-w-[220px] sm:flex-none" value={nhomTheo} onChange={(e) => setRieng({ ...rieng, nhomTheo: e.target.value as NhomTheo })} aria-label="Nhóm nhiệm vụ theo">
             {(Object.keys(TEN_NHOM_THEO) as NhomTheo[]).filter((k) => !(donVi && k === 'don_vi')).map((k) => <option key={k} value={k}>{TEN_NHOM_THEO[k]}</option>)}
           </select>
@@ -393,9 +397,11 @@ export default function DanhMucNhiemVu() {
               <option value="">Xem: toàn bộ</option>{data.dv.map((d) => <option key={d.id} value={d.id}>Xem như: {tenNgan(d.ten)}</option>)}
             </select>
           )}
-          {(tim || locDv || locs.length > 0) && <button className="h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
-          <span className="flex-1" />
+          <span className="hidden flex-1 sm:block" />
           <Zoom z={rieng.zoom} dat={(z) => setRieng({ ...rieng, zoom: z })} />
+          </div>
+          {(tim || locDv || locs.length > 0) && <button className="order-1 h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5 sm:order-none" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
+          <span className="hidden flex-1 sm:block" />
         </>} />
       <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`}
         loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
@@ -1411,19 +1417,19 @@ function DaiBaoCaoTuan({ ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, 
   return (
     <div className={cx('flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-2xl border px-3 py-2', xong ? 'border-[#BBF7D0] bg-[#F0FDF4]' : gap ? 'border-[#FBCFD4] bg-[#FFF5F6]' : 'border-[#DDD6FE] bg-[#F7F5FF]')}>
       <CalendarClock className={cx('h-5 w-5 shrink-0', xong ? 'text-[#166534]' : gap ? 'text-nguy' : 'text-[#6D28D9]')} />
-      <span className="min-w-0 flex-1 text-[0.8125rem] leading-snug">
+      <span className="min-w-0 flex-[1_1_calc(100%-2.25rem)] text-[0.8125rem] leading-snug sm:flex-1">
         <b>Báo cáo {ten.toLowerCase()}:</b> <b className="mono">{da}/{ds.length}</b> nhiệm vụ đã báo cáo
         <span className="text-mo-2"> · hạn {hanChu} ({conLai})</span>
         {lui > 0 && <span className="block text-xs font-semibold text-[#B45309]">Đang xem tuần đã qua — cột Tiến độ và Tình trạng là số liệu chốt tại hạn của tuần đó; nộp bây giờ được ghi nhận là nộp muộn.</span>}
         {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau: {ds.length} nhiệm vụ phải báo cáo (chưa hoàn thành, chưa tạm dừng). Nội dung chuẩn bị trước chưa đổi tiến độ / tình trạng.</span>}
-        {nhap && !xong && <span className="block text-xs text-mo">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
+        {nhap && !xong && <span className="hidden text-xs text-mo sm:block">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
       </span>
       <select value={lui} onChange={(e) => datLui(Number(e.target.value))} aria-label="Chọn tuần báo cáo"
-        className="h-9 w-full shrink-0 rounded-lg border border-vien bg-white px-2 text-[0.8125rem] font-semibold sm:w-auto sm:max-w-[320px]">
+        className="h-9 min-w-0 flex-1 rounded-lg border border-vien bg-white px-2 text-[0.8125rem] font-semibold sm:max-w-[320px] sm:flex-none">
         {Array.from({ length: 3 - toiDa + 1 }, (_, i) => 3 - i).map((v) => <option key={v} value={v}>{nhanTuan(v)}</option>)}
       </select>
       {!xong && <button onClick={() => datLoc(!loc)} aria-pressed={loc}
-        className={cx('h-9 w-full shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold sm:w-auto', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>
+        className={cx('h-9 shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>
         {loc ? 'Hiện tất cả' : `Chưa báo cáo (${con})`}</button>}
     </div>
   );
