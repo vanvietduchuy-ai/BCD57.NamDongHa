@@ -18,7 +18,9 @@ import { LienLacDonVi } from '../components/LienLacTrucTiep';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
 
 type NvT = NhiemVu;
-type DonVi = { id: string; ten: string; loai: string | null; thu_tu: number | null };
+type DonVi = { id: string; ma: string | null; ten: string; loai: string | null; thu_tu: number | null; phai_bao_cao: boolean };
+// Dòng nhóm "Các trường công lập" chỉ hiện khi có nhiệm vụ giao cho nhóm; từng trường vẫn hiện đủ
+const MA_NHOM = 'TRUONG_HOC';
 type Viec = { n: NvT; tuan: CapNhatTuan[] };
 
 export default function BaoCaoTuan() {
@@ -35,7 +37,7 @@ export default function BaoCaoTuan() {
     const [a, b, c, d] = await Promise.all([
       supabase.from('cau_hinh').select('khoa, gia_tri').in('khoa', [KHOA_BCT, KHOA_CAU_HINH]),
       supabase.from('v_nhiem_vu').select(COT_NV).eq('trang_thai_giao', 'da_duyet'),
-      supabase.from('don_vi').select('id, ten, loai, thu_tu').eq('hoat_dong', true).order('thu_tu'),
+      supabase.from('don_vi').select('id, ma, ten, loai, thu_tu, phai_bao_cao').eq('hoat_dong', true).order('thu_tu'),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc, phan_tram, boi_ten, trang_thai_moi').order('luc', { ascending: false }).limit(4000),
     ]);
     const ch = (kq(a) ?? []) as { khoa: string; gia_tri: unknown }[];
@@ -102,13 +104,16 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
     const muon = Math.max(0, ...bao.map((x) => muonMs(x.tuan, tuan.han)));
     const cuoi = bao.flatMap((x) => x.tuan).sort((a, b) => b.luc.localeCompare(a.luc))[0]?.luc ?? null;
     return { d, ds, bao, cuoi, muon, tt: tinhTrangTuan(ds.length, bao.length, muon > 0, tuan) };
-  }).filter((x) => x.ds.length);
+  // Hiện ĐỦ mọi đơn vị phải báo cáo (kể cả đơn vị tuần này chưa có nhiệm vụ → "Không có nhiệm vụ"); đơn vị không bắt buộc báo cáo chỉ hiện khi có nhiệm vụ
+  }).filter((x) => x.ds.length || (x.d.phai_bao_cao && x.d.ma !== MA_NHOM));
+  const coViec = dong.filter((x) => x.ds.length);
   const chuaDu = dong.filter((x) => ['chua', 'qua_han', 'thieu'].includes(x.tt));
   const du = dong.filter((x) => x.tt === 'du' || x.tt === 'tre').length;
+  const khongViec = dong.length - coViec.length;
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[0.875rem]"><b className="mono">{du}</b>/{dong.length} đơn vị đã gửi đủ · <b className="mono">{viec.filter((x) => x.tuan.length).length}</b>/{viec.length} nhiệm vụ có báo cáo</span>
+        <span className="text-[0.875rem]"><b className="mono">{du}</b>/{coViec.length} đơn vị đã gửi đủ · <b className="mono">{viec.filter((x) => x.tuan.length).length}</b>/{viec.length} nhiệm vụ có báo cáo{khongViec > 0 && <> · {khongViec} đơn vị chưa có nhiệm vụ tuần này</>}</span>
         <span className="flex-1" />
         {quanTri && chuaDu.length > 0 && <Nut icon={<Bell className="h-4 w-4" />} onClick={() => setNhac(chuaDu.map((x) => x.d))}>Nhắc {chuaDu.length} đơn vị chưa gửi đủ</Nut>}
       </div>
@@ -126,7 +131,7 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
                   <span className="justify-self-end rounded-md px-2 py-0.5 text-xs font-semibold sm:order-3" style={{ color: chu, background: nen }}>{nhan}{muon > 0 && ` · muộn ${chuTre(muon)}`}</span>
                   <div className="col-span-2 flex items-center gap-2 pl-6 sm:order-2 sm:col-span-1 sm:pl-0">
                     <span className="mono text-[0.8125rem]">{bao.length}/{ds.length}</span>
-                    <div className="h-1.5 w-full max-w-[80px] flex-1 rounded-full bg-nen-3 sm:w-20 sm:flex-none"><div className="h-1.5 rounded-full" style={{ width: `${(bao.length / ds.length) * 100}%`, background: chu }} /></div>
+                    <div className="h-1.5 w-full max-w-[80px] flex-1 rounded-full bg-nen-3 sm:w-20 sm:flex-none"><div className="h-1.5 rounded-full" style={{ width: `${ds.length ? (bao.length / ds.length) * 100 : 0}%`, background: chu }} /></div>
                     <span className="text-[11px] text-mo sm:hidden">{cuoi ? ngayGioDu(cuoi) : ''}</span>
                     {quanTri && <Link to={`/nhiem-vu?tab=chua_bct&dv=${d.id}`} className="ml-auto flex h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#8E1B22] hover:bg-do/5 sm:hidden"><PenLine className="h-3.5 w-3.5" />Nhập thay</Link>}
                   </div>
@@ -134,7 +139,8 @@ function BangTuan({ tuan, viec, dv, quanTri, daNhac }: { tuan: Tuan; viec: Viec[
                   {quanTri && <Link to={`/nhiem-vu?tab=chua_bct&dv=${d.id}`} title="Mở bảng A4 các nhiệm vụ của đơn vị để nhập thay báo cáo tuần"
                     className="hidden h-8 items-center gap-1 rounded-lg px-2 text-xs font-semibold text-[#8E1B22] hover:bg-do/5 sm:order-5 sm:flex"><PenLine className="h-3.5 w-3.5" />Nhập thay</Link>}
                 </div>
-                {mo === d.id && (
+                {mo === d.id && ds.length === 0 && <p className="m-0 bg-nen-2 px-3 py-3 pl-8 text-[0.8125rem] italic text-mo sm:px-4 sm:pl-10">Đơn vị chưa có nhiệm vụ nào phải báo cáo trong tuần này.</p>}
+                {mo === d.id && ds.length > 0 && (
                   <ul className="m-0 flex list-none flex-col gap-1.5 bg-nen-2 px-3 py-3 pl-8 sm:px-4 sm:pl-10">
                     {ds.map((x) => (
                       <li key={x.n.id} className="flex flex-col text-[0.8125rem]">
