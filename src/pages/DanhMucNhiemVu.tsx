@@ -220,6 +220,7 @@ export default function DanhMucNhiemVu() {
   const [moThem, setMoThem] = useState(false);
   const [themCon, setThemCon] = useState<string | null>(null);   // thêm nhiệm vụ con vào nhiệm vụ lớn (id)
   const [moTk, setMoTk] = useState(false);
+  const [chiToi, setChiToi] = useState(true); // đầu mối lĩnh vực: mặc định chỉ hiện nhiệm vụ đơn vị mình chủ trì
   const [moLoc, setMoLoc] = useState(false); // điện thoại: thu gọn các tuỳ chọn lọc phụ
   const [oSua, setOSua] = useState<{ id: string; khoa: KhoaCot; o: HTMLElement } | null>(null);
   const [sua, setSua] = useState<NhiemVu | null>(null);
@@ -306,8 +307,11 @@ export default function DanhMucNhiemVu() {
     || (donVi && ((dauMoiDa06(hoSo) && theCua(x) === 'da06') || (dauMoiCds(hoSo) && theCua(x) === 'cds'))))));
   const coNgoai = donVi && phamViGoc.some((x) => x.n.chu_tri_don_vi_id !== dvXem);   // phạm vi xem có cả nhiệm vụ đơn vị khác chủ trì
   const khopThe = (x: Dong) => the === 'chung' || theCua(x) === the;
-  const demThe = (t: The) => phamViGoc.filter((x) => !x.con.length && (t === 'chung' || theCua(x) === t)).length;
-  const phamVi = phamViGoc.filter(khopThe);
+  const laToi = (x: Dong) => x.n.chu_tri_don_vi_id === dvXem;
+  const loTheoToi = (x: Dong) => !coNgoai || !chiToi || laToi(x);
+  const demThe = (t: The) => phamViGoc.filter((x) => !x.con.length && loTheoToi(x) && (t === 'chung' || theCua(x) === t)).length;
+  const phamViThe = phamViGoc.filter(khopThe);
+  const phamVi = phamViThe.filter(loTheoToi);
   const hienLa = phamVi.filter((x) => {
     if (!dvXem && locDv && x.n.chu_tri_don_vi_id !== locDv) return false;
     const k = x.tt.loai;
@@ -370,6 +374,16 @@ export default function DanhMucNhiemVu() {
           </button>
         ))}
       </div>
+
+      {coNgoai && (
+        <div role="group" aria-label="Phạm vi nhiệm vụ" className="flex gap-1.5">
+          {([[true, 'Đơn vị tôi chủ trì', phamViThe.filter((x) => !x.con.length && laToi(x)).length], [false, 'Cả lĩnh vực (theo dõi)', phamViThe.filter((x) => !x.con.length).length]] as [boolean, string, number][]).map(([v, nhan, n]) => (
+            <button key={nhan} type="button" aria-pressed={chiToi === v} onClick={() => { setOSua(null); setChon(null); setChiToi(v); }}
+              className={cx('flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg border px-2 text-[0.8125rem] font-semibold sm:flex-none sm:px-3.5', chiToi === v ? 'border-[#8E1B22] bg-nen text-[#6A0F14]' : 'border-vien bg-white text-mo hover:bg-nen-2')}>
+              {nhan}<span className="mono text-[0.6875rem]">{n}</span></button>
+          ))}
+        </div>
+      )}
 
       {/* Thanh lọc gọn: tình trạng (đếm) + tìm, đơn vị, xem như, thu phóng */}
       <ThanhLoc ds={viecLa} loc={locs} datLoc={batTatLoc} choDuyet={donVi ? null : viecLa.filter((x) => x.n.trang_thai_giao === 'de_xuat').length}
