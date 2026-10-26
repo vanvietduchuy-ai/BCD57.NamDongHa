@@ -1,5 +1,5 @@
 // Văn bản đến – đi: đơn vị gửi văn bản PDF cho Cơ quan Thường trực; Thường trực gửi cho một, nhiều hoặc tất cả đơn vị.
-// Bên nhận xem PDF, bấm "Đã nhận"; bên gửi theo dõi ai đã xem, đã nhận, nhắc đơn vị chưa nhận. Tự vào sổ đến / sổ đi của Thường trực.
+// Bên nhận xem PDF, bấm "Đã nhận"; bên gửi theo dõi ai đã xem, đã nhận, nhắc đơn vị chưa nhận. Văn bản đơn vị gửi Thường trực tự vào sổ đến; văn bản Thường trực gửi đi chỉ vào sổ đi khi tích chọn.
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { xoaTepNhap } from '../lib/nhapTam';
@@ -324,8 +324,9 @@ function GuiVanBan({ mo, dong, quanTri, dsDv, coQuan, xong }: { mo: boolean; don
   const [han, setHan] = useState('');
   const [dang, setDang] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
+  const [vaoSoDi, setVaoSoDi] = useState(false);   // văn bản gửi đi KHÔNG tự vào sổ đi của Thường trực, chỉ khi tích chọn
   const [moCu, setMoCu] = useState(false);
-  if (mo !== moCu) { setMoCu(mo); if (mo) { setMeta(macDinh()); setTep(null); setKem([]); setChon([]); setGhiChu(''); setHan(''); setLoi(null); } }
+  if (mo !== moCu) { setMoCu(mo); if (mo) { setMeta(macDinh()); setTep(null); setKem([]); setChon([]); setGhiChu(''); setHan(''); setLoi(null); setVaoSoDi(false); } }
   if (!mo) return null;
   const gui = async () => {
     setLoi(null);
@@ -341,10 +342,22 @@ function GuiVanBan({ mo, dong, quanTri, dsDv, coQuan, xong }: { mo: boolean; don
       });
       if (error) throw error;
       void xoaTepNhap('cong_van:gui');
+      // Hàm gui_cong_van tự ghi sổ đi của Thường trực; không tích "Ghi vào sổ đi" thì gỡ dòng sổ vừa tự tạo (văn bản vẫn gửi và còn trong Kho)
+      let loiSo = '';
+      if (quanTri && !vaoSoDi && cvId) {
+        try {
+          const vbId = (await supabase.from('v_cong_van').select('van_ban_id').eq('id', cvId as string).maybeSingle()).data?.van_ban_id as string | undefined;
+          const tt = (await supabase.rpc('don_vi_thuong_truc')).data as string | null;
+          if (vbId && tt) {
+            const g = await supabase.from('so_van_ban').delete().eq('van_ban_id', vbId).eq('don_vi_id', tt).eq('loai_so', 'di');
+            if (g.error) throw g.error;
+          }
+        } catch (e) { loiSo = ` Chưa gỡ được khỏi sổ đi: ${loiDe(e)} — xoá tay trong Sổ công văn.`; }
+      }
       const hong = kem.length && cvId ? await taiTepKemCongVan(cvId as string, kem) : [];
       const coKem = kem.length ? ` kèm ${kem.length - hong.length} tệp` : '';
-      xong((quanTri ? `Đã gửi văn bản${coKem} cho ${chon.length} đơn vị, vào sổ đi.` : `Đã gửi văn bản${coKem} cho Cơ quan Thường trực BCĐ.`)
-        + (hong.length ? ` Chưa tải được: ${hong.join(', ')} — mở văn bản đã gửi để thử lại.` : ''));
+      xong((quanTri ? `Đã gửi văn bản${coKem} cho ${chon.length} đơn vị${vaoSoDi ? ', vào sổ đi' : ', không vào sổ đi'}.` : `Đã gửi văn bản${coKem} cho Cơ quan Thường trực BCĐ.`)
+        + loiSo + (hong.length ? ` Chưa tải được: ${hong.join(', ')} — mở văn bản đã gửi để thử lại.` : ''));
     } catch (e) { setLoi(loiDe(e)); } finally { setDang(false); }
   };
   return (
@@ -361,8 +374,14 @@ function GuiVanBan({ mo, dong, quanTri, dsDv, coQuan, xong }: { mo: boolean; don
           <O nhan="Nội dung kèm theo (không bắt buộc)"><textarea className={cx(lopO, 'min-h-20 py-2')} value={ghiChu} onChange={(e) => setGhiChu(e.target.value)} placeholder="VD: Đề nghị các đơn vị triển khai, báo cáo kết quả…" /></O>
           <O nhan="Hạn phản hồi (nếu có)"><input type="date" className={lopO} value={han} onChange={(e) => setHan(e.target.value)} /></O>
         </div>
+        {quanTri && (
+          <label className="flex cursor-pointer items-start gap-2 rounded-xl border border-vien bg-white px-3 py-2.5 text-[0.875rem]">
+            <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={vaoSoDi} onChange={(e) => setVaoSoDi(e.target.checked)} />
+            <span><b>Ghi vào sổ đi</b> của Cơ quan Thường trực <span className="text-mo">(không tích thì chỉ gửi, không vào sổ)</span></span>
+          </label>
+        )}
         <p className="m-0 rounded-xl bg-nen-3 px-3 py-2 text-[0.8125rem] text-mo-2">
-          {quanTri ? <>Văn bản tự vào <b>sổ đi</b> của Thường trực. Đơn vị nhận được thông báo trên web và điện thoại.</> : <>Văn bản tự vào <b>sổ đến</b> của Cơ quan Thường trực. Không gửi văn bản mật.</>}
+          {quanTri ? <>Đơn vị nhận được thông báo trên web và điện thoại. Văn bản gửi đi chỉ vào <b>sổ đi</b> khi anh tích chọn ở trên.</> : <>Văn bản tự vào <b>sổ đến</b> của Cơ quan Thường trực. Không gửi văn bản mật.</>}
         </p>
         {loi && <HopLoi loi={loi} />}
         <div className="flex justify-end gap-2">
