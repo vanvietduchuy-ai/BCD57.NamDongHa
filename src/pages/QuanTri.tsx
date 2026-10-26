@@ -81,6 +81,21 @@ function TaiKhoan() {
       setLoi(null); window.alert('Đã đặt lại mật khẩu. Người dùng sẽ phải đổi mật khẩu ở lần đăng nhập tới.'); void taiLai(); }
     catch (e) { setLoi(loiDe(e)); }
   };
+  // Đổi tên đăng nhập (email): chỉ phần trước @ được sửa, giữ nguyên tên miền; hàm SQL doi_ten_dang_nhap kiểm tra quyền và trùng tên
+  const doiTenDn = async (nd: Nd) => {
+    const [cu, mien] = (nd.email ?? '').split('@');
+    if (!mien) { setLoi('Tài khoản chưa có email để đổi.'); return; }
+    const moi = window.prompt(`Tên đăng nhập mới cho ${nd.ho_ten}\n(chỉ phần trước @${mien}; mật khẩu giữ nguyên):`, cu);
+    if (moi === null) return;
+    const ten = moi.trim().toLowerCase().replace(/@.*$/, '');
+    if (!ten || ten === cu) return;
+    if (!/^[a-z0-9._-]+$/.test(ten)) { setLoi('Tên đăng nhập chỉ dùng chữ không dấu, số, dấu chấm, gạch ngang, gạch dưới.'); return; }
+    if (!window.confirm(`Đổi tên đăng nhập\n${nd.email}\nthành\n${ten}@${mien}?\n\nNgười dùng phải đăng nhập bằng tên mới (mật khẩu không đổi).`)) return;
+    setLoi(null);
+    const { error } = await supabase.rpc('doi_ten_dang_nhap', { p_id: nd.id, p_email: `${ten}@${mien}` });
+    if (error) setLoi(/could not find the function|schema cache/i.test(error.message) ? 'Chưa cài chức năng đổi tên đăng nhập: chạy supabase/doi-ten-dang-nhap.sql trong Supabase SQL Editor.' : loiDe(error));
+    else { window.alert(`Đã đổi tên đăng nhập thành ${ten}@${mien}.`); void taiLai(); }
+  };
   // Bắt đổi mật khẩu ở lần đăng nhập tới: một tài khoản, hoặc mọi tài khoản đang bật (trừ tài khoản đang dùng) chưa bị bắt đổi
   const batDoiMk = async (ds: Nd[], hoi: string) => {
     if (!ds.length || !window.confirm(hoi)) return;
@@ -129,6 +144,7 @@ function TaiKhoan() {
                 <td className="px-2"><select aria-label="Vai trò" className={cx(lopO, 'min-h-9 text-[0.8125rem]')} value={n.vai_tro} onChange={(e) => doi(n.id, { vai_tro: e.target.value })}>{Object.entries(VT).map(([k, v]) => <option key={k} value={k}>{v[0]}</option>)}</select></td>
                 <td className="px-2"><Chip nen={n.hoat_dong ? 'bg-xanh-nhat' : 'bg-cam-nhat'} chu={n.hoat_dong ? 'text-xanh' : 'text-cam-dam'}>{n.hoat_dong ? 'Đang hoạt động' : 'Đã khoá'}</Chip>{n.doi_mat_khau && <div className="mt-1 text-[11px] font-semibold text-cam-dam">Chờ đổi mật khẩu</div>}</td>
                 <td className="whitespace-nowrap px-4 text-right">
+                  <button className="mr-3 font-semibold text-[#8E1B22]" onClick={() => void doiTenDn(n)}>Sửa tên ĐN</button>
                   <button className="mr-3 font-semibold text-[#8E1B22]" onClick={() => datLaiMk(n)}>Đặt lại MK</button>
                   {!n.doi_mat_khau && n.id !== hoSo?.id && <button className="mr-3 font-semibold text-mo-2" title="Bắt đổi mật khẩu ở lần đăng nhập tới" onClick={() => void batDoiMk([n], `Bắt ${n.ho_ten} đổi mật khẩu ở lần đăng nhập tới?`)}>Bắt đổi MK</button>}
                   <button className={cx('font-semibold', n.hoat_dong ? 'text-nguy' : 'text-xanh')} onClick={() => doi(n.id, { hoat_dong: !n.hoat_dong })}>{n.hoat_dong ? 'Khoá' : 'Mở khoá'}</button>
@@ -156,6 +172,7 @@ function TaiKhoan() {
               <div className="-ml-2 flex items-center gap-1 text-[0.8125rem]">
                 {nutSdt(n)}
                 <span className="flex-1" />
+                <button className="min-h-9 px-2 font-semibold text-[#8E1B22]" onClick={() => void doiTenDn(n)}>Sửa tên ĐN</button>
                 <button className="min-h-9 px-2 font-semibold text-[#8E1B22]" onClick={() => datLaiMk(n)}>Đặt lại MK</button>
                 {!n.doi_mat_khau && n.id !== hoSo?.id && <button className="min-h-9 px-2 font-semibold text-mo-2" onClick={() => void batDoiMk([n], `Bắt ${n.ho_ten} đổi mật khẩu ở lần đăng nhập tới?`)}>Bắt đổi MK</button>}
                 <button className={cx('min-h-9 px-2 font-semibold', n.hoat_dong ? 'text-nguy' : 'text-xanh')} onClick={() => doi(n.id, { hoat_dong: !n.hoat_dong })}>{n.hoat_dong ? 'Khoá' : 'Mở khoá'}</button>
