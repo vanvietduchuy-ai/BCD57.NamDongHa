@@ -138,7 +138,7 @@ const LA_MA = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'
 const hanCua = (x: Dong) => (x.n.dinh_ky ? x.n.ky_han : x.n.han) ?? '9999-12-31';
 const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
 // Thứ hạng khi sắp theo tình trạng: "Chưa đạt" (đang thực hiện nhưng chưa đạt chỉ tiêu) xếp trên "Đang thực hiện"
-const hangTT = (x: Dong) => { const h = ttHienThi(x); return THU_TU_TT.indexOf(h.loai) - (h.loai === 'dang' && /chưa đạt/i.test(h.nhan) ? 0.5 : 0); };
+const hangTT = (x: Dong) => { const h = ttHienThi(x); return THU_TU_TT.indexOf(h.loai) - (h.loai === 'dang' ? (/nguy cơ/i.test(h.nhan) ? 1 : /chưa đạt/i.test(h.nhan) ? 0.5 : 0) : 0); };
 // Cách xem bảng: nhóm lại theo đơn vị chủ trì / lĩnh vực / loại đánh giá và sắp theo hạn, tình trạng (chỉ đổi cách xem và bản xuất, không đổi thứ tự danh mục)
 function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
   if (nhomTheo === 'nhom' && !tieuChi.length) return { ds, nhom: nhomGoc };
@@ -966,7 +966,7 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
           <button key={i} type="button" title={`Xem: ${t.ten}${t.trich_yeu ? ` – ${t.trich_yeu}` : ''}`} onClick={(e) => { e.stopPropagation(); void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url); }}
             className="text-left text-[#1E4F86] underline-offset-2 hover:underline">{t.ten}</button>))}</span>
         : <span className="text-[#8D8486]">—</span>;
-      case 'tinh_trang': { const h = ttHienThi(x); const m = MAU_TT[h.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : h.tyLe ? 'Theo tỷ lệ so với chỉ tiêu' : 'Tình trạng tự động theo hạn và tiến độ'}>{h.nhan}{x.d.tt_tay && ' ✎'}</span>; }
+      case 'tinh_trang': { const h = ttHienThi(x); const m = MAU_TT[h.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : h.tyLe ? 'Theo tỷ lệ so với chỉ tiêu' : 'Tình trạng tự động theo hạn và tiến độ'}>{h.nhan}{x.d.tt_tay && !(x.con.length && /\d+\s*\/\s*\d+\s*(nhiệm vụ )?(con )?(đã )?hoàn thành|\d+\s*việc quá hạn/i.test(x.d.tt_tay.nhan)) && ' ✎'}</span>; }
       case 'lanh_dao': return x.n.lanh_dao_phu_trach;
       case 'ma': return x.n.ma;
     }

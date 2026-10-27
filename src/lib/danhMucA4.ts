@@ -166,7 +166,7 @@ export function tinhTrangTatCa(nv0: NhiemVu[], cn0: Map<string, CapNhatTT[]>, ch
       : { loai: xau, nhan: xau === 'qua_han' ? `${tc.filter((t) => t.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
   }
   // Nhãn tổng hợp cũ ("1/5 hoàn thành", "2 việc quá hạn") lỡ lưu thành sửa tay trên nhiệm vụ lớn thì bỏ qua, luôn tính lại từ nhiệm vụ con
-  const nhanTongHop = (t: { nhan: string }) => /^\d+\/\d+ hoàn thành$|^\d+ việc quá hạn$/i.test(t.nhan.trim());
+  const nhanTongHop = (t: { nhan: string }) => /\d+\s*\/\s*\d+\s*(nhiệm vụ )?(con )?(đã )?hoàn thành|\d+\s*việc quá hạn/i.test(t.nhan);
   return new Map(ds.map((x) => [x.n.id, { ttTD: x.tt, tt: x.d.tt_tay && !(x.con.length && nhanTongHop(x.d.tt_tay)) ? chuanTTTay(x.d.tt_tay) : x.tt, nv: x.n }]));
 }
 // Nhiệm vụ phải báo cáo tuần (một nguồn duy nhất cho bảng A4 và trang Báo cáo tuần):
