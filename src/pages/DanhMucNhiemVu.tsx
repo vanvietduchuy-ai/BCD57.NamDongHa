@@ -9,7 +9,7 @@ import { dauMoiCds, dauMoiDa06, laQuanTri, useAuth } from '../lib/auth';
 import { homNayVN, ngayGioDu } from '../lib/dinhDang';
 import { COT_NV, khongDau, LINH_VUC, NHOM_NV, tenKyNv, thieu6Ro, TT_NV, type NhiemVu, type NhomNv, type TrangThaiNv } from '../lib/nhiemVu';
 import {
-  CAU_HINH_MAC_DINH, canBaoCaoTuan, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrangTatCa, soLieuMoiNhat, tyLeNhiemVu, loaiTheoChu, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
+  CAU_HINH_MAC_DINH, canBaoCaoTuan, chuanTTTay, COT_MAC_DINH, doanDonVi, docDanhMucWord, ghepCauHinh, KHOA_CAU_HINH, kichThuocTrang, MAU_TT, ngayNgan, soNgay, tinhTrangTatCa, soLieuMoiNhat, tyLeNhiemVu, loaiTheoChu, docSo, goiYDanhGia, mauDonViSua, soVN, tinhDanhGia, type DanhGia, type KieuDG, trangThaiTuChu,
   type CauHinhA4, type CotA4, type DongA4, type DongNhap, type KetQuaDoc, type KhoaCot, type LoaiTT, type NhomA4, type TinhTrang,
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
@@ -356,6 +356,7 @@ export default function DanhMucNhiemVu() {
     // Xem tuần đã qua: nhiệm vụ hoàn thành SAU tuần đó vẫn phải báo cáo (nộp bù) cho tuần đó
     const xongSauTuan = (x: Dong) => { const l = x.cn.find((c) => c.trang_thai_moi === 'hoan_thanh')?.luc; return !!l && l > tuan.ketThuc.toISOString(); };
     kq.forEach((x, i) => { x.stt = i + 1; const t = lay(x.n.id); x.ttTD = t.ttTD; x.tt = t.tt;
+      if (anh && x.d.tt_tay && !x.con.length) x.tt = chuanTTTay(x.d.tt_tay);   // tình trạng Thường trực sửa tay luôn có hiệu lực, kể cả khi xem tuần đã chốt (bản chốt chỉ giữ tình trạng tự động)
       if (x.con.length) { const tg = ttTatCa.get(x.n.id); if (tg) { x.tt = tg.tt; x.ttTD = tg.ttTD; } }   // nhiệm vụ lớn: luôn tổng hợp lại từ nhiệm vụ con (không dùng số cũ trong bản chốt)
       x.canBct = !x.con.length && canBaoCaoTuan(x.n, x.tt, x.d.danh_gia ?? goiYDanhGia(x.n), x.tuanCn.length > 0, xongSauTuan(x), tuan.han, !!x.d.tt_tay); });
     return kq;
