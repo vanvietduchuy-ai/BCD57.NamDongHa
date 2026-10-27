@@ -496,6 +496,14 @@ export default function DanhMucNhiemVu() {
             dsVb={data.vb} ganVb={(id) => void capNhatNv(dongChon.n.id, { can_cu_van_ban_id: id })} luuTenNguon={(t) => suaDong(dongChon.n.id, { nguon_vb: t })} luuDong={(pp) => suaDong(dongChon.n.id, pp)}
             dsCha={dongChon.con.length ? [] : tatCa.filter((y) => !y.cha && y.nhom === dongChon.nhom && y.n.id !== dongChon.n.id)}
             chonCha={(id) => suaDong(dongChon.n.id, { cha: id ?? undefined, thu_tu: Date.now() })}
+            dsNhom={nhomDs}
+            chonNhom={(g) => {
+              // Chuyển sang nhóm khác: xuống cuối nhóm mới, tách khỏi nhiệm vụ lớn cũ (nhiệm vụ con phải cùng nhóm với nhiệm vụ lớn); nhiệm vụ lớn mang theo các nhiệm vụ con
+              const dong = { ...ch.dong };
+              dong[dongChon.n.id] = { ...dong[dongChon.n.id], nhom: g, cha: undefined, thu_tu: Date.now() };
+              dongChon.con.forEach((c) => { dong[c.n.id] = { ...dong[c.n.id], nhom: g }; });
+              void luuCH({ ...ch, dong });
+            }}
             themCon={() => setThemCon(dongChon.cha ?? dongChon.n.id)}
             duyet={() => void capNhatNv(dongChon.n.id, { trang_thai_giao: 'da_duyet' })}
             xoa={async () => {
@@ -1000,8 +1008,9 @@ const chuTriMacDinh = (x: Dong) => x.n.chu_tri_ten ? `${x.n.chu_tri_ten} chủ t
 
 
 // ---------- Dạng thẻ (điện thoại)
-function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon, taiLai }: {
+function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon, dsNhom, chonNhom, taiLai }: {
   taiLai: () => void;
+  dsNhom: NhomA4[]; chonNhom: (id: string) => void;   // đổi nhóm trên bảng A4 (không cần kéo thả, dùng được khi bảng đang sắp xếp / lọc)
   tienTo: string; x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
   dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void; luuDong: (p: Partial<DongA4>) => void;
   dsCha: Dong[]; chonCha: (id: string | null) => void; themCon: () => void;
@@ -1081,6 +1090,17 @@ function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, l
           {duocBaoCao && (quanTri || x.canBct) && <CapNhatNhanh x={x} laChuTri={laChuTri} quanTri={quanTri} luuDong={luuDong} xong={daGui} tienTo={quanTri ? undefined : tienTo} />}
 
           <NguonVanBan x={x} quanTri={quanTri} dsVb={dsVb} gan={ganVb} luuTen={luuTenNguon} />
+
+          {quanTri && (
+            <section className="flex flex-col gap-1.5">
+              <h3 className="m-0 text-[0.8125rem] font-bold">Nhóm trên bảng A4</h3>
+              <select className={cx(lopO, 'min-h-10 text-[0.8125rem]')} value={x.nhom} onChange={(e) => { if (e.target.value && e.target.value !== x.nhom) chonNhom(e.target.value); }}>
+                {x.nhom === '_khac' && <option value="_khac">Chưa phân nhóm</option>}
+                {dsNhom.map((g) => <option key={g.id} value={g.id}>{g.ky_hieu ? `${g.ky_hieu}. ` : ''}{g.ten}</option>)}
+              </select>
+              {(x.con.length > 0 || x.cha) && <p className="m-0 text-xs text-mo">{x.con.length ? 'Các nhiệm vụ con đi theo nhiệm vụ lớn sang nhóm mới.' : 'Đổi nhóm sẽ tách khỏi nhiệm vụ lớn hiện tại.'}</p>}
+            </section>
+          )}
 
           {quanTri && (
             <section className="flex flex-col gap-1.5">
