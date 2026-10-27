@@ -140,7 +140,36 @@ const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong
 // Cách xem bảng: nhóm lại theo đơn vị chủ trì / lĩnh vực / loại đánh giá và sắp theo hạn, tình trạng (chỉ đổi cách xem và bản xuất, không đổi thứ tự danh mục)
 function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
   if (nhomTheo === 'nhom' && !tieuChi.length) return { ds, nhom: nhomGoc };
-  const la = ds.filter((x) => !x.con.length);                     // nhiệm vụ lớn (tổng hợp) chỉ hiện ở thứ tự danh mục
+  // Nhóm theo danh mục / lĩnh vực: sắp xếp theo NHIỆM VỤ LỚN, nhiệm vụ con đi liền ngay dưới nhiệm vụ lớn (không xếp riêng)
+  if (nhomTheo === 'nhom' || nhomTheo === 'linh_vuc') return sapXepTheoNhiemVuLon(ds, nhomGoc, nhomTheo, tieuChi);
+  return sapXepTheoViec(ds, nhomGoc, dv, nhomTheo, tieuChi);
+}
+function sapXepTheoNhiemVuLon(ds: Dong[], nhomGoc: NhomA4[], nhomTheo: 'nhom' | 'linh_vuc', tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
+  const co = new Set(ds.map((x) => x.n.id));
+  const goc = ds.filter((x) => !x.cha || !co.has(x.cha));            // nhiệm vụ lớn và nhiệm vụ độc lập
+  const con = new Map<string, Dong[]>();
+  ds.filter((x) => x.cha && co.has(x.cha)).forEach((x) => con.set(x.cha!, [...(con.get(x.cha!) ?? []), x]));
+  const khoa = (x: Dong) => (nhomTheo === 'nhom' ? x.nhom : x.n.linh_vuc);
+  let nhom: NhomA4[] = nhomTheo === 'nhom' ? nhomGoc : (Object.entries(LINH_VUC) as [string, string][]).map(([k, v]) => ({ id: k, ky_hieu: '', ten: v }));
+  nhom = nhom.filter((g) => goc.some((x) => khoa(x) === g.id));
+  if (nhomTheo !== 'nhom') nhom = nhom.map((g, i) => ({ ...g, ky_hieu: LA_MA[i] ?? String(i + 1) }));
+  const ss = (a: Dong, b: Dong) => {
+    for (const t of tieuChi) { const c = soSanhTieuChi(t.khoa, a, b); if (c) return t.giam ? -c : c; }
+    return a.stt - b.stt;
+  };
+  const coNhom = new Set(nhom.map((g) => g.id));
+  const xep = [...nhom.flatMap((g) => goc.filter((x) => khoa(x) === g.id).sort(ss)), ...goc.filter((x) => !coNhom.has(khoa(x))).sort(ss)];
+  // Đánh lại số thứ tự theo thứ tự đang xem: nhiệm vụ lớn 1, 2, 3…; nhiệm vụ con giữ thứ tự trong danh mục (n.1, n.2…)
+  const kq: Dong[] = []; let so = 0;
+  for (const x of xep) {
+    const s = String(++so); kq.push({ ...x, so: s, nhom: khoa(x) });
+    (con.get(x.n.id) ?? []).sort((a, b) => a.stt - b.stt).forEach((c, k) => kq.push({ ...c, so: `${s}.${k + 1}`, nhom: khoa(x) }));
+  }
+  return { ds: kq, nhom };
+}
+// Nhóm theo đơn vị chủ trì / loại đánh giá: thống kê theo từng nhiệm vụ (cả nhiệm vụ con) nên tách từng việc, nhiệm vụ lớn (tổng hợp) không hiện
+function sapXepTheoViec(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
+  const la = ds.filter((x) => !x.con.length);
   const theoId = new Map(ds.map((x) => [x.n.id, x]));
   const linhVuc = (x: Dong) => (x.cha ? theoId.get(x.cha) ?? x : x).n.linh_vuc;   // nhiệm vụ con đi theo lĩnh vực của nhiệm vụ lớn
   const khoa = (x: Dong) => nhomTheo === 'nhom' ? x.nhom : nhomTheo === 'don_vi' ? (x.n.chu_tri_don_vi_id ?? '_chua_giao')
@@ -362,10 +391,11 @@ export default function DanhMucNhiemVu() {
   const dsLon = tatCa.filter((x) => x.con.length).map((x) => x.n.id);
   const daMoCon = (id: string) => (moCon ? moCon.has(id) : donVi);
   const hienCon = (id: string) => dangLoc || daMoCon(id);
-  const gapDuoc = macDinhXem && !dangLoc;
+  const giuNhomLon = nhomTheo === 'nhom' || nhomTheo === 'linh_vuc';   // còn nhiệm vụ lớn + nhiệm vụ con đi liền nhau
+  const gapDuoc = giuNhomLon && !dangLoc;
   const batCon = (id: string) => setMoCon((c) => { const n = new Set(c ?? (donVi ? dsLon : [])); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const moTatCaCon = dsLon.length > 0 && dsLon.every(daMoCon);
-  const dsBang = macDinhXem ? xem.ds.filter((x) => !x.cha || hienCon(x.cha)) : xem.ds;
+  const dsBang = giuNhomLon ? xem.ds.filter((x) => !x.cha || hienCon(x.cha)) : xem.ds;
   const viecLa = phamVi.filter((x) => !x.con.length);
 
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
