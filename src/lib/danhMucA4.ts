@@ -110,10 +110,13 @@ export function tyLeNhiemVu(n: Pick<NhiemVu, 'san_pham' | 'dinh_ky'>, cn: CapNha
   const chiTieu = (d.danh_gia ?? goiYDanhGia(n)).chi_tieu; const tyLe = (sl.tu / sl.mau) * 100;
   return { tu: sl.tu, mau: sl.mau, tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
 }
-// Tình trạng ghi tay: suy loại theo chữ (Đạt / Đảm bảo / Hoàn thành -> hoàn thành; Không đạt / Chưa đạt / Chậm -> chưa đạt)
+// Tình trạng ghi tay: suy loại theo chữ (Đạt / Đảm bảo / Hoàn thành -> hoàn thành; Không đạt / Chưa đạt / Chậm -> chưa đạt; Có nguy cơ chậm -> đang thực hiện)
 export const loaiTheoChu = (t: string, macDinh: LoaiTT): LoaiTT => {
   const c = khongDau(t.trim().toLowerCase());
-  if (/(khong|chua) dat|cham/.test(c)) return 'qua_han';
+  if (/(khong|chua) dat/.test(c)) return 'qua_han';
+  // "Có nguy cơ chậm tiến độ", "không chậm"… chỉ là cảnh báo / còn đúng tiến độ — KHÔNG phải quá hạn: tính là đang thực hiện (giữ sắp đến hạn / chưa triển khai nếu đang vậy)
+  if (/nguy co|(khong|chua) (bi |co )?cham/.test(c)) return macDinh === 'sap_han' || macDinh === 'chua' ? macDinh : 'dang';
+  if (/cham/.test(c)) return 'qua_han';
   if (/^(dat|dam bao|hoan thanh|da hoan thanh)\b/.test(c)) return 'xong';
   return macDinh;
 };

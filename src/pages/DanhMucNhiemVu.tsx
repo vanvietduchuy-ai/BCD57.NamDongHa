@@ -1308,7 +1308,7 @@ function TrangThaiNhanh({ x, quanTri, laChuTri, capNhatNv, xong, luuDienGiai }: 
 // Tình trạng: tự động (theo hạn, tiến độ) hoặc chọn tay
 const TT_TAY: { loai: LoaiTT; nhan: string }[] = [
   { loai: 'xong', nhan: 'Hoàn thành' }, { loai: 'xong', nhan: 'Đạt' }, { loai: 'xong', nhan: 'Đảm bảo' },
-  { loai: 'dang', nhan: 'Đang thực hiện' }, { loai: 'chua', nhan: 'Chưa triển khai' },
+  { loai: 'dang', nhan: 'Đang thực hiện' }, { loai: 'dang', nhan: 'Có nguy cơ chậm tiến độ' }, { loai: 'chua', nhan: 'Chưa triển khai' },
   { loai: 'qua_han', nhan: 'Chậm tiến độ' }, { loai: 'qua_han', nhan: 'Không đạt' }, { loai: 'dung', nhan: 'Tạm dừng' }, { loai: 'dung', nhan: 'Không thực hiện' },
 ];
 function ChonTinhTrang({ x, luu }: { x: Dong; luu: (v: { loai: LoaiTT; nhan: string } | undefined) => void }) {
