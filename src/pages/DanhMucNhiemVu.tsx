@@ -102,6 +102,7 @@ type KhoaSap = 'han' | 'tinh_trang' | 'tien_do' | 'don_vi' | 'linh_vuc' | 'ten' 
 type TieuChiSap = { khoa: KhoaSap; giam?: boolean };
 // Thẻ lĩnh vực trên bảng: Chung = tổng cả hai nhóm; Đề án 06; CĐS – KHCN – ĐMST (NQ 57). Mỗi nhiệm vụ thuộc một lĩnh vực chính (trường linh_vuc);
 // nhiệm vụ con theo lĩnh vực của nhiệm vụ lớn chứa nó. Nhiệm vụ lĩnh vực "Chung" chỉ hiện ở thẻ Chung.
+const TAT_CA_TUAN = 999;
 type The = 'chung' | 'da06' | 'cds';
 const THE_NV: { khoa: The; nhan: string; ngan?: string }[] = [
   { khoa: 'chung', nhan: 'Chung' }, { khoa: 'da06', nhan: 'Đề án 06' }, { khoa: 'cds', nhan: 'CĐS – KHCN – ĐMST (NQ57)', ngan: 'CĐS – NQ57' },
@@ -258,7 +259,10 @@ export default function DanhMucNhiemVu() {
   const nhomCua = (n: NhiemVu) => { const g = ch.dong[n.id]?.nhom; return g && nhomDs.some((x) => x.id === g) ? g : ch.nhom.length ? '_khac' : `nv_${n.nhom}`; };
 
   // Tuần báo cáo (nhập ngay trên bảng A4): mặc định tuần hiện tại; lùi 1–3 tuần để nộp bù (ghi nhận nộp muộn)
-  const [luiTuan, setLuiTuan] = useState(0);
+  const [luiChon, setLuiTuan] = useState(0);
+  const tatCaTuan = luiChon === TAT_CA_TUAN;            // xem lịch sử mọi tuần ngay trong ô Kết quả (chỉ để đọc)
+  const luiTuan = tatCaTuan ? 0 : luiChon;
+  const [docRong, setDocRong] = useState(false);       // Đọc rộng: ẩn các cột phụ, mở rộng cột Kết quả
   const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH, luiTuan), [data, luiTuan]);
   // Thời gian nhận báo cáo (Thường trực cài: bắt đầu / kết thúc nhận): ngoài khoảng này đơn vị không nhập được; Thường trực nhập thay được
   const loiCuaSo = !quanTri && data ? kiemTraCuaSoNop(data.bct, tuan, luiTuan) : null;
@@ -357,6 +361,8 @@ export default function DanhMucNhiemVu() {
   const suaDuocBang = quanTri && !xemNhu;
   const tuanNgan = tuan.ten.split(' (')[0];
   const chHien: CauHinhA4 = ch;
+  // Đọc rộng chỉ đổi cách xem trên màn hình; xuất Word/Excel vẫn theo form A4 (chHien)
+  const chBang: CauHinhA4 = docRong ? { ...ch, cot: ch.cot.map((c) => (['nguon_vb', 'san_pham', 'minh_chung', 'lanh_dao', 'ma'].includes(c.khoa) ? { ...c, hien: false } : c.khoa === 'ket_qua_tuan' ? { ...c, hien: true, rong: Math.max(c.rong, 40) } : c)) } : ch;
   const dongChon = tatCa.find((x) => x.n.id === chon) ?? null;
   const tenDv = (id: string | null) => data.dv.find((d) => d.id === id)?.ten ?? '';
 
@@ -434,17 +440,18 @@ export default function DanhMucNhiemVu() {
           {(tim || locDv || locs.length > 0) && <button className="order-1 h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5 sm:order-none" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
           <span className="hidden flex-1 sm:block" />
         </>} />
-      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`} cuaSo={cuaSoChu} khoa={!!loiCuaSo} doc={() => setMoDoc(true)}
+      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`} cuaSo={cuaSoChu} khoa={!!loiCuaSo} doc={() => setMoDoc(true)} docRong={docRong} datDocRong={setDocRong} giaTri={luiChon}
         loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
-        lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
+        lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => v === TAT_CA_TUAN ? 'Tất cả các tuần (lịch sử)' : `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length && khopThe(x))} dv={data.dv} dvXem={coNgoai ? '' : dvXem}quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
       {moDoc && <DocBaoCao ds={hien.filter((x) => !x.con.length)} tuan={tuan} dong={() => setMoDoc(false)} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
-      <div className="flex items-start gap-4">
+      {docRong && <div className="sm:hidden"><DocBaoCao nhung pham={tatCaTuan ? 'tatca' : 'tuan'} ds={hien.filter((x) => !x.con.length)} tuan={tuan} dong={() => setDocRong(false)} /></div>}
+      <div className={cx('flex items-start gap-4', docRong && 'max-sm:hidden')}>
         <div className="min-w-0 flex-1">
-          <BangA4 ch={chHien} ds={xem.ds} nhomDs={xem.nhom} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
+          <BangA4 tatCaTuan={tatCaTuan} ch={chBang} ds={xem.ds} nhomDs={xem.nhom} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={(id) => { setOSua(null); setChon((c) => (c === id ? null : id)); }} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
             oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()} lechTuan={luiTuan}
             luuO={(x, khoa, v) => { setOSua(null); void luuOSua(x, khoa, v, capNhatNv, suaDong); }} dongO={() => setOSua(null)}
@@ -615,7 +622,7 @@ type BangProps = {
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
-  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; luuO: (x: Dong, khoa: KhoaCot, v: string) => void; dongO: () => void; oDangMo: string | null; hanTuan: number; lechTuan?: number;
+  moO: (x: Dong, khoa: KhoaCot, o: HTMLElement) => boolean; luuO: (x: Dong, khoa: KhoaCot, v: string) => void; dongO: () => void; oDangMo: string | null; hanTuan: number; lechTuan?: number; tatCaTuan?: boolean;
 };
 // Ô sửa thẳng trong bảng (không bật hộp): chữ thường; các ô cần chọn (hạn, nguồn, tiến độ, tình trạng…) vẫn mở hộp nhỏ
 const O_TAI_CHO: KhoaCot[] = ['ten', 'san_pham', 'lanh_dao', 'ma', 'chu_tri'];
@@ -717,7 +724,7 @@ function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: K
   );
 }
 
-function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, luuO, dongO, oDangMo, hanTuan, lechTuan = 0, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, luuO, dongO, oDangMo, hanTuan, lechTuan = 0, tatCaTuan = false, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -805,6 +812,7 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
   const veLaiCao = (x: Dong) => { if (suaDuoc) suaDong(x.n.id, { cao: 0 }); else { const c = { ...rieng.cao }; delete c[x.n.id]; setRieng({ ...rieng, cao: c }); } };
 
   // Kéo thả hàng: giữ biểu tượng ở ô TT, kéo tới hàng khác (hoặc tiêu đề nhóm) rồi thả
+  const [moHet, setMoHet] = useState<Set<string>>(new Set());   // nhiệm vụ đang mở hết các tuần ở chế độ Tất cả các tuần
   const [keo, setKeo] = useState<{ id: string; dich?: { id?: string; nhom?: string; truoc: boolean } } | null>(null);
   const vuaKeo = useRef(false);
   const batDauKeo = (e: PE, x: Dong) => {
@@ -865,6 +873,19 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
         if (x.con.length) { const can = x.con.filter((c) => c.canBct); return can.length ? <span className="font-sans text-[8pt] font-semibold">{can.filter((c) => c.tuanCn.length).length}/{can.length} nhiệm vụ con đã báo cáo</span> : null; }
         // Kết quả thực hiện = báo cáo tuần mới nhất (tự điền khi đơn vị gửi báo cáo tuần)
         // Nhiệm vụ phải báo cáo tuần: mỗi tuần một báo cáo riêng — tuần mới bắt đầu trống để nhập (dữ liệu tuần cũ vẫn lưu, xem bằng nút ‹ tuần trước); nhiệm vụ không phải báo cáo thì giữ kết quả gần nhất
+        if (tatCaTuan) {
+          const ls = baoCaoCuaDong(x, null), hetCa = moHet.has(x.n.id), hienLs = hetCa ? ls : ls.slice(0, 3);
+          if (!ls.length) return <span className="text-[#8D8486]">{x.canBct ? 'Chưa có báo cáo tuần' : '—'}</span>;
+          return <span className="flex flex-col gap-1">
+            {hienLs.map((b) => (
+              <span key={b.khoa} className="block border-l-2 border-[#C99A2E] pl-1.5">
+                <span className="block font-sans text-[7.5pt] font-semibold text-[#6B6B6B]">{b.ten} · {nguoiGon(b.boi)} · {ngayGioDu(b.luc)}</span>
+                {b.noi && <span className="block whitespace-pre-wrap">{b.noi}</span>}
+              </span>))}
+            {ls.length > 3 && <button type="button" onClick={(e) => { e.stopPropagation(); setMoHet((t) => { const n = new Set(t); if (n.has(x.n.id)) n.delete(x.n.id); else n.add(x.n.id); return n; }); }}
+              className="self-start font-sans text-[7.5pt] font-semibold text-[#1E4F86] hover:underline">{hetCa ? 'Thu gọn' : `Xem thêm ${ls.length - 3} tuần`}</button>}
+          </span>;
+        }
         const cuoi = x.canBct ? x.tuanCn[0] ?? null : baoCaoGanNhat(x);
         const tuanCuoi = cuoi?.noi_dung.match(/^Báo cáo tuần (\d+\/\d+):/)?.[1];
         return <>
@@ -1441,7 +1462,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 }
 
 // ---------- Dải báo cáo tuần: tiến độ báo cáo tuần này + hạn; một chạm lọc nhiệm vụ chưa báo cáo
-function DaiBaoCaoTuan({ doc, cuaSo = '', khoa = false, ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { doc?: () => void; cuaSo?: string; khoa?: boolean; ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
+function DaiBaoCaoTuan({ docRong, datDocRong, giaTri, doc, cuaSo = '', khoa = false, ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { docRong?: boolean; datDocRong?: (b: boolean) => void; giaTri?: number; doc?: () => void; cuaSo?: string; khoa?: boolean; ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
   if (!ds.length && !lui) return null;
   const toiDa = chuanBi ? -1 : 0;
   const da = ds.filter((x) => x.tuanCn.length).length, con = ds.length - da;
@@ -1459,11 +1480,13 @@ function DaiBaoCaoTuan({ doc, cuaSo = '', khoa = false, ds, ten, han, hanChu, lo
         {lui < 0 && <span className="block text-xs font-semibold text-[#6D28D9]">Tuần sau: {ds.length} nhiệm vụ phải báo cáo (chưa hoàn thành, chưa tạm dừng). Nội dung chuẩn bị trước chưa đổi tiến độ / tình trạng.</span>}
         {nhap && !xong && <span className="hidden text-xs text-mo sm:block">Bấm ô “Kết quả thực hiện” của nhiệm vụ để nhập kết quả tuần.</span>}
       </span>
-      <select value={lui} onChange={(e) => datLui(Number(e.target.value))} aria-label="Chọn tuần báo cáo"
+      <select value={giaTri ?? lui} onChange={(e) => datLui(Number(e.target.value))} aria-label="Chọn tuần báo cáo"
         className="h-9 min-w-0 flex-1 rounded-lg border border-vien bg-white px-2 text-[0.8125rem] font-semibold sm:max-w-[320px] sm:flex-none">
-        {Array.from({ length: 3 - toiDa + 1 }, (_, i) => 3 - i).map((v) => <option key={v} value={v}>{nhanTuan(v)}</option>)}
+        {[...Array.from({ length: 3 - toiDa + 1 }, (_, i) => 3 - i), TAT_CA_TUAN].map((v) => <option key={v} value={v}>{nhanTuan(v)}</option>)}
       </select>
-      {doc && <button type="button" onClick={doc} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-vien bg-white px-3 text-[0.8125rem] font-semibold hover:bg-nen-2"><BookOpen className="h-4 w-4" />Đọc báo cáo</button>}
+      {datDocRong && <button type="button" onClick={() => datDocRong(!docRong)} aria-pressed={docRong} title="Ẩn các cột phụ, mở rộng cột Kết quả để đọc"
+        className={cx('flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-[0.8125rem] font-semibold', docRong ? 'border-[#6A0F14] bg-[#6A0F14] text-white' : 'border-vien bg-white hover:bg-nen-2')}><BookOpen className="h-4 w-4" />Đọc rộng</button>}
+      {doc && <button type="button" onClick={doc} title="Sao chép kết quả báo cáo thành văn bản" className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-vien bg-white px-3 text-[0.8125rem] font-semibold hover:bg-nen-2"><Copy className="h-4 w-4" />Sao chép</button>}
       {!xong && <button onClick={() => datLoc(!loc)} aria-pressed={loc}
         className={cx('h-9 shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>
         {loc ? 'Hiện tất cả' : `Chưa báo cáo (${con})`}</button>}
@@ -1901,8 +1924,9 @@ function baoCaoCuaDong(x: Dong, tuan: Tuan | null): MucBc[] {
   }
   return tuan ? ra : ra.sort((a, b) => b.khoa - a.khoa);
 }
-function DocBaoCao({ ds, tuan, dong }: { ds: Dong[]; tuan: Tuan; dong: () => void }) {
-  const [pham, setPham] = useState<'tuan' | 'tatca'>('tuan');
+function DocBaoCao({ ds, tuan, dong, nhung = false, pham: phamCo }: { ds: Dong[]; tuan: Tuan; dong: () => void; nhung?: boolean; pham?: 'tuan' | 'tatca' }) {
+  const [phamTu, setPham] = useState<'tuan' | 'tatca'>('tuan');
+  const pham = phamCo ?? phamTu;
   const [chiCo, setChiCo] = useState(false);
   const [daChep, setDaChep] = useState(false);
   const nhom = useMemo(() => {
@@ -1922,10 +1946,10 @@ function DocBaoCao({ ds, tuan, dong }: { ds: Dong[]; tuan: Tuan; dong: () => voi
     ? bc.map((b) => `  ${pham === 'tatca' ? `[${b.ten}] ` : ''}${b.noi}`).join('\n') : '  (chưa báo cáo)')).join('\n')).join('\n\n');
   const chep = async () => { try { await navigator.clipboard.writeText(`${pham === 'tuan' ? tuan.ten : 'Kết quả báo cáo các tuần'}\n\n${vanBan()}`); setDaChep(true); setTimeout(() => setDaChep(false), 2000); } catch { window.alert('Không sao chép được — trình duyệt chặn.'); } };
   return (
-    <HopThoai mo dong={dong} tieuDe="Đọc kết quả báo cáo" rong="max-w-3xl">
+    <Khung nhung={nhung} dong={dong}>
       <div className="flex flex-col gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {([['tuan', tuan.ten], ['tatca', 'Từ trước đến nay']] as const).map(([k, nhan]) => (
+          {!phamCo && ([['tuan', tuan.ten], ['tatca', 'Từ trước đến nay']] as const).map(([k, nhan]) => (
             <button key={k} type="button" aria-pressed={pham === k} onClick={() => setPham(k)}
               className={cx('h-9 rounded-lg border px-3 text-[0.8125rem] font-semibold', pham === k ? 'border-[#6A0F14] bg-[#6A0F14] text-white' : 'border-vien bg-white hover:bg-nen-2')}>{nhan}</button>
           ))}
@@ -1955,6 +1979,7 @@ function DocBaoCao({ ds, tuan, dong }: { ds: Dong[]; tuan: Tuan; dong: () => voi
           </section>
         ))}
       </div>
-    </HopThoai>
+    </Khung>
   );
 }
+const Khung = ({ nhung, dong, children }: { nhung: boolean; dong: () => void; children: ReactNode }) => (nhung ? <>{children}</> : <HopThoai mo dong={dong} tieuDe="Sao chép kết quả báo cáo" rong="max-w-3xl">{children}</HopThoai>);
