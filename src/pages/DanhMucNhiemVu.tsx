@@ -124,7 +124,7 @@ const soSanhTieuChi = (k: KhoaSap, a: Dong, b: Dong): number => {
   const vi = (u: string, v: string) => u.localeCompare(v, 'vi');
   switch (k) {
     case 'han': return hanCua(a).localeCompare(hanCua(b));
-    case 'tinh_trang': return THU_TU_TT.indexOf(ttHienThi(a).loai) - THU_TU_TT.indexOf(ttHienThi(b).loai);
+    case 'tinh_trang': return hangTT(a) - hangTT(b);
     case 'tien_do': return a.n.phan_tram - b.n.phan_tram;
     case 'don_vi': return vi(a.n.chu_tri_ten ?? '\uffff', b.n.chu_tri_ten ?? '\uffff');
     case 'linh_vuc': return vi(LINH_VUC[a.n.linh_vuc as keyof typeof LINH_VUC] ?? '', LINH_VUC[b.n.linh_vuc as keyof typeof LINH_VUC] ?? '');
@@ -137,6 +137,8 @@ const TEN_KIEU_NHOM: Record<KieuDG, string> = { ty_le: 'Nhiệm vụ tính theo 
 const LA_MA = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI', 'XII', 'XIII', 'XIV', 'XV', 'XVI', 'XVII', 'XVIII', 'XIX', 'XX'];
 const hanCua = (x: Dong) => (x.n.dinh_ky ? x.n.ky_han : x.n.han) ?? '9999-12-31';
 const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
+// Thứ hạng khi sắp theo tình trạng: "Chưa đạt" (đang thực hiện nhưng chưa đạt chỉ tiêu) xếp trên "Đang thực hiện"
+const hangTT = (x: Dong) => { const h = ttHienThi(x); return THU_TU_TT.indexOf(h.loai) - (h.loai === 'dang' && /chưa đạt/i.test(h.nhan) ? 0.5 : 0); };
 // Cách xem bảng: nhóm lại theo đơn vị chủ trì / lĩnh vực / loại đánh giá và sắp theo hạn, tình trạng (chỉ đổi cách xem và bản xuất, không đổi thứ tự danh mục)
 function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
   if (nhomTheo === 'nhom' && !tieuChi.length) return { ds, nhom: nhomGoc };
@@ -1875,7 +1877,8 @@ function oChu(c: KhoaCot, x: Dong): string {
     case 'ten': return x.n.ten;
     case 'chu_tri': return x.d.chu_tri_vb || chuTriMacDinh(x);
     case 'san_pham': return x.n.san_pham ?? '';
-    case 'nguon_vb': return [x.d.nguon_vb, x.vb ? tenVb(x.vb) : ''].filter(Boolean).join('\n');
+    case 'nguon_vb': { const t = x.vb ? chuMinhChung(x.vb.so_ky_hieu, x.vb.ngay_ban_hanh, '') : '';   // chỉ số, ký hiệu và ngày ban hành văn bản; chưa gắn văn bản thì giữ tên đã ghi tay
+      return t || x.d.nguon_vb || (x.vb ? tenVb(x.vb) : ''); }
     case 'han': return ngayNgan(x.n.han);
     case 'tien_do': {
       if (x.con.length) return `${x.con.filter((c) => c.tt.loai === 'xong').length}/${x.con.length} nhiệm vụ con hoàn thành (${x.pt}%)`;
@@ -1894,13 +1897,17 @@ function oChu(c: KhoaCot, x: Dong): string {
     case 'ma': return x.n.ma ?? '';
   }
 }
+// Màu nền hàng khi xuất Word / Excel: giống màu tô trên bảng (hoàn thành xanh, quá hạn đỏ nhạt, sắp đến hạn vàng, chưa triển khai xám, nhiệm vụ lớn kem)
+const NEN_HANG: Record<string, string> = { xong: 'F0FAF3', qua_han: 'FEF3F1', sap_han: 'FFFBEA', chua: 'F4F4F5' };
+const NEN_NHOM = 'F1ECEC';
+const nenHang = (x: Dong): string | undefined => NEN_HANG[ttHienThi(x).loai] ?? (x.con.length > 0 ? 'FAF6EE' : undefined);
 function nhomTheoThuTu(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
   const g = nhom ?? (ch.nhom.length ? ch.nhom : nhomMacDinh());
   return [...g, { id: '_khac', ky_hieu: '', ten: 'Chưa phân nhóm' }].map((x) => [x, ds.filter((y) => y.nhom === x.id)] as const).filter(([, v]) => v.length);
 }
 async function xuatWord(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
   const D = await import('docx');
-  const { AlignmentType, Document, Header, Packer, PageNumber, PageOrientation, Paragraph, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlign, WidthType, BorderStyle } = D;
+  const { AlignmentType, Document, Header, Packer, PageNumber, PageOrientation, Paragraph, ShadingType, Table, TableCell, TableLayoutType, TableRow, TextRun, VerticalAlign, WidthType, BorderStyle } = D;
   const cot = ch.cot.filter((c) => c.hien); const tong = cot.reduce((a, c) => a + c.rong, 0);
   const tw = (mm: number) => Math.round(mm * 56.6929);
   const kt = kichThuocTrang(ch); const [mt, mr, mb, ml] = ch.kho.le;
@@ -1910,13 +1917,14 @@ async function xuatWord(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
   const doan = (t: string, o: { dam?: boolean; nghieng?: boolean; can?: (typeof AlignmentType)[keyof typeof AlignmentType]; co?: number } = {}) =>
     (t || '').split('\n').map((dong) => new Paragraph({ alignment: o.can ?? AlignmentType.LEFT, widowControl: false, keepNext: false, keepLines: false, spacing: { before: 0, after: 0, line: 240 },
       children: [new TextRun({ text: dong, bold: o.dam, italics: o.nghieng, font: 'Times New Roman', size: o.co ?? sz })] }));
-  const o = (t: string, w: number, o2: Parameters<typeof doan>[1] & { gop?: number } = {}) => new TableCell({ borders, width: { size: w, type: WidthType.DXA }, columnSpan: o2.gop,
+  const o = (t: string, w: number, o2: Parameters<typeof doan>[1] & { gop?: number; nen?: string } = {}) => new TableCell({ borders, width: { size: w, type: WidthType.DXA }, columnSpan: o2.gop,
+    shading: o2.nen ? { type: ShadingType.CLEAR, color: 'auto', fill: o2.nen } : undefined,
     verticalAlign: VerticalAlign.CENTER, margins: { top: 40, bottom: 40, left: 70, right: 70 }, children: doan(t, o2) });
   const giua = ['tt', 'han', 'tinh_trang'];
   const hang: InstanceType<typeof TableRow>[] = [new TableRow({ tableHeader: true, children: cot.map((c, i) => o(c.nhan, rong[i], { dam: true, can: AlignmentType.CENTER })) })];
   for (const [g, arr] of nhomTheoThuTu(ch, ds, nhom)) {
-    hang.push(new TableRow({ children: [o(`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`, rongNd, { dam: true, gop: cot.length })] }));
-    for (const x of arr) hang.push(new TableRow({ children: cot.map((c, i) => o(oChu(c.khoa, x), rong[i], { can: giua.includes(c.khoa) ? AlignmentType.CENTER : AlignmentType.JUSTIFIED, dam: c.khoa === 'han' })) }));
+    hang.push(new TableRow({ children: [o(`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`, rongNd, { dam: true, gop: cot.length, nen: NEN_NHOM })] }));
+    for (const x of arr) hang.push(new TableRow({ children: cot.map((c, i) => o(oChu(c.khoa, x), rong[i], { can: giua.includes(c.khoa) ? AlignmentType.CENTER : AlignmentType.JUSTIFIED, dam: c.khoa === 'han', nen: nenHang(x) })) }));
   }
   const phu = ch.dong_phu.replace(/\{ngay\}/g, ngayNgan(homNayVN()));
   const con = [
@@ -1959,13 +1967,14 @@ async function xuatWord(ch: CauHinhA4, ds: Dong[], nhom?: NhomA4[]) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 async function xuatExcel(ch: CauHinhA4, ds: Dong[], phamVi: Dong[], dv: DonVi[], nhom?: NhomA4[]) {
-  const XLSX = await import('xlsx');
+  const XLSX = await import('xlsx-js-style');   // bản có tô màu ô (giống xlsx)
   const cot = ch.cot.filter((c) => c.hien); const tong = cot.reduce((a, c) => a + c.rong, 0);
   const aoa: (string | number)[][] = [[ch.tieu_de], [ch.dong_phu.replace(/\{ngay\}/g, ngayNgan(homNayVN()))], [], cot.map((c) => c.nhan)];
   const gop = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cot.length - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: cot.length - 1 } }];
+  const nenDong = new Map<number, string>();   // chỉ số hàng -> màu nền
   for (const [g, arr] of nhomTheoThuTu(ch, ds, nhom)) {
-    gop.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: cot.length - 1 } }); aoa.push([`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`]);
-    for (const x of arr) aoa.push(cot.map((c) => (c.khoa === 'tt' ? x.stt : oChu(c.khoa, x))));
+    gop.push({ s: { r: aoa.length, c: 0 }, e: { r: aoa.length, c: cot.length - 1 } }); nenDong.set(aoa.length, NEN_NHOM); aoa.push([`${g.ky_hieu ? `${g.ky_hieu}. ` : ''}${g.ten}`]);
+    for (const x of arr) { const nen = nenHang(x); if (nen) nenDong.set(aoa.length, nen); aoa.push(cot.map((c) => (c.khoa === 'tt' ? x.stt : oChu(c.khoa, x)))); }
   }
   const tk = thongKeTT(ds);
   aoa.push([], ['Thống kê tình trạng nhiệm vụ'], ['Tình trạng', 'Số nhiệm vụ', 'Tỷ lệ (%)'], ['Tổng số', tk.tong, 100],
@@ -1977,7 +1986,11 @@ async function xuatExcel(ch: CauHinhA4, ds: Dong[], phamVi: Dong[], dv: DonVi[],
     const x = a.filter((y) => y.tt.loai === 'xong');
     aoa.push([d.ten, a.length, phanTram(a.length, giao.length), x.length, x.filter((y) => !y.tt.tre).length, a.filter((y) => y.tt.loai === 'qua_han').length, phanTram(x.length, a.length)]);
   }
-  const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!merges'] = gop; ws['!cols'] = cot.map((c) => ({ wch: Math.max(6, Math.round((c.rong / tong) * 170)) }));
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  // Tô màu nền cả hàng như trên bảng (ô trống cũng tô để màu liền mạch)
+  nenDong.forEach((rgb, r) => { for (let c = 0; c < cot.length; c++) { const a = XLSX.utils.encode_cell({ r, c }); const o = ws[a] ?? (ws[a] = { t: 's', v: '' });
+    o.s = { fill: { patternType: 'solid', fgColor: { rgb } }, alignment: { vertical: 'top', wrapText: true } }; } });
+  ws['!merges'] = gop; ws['!cols'] = cot.map((c) => ({ wch: Math.max(6, Math.round((c.rong / tong) * 170)) }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Danh mục');
   XLSX.writeFile(wb, `danh-muc-nhiem-vu-${homNayVN()}.xlsx`);
 }
