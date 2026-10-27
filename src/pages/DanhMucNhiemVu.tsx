@@ -2,7 +2,7 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, CalendarClock, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, CalendarClock, Copy, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { dauMoiCds, dauMoiDa06, laQuanTri, useAuth } from '../lib/auth';
@@ -14,7 +14,7 @@ import {
 } from '../lib/danhMucA4';
 import { moTepDrive } from '../components/TepDrive';
 import { khoaChot, chupTuan, daQuaHan, type AnhChup } from '../lib/chotTuan';
-import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, cuaSoNop, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, kiemTraCuaSoNop, laBaoCaoTuanBatKy, laBaoCaoTuanSau, laRutBaoCao, muonMs, nhanMoc, TEN_THU, tuanCua, type CauHinhBCT } from '../lib/baoCaoTuan';
+import { baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, cuaSoNop, DAU_RUT, gioHan, khoaTuan, KHOA_BCT, kiemTraCuaSoNop, laBaoCaoTuanBatKy, laBaoCaoTuanSau, laRutBaoCao, muonMs, nhanMoc, TEN_THU, tuanCua, type CauHinhBCT, type Tuan } from '../lib/baoCaoTuan';
 import FormVanBan from '../components/FormVanBan';
 import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
@@ -221,6 +221,7 @@ export default function DanhMucNhiemVu() {
   const [themCon, setThemCon] = useState<string | null>(null);   // thêm nhiệm vụ con vào nhiệm vụ lớn (id)
   const [moTk, setMoTk] = useState(false);
   const [chiToi, setChiToi] = useState(true); // đầu mối lĩnh vực: mặc định chỉ hiện nhiệm vụ đơn vị mình chủ trì
+  const [moDoc, setMoDoc] = useState(false);   // màn đọc toàn bộ kết quả báo cáo
   const [moLoc, setMoLoc] = useState(false); // điện thoại: thu gọn các tuỳ chọn lọc phụ
   const [oSua, setOSua] = useState<{ id: string; khoa: KhoaCot; o: HTMLElement } | null>(null);
   const [sua, setSua] = useState<NhiemVu | null>(null);
@@ -433,10 +434,12 @@ export default function DanhMucNhiemVu() {
           {(tim || locDv || locs.length > 0) && <button className="order-1 h-9 rounded-lg px-2 text-[0.8125rem] font-semibold text-[#8E1B22] hover:bg-do/5 sm:order-none" onClick={() => { setTim(''); setLocDv(''); setLocTT('tat_ca'); }}>Bỏ lọc</button>}
           <span className="hidden flex-1 sm:block" />
         </>} />
-      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`} cuaSo={cuaSoChu} khoa={!!loiCuaSo}
+      <DaiBaoCaoTuan ds={viecLa.filter((x) => x.canBct && (dvXem ? !donVi || x.n.chu_tri_don_vi_id === dvXem : !locDv || x.n.chu_tri_don_vi_id === locDv))}ten={tuanNgan} han={tuan.han} hanChu={`${TEN_THU[data.bct.thu]} ${gioHan(data.bct)}`} cuaSo={cuaSoChu} khoa={!!loiCuaSo} doc={() => setMoDoc(true)}
         loc={locs.length === 1 && locs[0] === 'chua_bct'} datLoc={(b) => setLocTT(b ? 'chua_bct' : 'tat_ca')} nhap={donVi || (quanTri && !!locDv)}
         lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length && khopThe(x))} dv={data.dv} dvXem={coNgoai ? '' : dvXem}quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
+
+      {moDoc && <DocBaoCao ds={hien.filter((x) => !x.con.length)} tuan={tuan} dong={() => setMoDoc(false)} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
       <div className="flex items-start gap-4">
@@ -1438,7 +1441,7 @@ function CapNhatNhanh({ x, laChuTri, quanTri, luuDong, xong, moSan = false, huy,
 }
 
 // ---------- Dải báo cáo tuần: tiến độ báo cáo tuần này + hạn; một chạm lọc nhiệm vụ chưa báo cáo
-function DaiBaoCaoTuan({ cuaSo = '', khoa = false, ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { cuaSo?: string; khoa?: boolean; ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
+function DaiBaoCaoTuan({ doc, cuaSo = '', khoa = false, ds, ten, han, hanChu, loc, datLoc, nhap, lui, chuanBi, datLui, nhanTuan }: { doc?: () => void; cuaSo?: string; khoa?: boolean; ds: Dong[]; ten: string; han: Date; hanChu: string; loc: boolean; datLoc: (b: boolean) => void; nhap: boolean; lui: number; chuanBi: boolean; datLui: (v: number) => void; nhanTuan: (v: number) => string }) {
   if (!ds.length && !lui) return null;
   const toiDa = chuanBi ? -1 : 0;
   const da = ds.filter((x) => x.tuanCn.length).length, con = ds.length - da;
@@ -1460,6 +1463,7 @@ function DaiBaoCaoTuan({ cuaSo = '', khoa = false, ds, ten, han, hanChu, loc, da
         className="h-9 min-w-0 flex-1 rounded-lg border border-vien bg-white px-2 text-[0.8125rem] font-semibold sm:max-w-[320px] sm:flex-none">
         {Array.from({ length: 3 - toiDa + 1 }, (_, i) => 3 - i).map((v) => <option key={v} value={v}>{nhanTuan(v)}</option>)}
       </select>
+      {doc && <button type="button" onClick={doc} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-vien bg-white px-3 text-[0.8125rem] font-semibold hover:bg-nen-2"><BookOpen className="h-4 w-4" />Đọc báo cáo</button>}
       {!xong && <button onClick={() => datLoc(!loc)} aria-pressed={loc}
         className={cx('h-9 shrink-0 rounded-lg px-3 text-[0.8125rem] font-semibold', loc ? 'bg-white text-den ring-1 ring-vien' : 'bg-[#6D28D9] text-white hover:bg-[#5B21B6]')}>
         {loc ? 'Hiện tất cả' : `Chưa báo cáo (${con})`}</button>}
@@ -1879,4 +1883,78 @@ async function xuatExcel(ch: CauHinhA4, ds: Dong[], phamVi: Dong[], dv: DonVi[],
   const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!merges'] = gop; ws['!cols'] = cot.map((c) => ({ wch: Math.max(6, Math.round((c.rong / tong) * 170)) }));
   const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Danh mục');
   XLSX.writeFile(wb, `danh-muc-nhiem-vu-${homNayVN()}.xlsx`);
+}
+
+
+// ---------- Đọc toàn bộ kết quả báo cáo: theo tuần đang chọn, hoặc lịch sử các tuần (từ trước đến nay), gom theo đơn vị chủ trì; theo đúng bộ lọc đang áp dụng
+type MucBc = { khoa: number; ten: string; noi: string; luc: string; boi: string | null };
+function baoCaoCuaDong(x: Dong, tuan: Tuan | null): MucBc[] {
+  const ra: MucBc[] = [], da = new Set<number>();
+  const ds = tuan ? x.tuanCn : x.cn;
+  for (const c of ds) {                                    // mới nhất trước
+    const k = khoaTuan(c.noi_dung);
+    if (k === null || (tuan === null && da.has(k))) continue;
+    da.add(k);
+    if (laRutBaoCao(c.noi_dung)) continue;                 // lần mới nhất là rút -> tuần đó coi như chưa báo cáo
+    ra.push({ khoa: k, ten: `Tuần ${k % 100}/${Math.floor(k / 100)}`, noi: boTienTo(c.noi_dung).trim(), luc: c.luc, boi: c.boi_ten });
+    if (tuan) break;
+  }
+  return tuan ? ra : ra.sort((a, b) => b.khoa - a.khoa);
+}
+function DocBaoCao({ ds, tuan, dong }: { ds: Dong[]; tuan: Tuan; dong: () => void }) {
+  const [pham, setPham] = useState<'tuan' | 'tatca'>('tuan');
+  const [chiCo, setChiCo] = useState(false);
+  const [daChep, setDaChep] = useState(false);
+  const nhom = useMemo(() => {
+    const m = new Map<string, { x: Dong; bc: MucBc[] }[]>();
+    for (const x of ds) {
+      if (pham === 'tuan' && !x.canBct && !x.tuanCn.length) continue;
+      const bc = baoCaoCuaDong(x, pham === 'tuan' ? tuan : null);
+      if (chiCo && !bc.length) continue;
+      if (pham === 'tatca' && !bc.length && !x.cn.length) continue;
+      const k = x.n.chu_tri_ten ?? 'Chưa giao đơn vị';
+      m.set(k, [...(m.get(k) ?? []), { x, bc }]);
+    }
+    return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
+  }, [ds, tuan, pham, chiCo]);
+  const tong = nhom.reduce((a, [, v]) => a + v.length, 0), coBc = nhom.reduce((a, [, v]) => a + v.filter((r) => r.bc.length).length, 0);
+  const vanBan = () => nhom.map(([dv, v]) => `${dv.toUpperCase()}\n` + v.map(({ x, bc }) => `- ${x.so ? `${x.so}. ` : ''}${x.n.ten}\n` + (bc.length
+    ? bc.map((b) => `  ${pham === 'tatca' ? `[${b.ten}] ` : ''}${b.noi}`).join('\n') : '  (chưa báo cáo)')).join('\n')).join('\n\n');
+  const chep = async () => { try { await navigator.clipboard.writeText(`${pham === 'tuan' ? tuan.ten : 'Kết quả báo cáo các tuần'}\n\n${vanBan()}`); setDaChep(true); setTimeout(() => setDaChep(false), 2000); } catch { window.alert('Không sao chép được — trình duyệt chặn.'); } };
+  return (
+    <HopThoai mo dong={dong} tieuDe="Đọc kết quả báo cáo" rong="max-w-3xl">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {([['tuan', tuan.ten], ['tatca', 'Từ trước đến nay']] as const).map(([k, nhan]) => (
+            <button key={k} type="button" aria-pressed={pham === k} onClick={() => setPham(k)}
+              className={cx('h-9 rounded-lg border px-3 text-[0.8125rem] font-semibold', pham === k ? 'border-[#6A0F14] bg-[#6A0F14] text-white' : 'border-vien bg-white hover:bg-nen-2')}>{nhan}</button>
+          ))}
+          <label className="flex items-center gap-1.5 text-[0.8125rem]"><input type="checkbox" className="h-4 w-4" checked={chiCo} onChange={(e) => setChiCo(e.target.checked)} />Chỉ nhiệm vụ đã có báo cáo</label>
+          <span className="flex-1" />
+          <button type="button" onClick={() => void chep()} className="flex h-9 items-center gap-1.5 rounded-lg border border-vien px-3 text-[0.8125rem] font-semibold hover:bg-nen-2"><Copy className="h-4 w-4" />{daChep ? 'Đã chép' : 'Sao chép'}</button>
+        </div>
+        <p className="m-0 text-xs text-mo">{coBc}/{tong} nhiệm vụ có báo cáo · theo đúng thẻ và bộ lọc đang chọn ở bảng.</p>
+        {!nhom.length && <p className="m-0 rounded-xl bg-nen p-4 text-center text-sm text-mo">Không có nhiệm vụ nào.</p>}
+        {nhom.map(([dv, v]) => (
+          <section key={dv} className="flex flex-col overflow-hidden rounded-2xl border border-vien">
+            <h3 className="m-0 border-b border-vien bg-nen-2 px-4 py-2 text-[0.8125rem] font-bold text-[#6A0F14]">{dv} <span className="mono font-normal text-mo">({v.length})</span></h3>
+            <ul className="m-0 flex list-none flex-col p-0">
+              {v.map(({ x, bc }) => (
+                <li key={x.n.id} className="flex flex-col gap-1 border-b border-[#F1EEE7] px-4 py-2.5 last:border-0">
+                  <span className="text-[0.8438rem] font-semibold leading-snug">{x.so ? `${x.so}. ` : ''}{x.n.ten}</span>
+                  {!bc.length && <span className="text-xs text-[#9F1239]">{pham === 'tuan' ? 'Chưa báo cáo tuần này' : 'Chưa có báo cáo tuần'}</span>}
+                  {bc.map((b) => (
+                    <div key={b.khoa} className="flex flex-col rounded-lg bg-nen px-3 py-1.5 text-[0.8125rem] leading-snug">
+                      <span className="text-[11px] text-mo">{pham === 'tatca' ? `${b.ten} · ` : ''}{nguoiGon(b.boi)} · {ngayGioDu(b.luc)}</span>
+                      <span className="whitespace-pre-wrap break-words">{b.noi || '—'}</span>
+                    </div>
+                  ))}
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </HopThoai>
+  );
 }
