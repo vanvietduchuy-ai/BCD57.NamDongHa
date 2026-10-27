@@ -319,7 +319,7 @@ export default function DanhMucNhiemVu() {
     if (!data) return [];
     const thuTuNhom = new Map(nhomDs.map((g, i) => [g.id, i]));
     // Xem tuần đã qua: tiến độ / tình trạng theo ảnh chụp Chốt tuần (chưa chốt thì dựng lại tại hạn của tuần đó)
-    const quaKhu = luiTuan > 0, anh = quaKhu ? data.chot[khoaChot(tuan)] : undefined;
+    const quaKhu = luiTuan > 0 || daQuaHan(tuan), anh = quaKhu ? data.chot[khoaChot(tuan)] : undefined;   // kỳ đã qua hạn (kể cả kỳ vừa hết hạn đang xem mặc định): thống kê tại hạn
     const ttTatCa = tinhTrangTatCa(data.nv, data.cn, ch, quaKhu ? tuan.han : undefined);   // dùng chung với Tổng quan
     const lay = (id: string) => anh?.nv[id] ?? { tt: ttTatCa.get(id)!.tt, ttTD: ttTatCa.get(id)!.ttTD, pt: ttTatCa.get(id)!.nv.phan_tram, ts: ttTatCa.get(id)!.nv.trang_thai };
     const ds = data.nv.map((n) => {

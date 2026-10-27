@@ -158,10 +158,12 @@ export function tinhTrangTatCa(nv0: NhiemVu[], cn0: Map<string, CapNhatTT[]>, ch
   }
   for (const g of ds) {
     if (!g.con.length) continue;
-    const xong = g.con.filter((c) => c.tt.loai === 'xong').length;
-    const xau = MUC_XAU.find((m) => g.con.some((c) => c.tt.loai === m)) ?? 'chua';
+    // Tình trạng thực tế của từng nhiệm vụ con: tình trạng Thường trực sửa tay (vd Hoàn thành) được ưu tiên, giống cột Tình trạng của dòng con
+    const tc = g.con.map((c) => (c.d.tt_tay ? chuanTTTay(c.d.tt_tay) : c.tt));
+    const xong = tc.filter((t) => t.loai === 'xong').length;
+    const xau = MUC_XAU.find((m) => tc.some((t) => t.loai === m)) ?? 'chua';
     g.tt = xong === g.con.length ? { loai: 'xong', nhan: 'Hoàn thành' }
-      : { loai: xau, nhan: xau === 'qua_han' ? `${g.con.filter((c) => c.tt.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
+      : { loai: xau, nhan: xau === 'qua_han' ? `${tc.filter((t) => t.loai === 'qua_han').length} việc quá hạn` : `${xong}/${g.con.length} hoàn thành` };
   }
   return new Map(ds.map((x) => [x.n.id, { ttTD: x.tt, tt: x.d.tt_tay ? chuanTTTay(x.d.tt_tay) : x.tt, nv: x.n }]));
 }

@@ -13,7 +13,7 @@ import {
   baoCaoHieuLuc, BCT_MAC_DINH, boTienTo, chuTre, gioHan, KHOA_BCT, muonMs, NHAN_TT_TUAN, TEN_THU, tinhTrangTuan, tuanCua, type CapNhatTuan, type CauHinhBCT, type Tuan,
 } from '../lib/baoCaoTuan';
 import TheoDoiNhieuTuan from '../components/TheoDoiNhieuTuan';
-import { gomCapNhat, viecCuaTuan } from '../lib/chotTuan';
+import { daQuaHan, gomCapNhat, viecCuaTuan } from '../lib/chotTuan';
 import { LienLacDonVi } from '../components/LienLacTrucTiep';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, Rong, The, TieuDeTrang, cx } from '../components/ui';
 
@@ -50,7 +50,7 @@ export default function BaoCaoTuan() {
 
   const tuan = useMemo(() => tuanCua(new Date(), data?.bct ?? BCT_MAC_DINH, lui), [data, lui]);
   // Nhiệm vụ phải báo cáo tuần: cùng quy tắc với bảng A4 (canBaoCaoTuan) — đã duyệt giao, không phải nhiệm vụ lớn có nhiệm vụ con
-  const viec = useMemo(() => data ? viecCuaTuan(data.nv, data.cn, gomCapNhat(data.cn), data.a4, tuan, lui > 0) : [] as Viec[], [data, tuan, lui]);
+  const viec = useMemo(() => data ? viecCuaTuan(data.nv, data.cn, gomCapNhat(data.cn), data.a4, tuan, lui > 0 || daQuaHan(tuan)) : [] as Viec[], [data, tuan, lui]);
 
   // Đơn vị nhập báo cáo tuần ngay trên bảng A4 nhiệm vụ
   if (donVi) return <Navigate to="/nhiem-vu?tab=chua_bct" replace />;

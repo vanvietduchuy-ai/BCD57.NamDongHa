@@ -16,7 +16,8 @@ export default function TheoDoiNhieuTuan({ nv, cn, a4, bct, dv }: { nv: NhiemVu[
   const [soTuan, setSoTuan] = useState(8);
   const { tuans, bang } = useMemo(() => {
     const cnMap = gomCapNhat(cn);
-    const tuans = Array.from({ length: soTuan }, (_, i) => tuanCua(new Date(), bct, i + 1)).filter((t) => daQuaHan(t)).reverse();   // cũ → mới; kỳ hiện tại (lui 0) chưa tới hạn nên bắt đầu từ kỳ vừa qua hạn
+    // cũ → mới; chỉ lấy các kỳ đã qua hạn (kỳ hiện tại có thể đã qua hạn nhưng chưa tới mốc mở kỳ sau nên tính từ lui 0)
+    const tuans = Array.from({ length: soTuan + 1 }, (_, i) => tuanCua(new Date(), bct, i)).filter((t) => daQuaHan(t)).slice(0, soTuan).reverse();
     const theoTuan = tuans.map((t) => ({ t, viec: viecCuaTuan(nv, cn, cnMap, a4, t, true) }));
     const bang = dv.map((d) => {
       const o: (O | null)[] = theoTuan.map(({ t, viec }) => {

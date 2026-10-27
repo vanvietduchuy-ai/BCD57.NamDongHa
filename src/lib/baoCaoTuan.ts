@@ -16,14 +16,19 @@ const ngayVN = (d: Date) => { const t = new Date(d.getTime() + VN); return Date.
 // Giờ hạn dạng 17:00
 export const gioHan = (ch: CauHinhBCT) => `${String(ch.gio).padStart(2, '0')}:${String(ch.phut ?? 0).padStart(2, '0')}`;
 export type Tuan = { so: number; nam: number; batDau: Date; ketThuc: Date; han: Date; ten: string; tienTo: string };
-// Kỳ báo cáo tuần: lui = số tuần lùi lại. Kỳ hiện tại = kỳ có hạn nộp gần nhất chưa qua (qua hạn thì sang kỳ kế tiếp).
+// Kỳ báo cáo tuần: lui = số tuần lùi lại. Kỳ hiện tại = kỳ có hạn nộp gần nhất chưa qua.
+// Qua hạn nộp thì VẪN giữ kỳ vừa hết hạn (xem thống kê trong hạn, nộp bù) cho tới khi đến mốc mở nhận báo cáo của kỳ kế tiếp mới sang kỳ mới;
+// chưa cài mốc mở thì sang kỳ kế tiếp ngay khi qua hạn.
 export function tuanCua(d: Date, ch: CauHinhBCT, lui = 0): Tuan {
   const DAY = 86400000;
   const n0 = ngayVN(d);
   const thu = ((new Date(n0).getUTCDay() + 6) % 7) + 1;              // 1..7
   const hanCua = (t2: number) => t2 + (ch.thu - 1) * DAY + ch.gio * 3600000 + (ch.phut ?? 0) * 60000 - VN;
   let thu2 = n0 - (thu - 1) * DAY;                                    // thứ Hai 00:00 (VN, dạng UTC) của tuần chứa ngày hạn
-  if (hanCua(thu2) < d.getTime()) thu2 += 7 * DAY;                    // đã qua hạn tuần này -> kỳ đang chờ báo cáo là tuần kế tiếp
+  if (hanCua(thu2) < d.getTime()) thu2 += 7 * DAY;                    // đã qua hạn tuần này -> kỳ có hạn kế tiếp
+  // Kỳ có hạn kế tiếp chưa đến mốc mở nhận báo cáo -> vẫn giữ kỳ vừa hết hạn (hạn của kỳ đó chắc chắn đã qua)
+  const moKy = ch.mo ? cuaSoNop({ ...ch, dong: null }, { han: new Date(hanCua(thu2)) } as Tuan).mo : null;
+  if (moKy && d.getTime() < moKy.getTime()) thu2 -= 7 * DAY;
   thu2 -= lui * 7 * DAY;
   // Số tuần ISO: theo thứ Năm của tuần
   const thu5 = new Date(thu2 + 3 * DAY);
