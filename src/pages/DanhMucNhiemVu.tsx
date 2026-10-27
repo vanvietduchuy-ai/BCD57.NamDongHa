@@ -138,7 +138,14 @@ const LA_MA = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X', 'XI'
 const hanCua = (x: Dong) => (x.n.dinh_ky ? x.n.ky_han : x.n.han) ?? '9999-12-31';
 const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong'];
 // Thứ hạng khi sắp theo tình trạng: "Chưa đạt" (đang thực hiện nhưng chưa đạt chỉ tiêu) xếp trên "Đang thực hiện"
-const hangTT = (x: Dong) => { const h = ttHienThi(x); return THU_TU_TT.indexOf(h.loai) - (h.loai === 'dang' ? (/nguy cơ/i.test(h.nhan) ? 1 : /chưa đạt/i.test(h.nhan) ? 0.5 : 0) : 0); };
+const chuaBaoTuan = (x: Dong) => (x.con.length ? x.con.some(chuaBaoTuan) : x.canBct && !x.tuanCn.length);
+const hangTT = (x: Dong) => {
+  const h = ttHienThi(x);
+  // Đầu danh sách: Chưa triển khai, rồi chưa báo cáo tuần; sau đó theo mức độ như cũ
+  if (h.loai === 'chua') return -3;
+  if (chuaBaoTuan(x)) return -2;
+  return THU_TU_TT.indexOf(h.loai) - (h.loai === 'dang' ? (/nguy cơ/i.test(h.nhan) ? 1 : /chưa đạt/i.test(h.nhan) ? 0.5 : 0) : 0);
+};
 // Cách xem bảng: nhóm lại theo đơn vị chủ trì / lĩnh vực / loại đánh giá và sắp theo hạn, tình trạng (chỉ đổi cách xem và bản xuất, không đổi thứ tự danh mục)
 function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
   if (nhomTheo === 'nhom' && !tieuChi.length) return { ds, nhom: nhomGoc };
