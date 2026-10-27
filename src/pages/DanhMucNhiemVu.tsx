@@ -2,7 +2,7 @@
 // cảnh báo quá hạn, tỉ lệ hoàn thành theo đơn vị. Đơn vị chỉ thấy nhiệm vụ mình được giao chủ trì.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowDown, ArrowUp, BookOpen, CalendarClock, Copy, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, BookOpen, CalendarClock, ChevronDown, Copy, Download, FileUp, GripVertical, Maximize2, Minus, Paperclip, Pencil, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { loiDe, supabase } from '../lib/supabase';
 import { kq, useDuLieu } from '../lib/useDuLieu';
 import { dauMoiCds, dauMoiDa06, laQuanTri, useAuth } from '../lib/auth';
@@ -141,8 +141,10 @@ const THU_TU_TT: LoaiTT[] = ['qua_han', 'sap_han', 'dang', 'chua', 'dung', 'xong
 function sapXepXem(ds: Dong[], nhomGoc: NhomA4[], dv: DonVi[], nhomTheo: NhomTheo, tieuChi: TieuChiSap[]): { ds: Dong[]; nhom: NhomA4[] } {
   if (nhomTheo === 'nhom' && !tieuChi.length) return { ds, nhom: nhomGoc };
   const la = ds.filter((x) => !x.con.length);                     // nhiệm vụ lớn (tổng hợp) chỉ hiện ở thứ tự danh mục
+  const theoId = new Map(ds.map((x) => [x.n.id, x]));
+  const linhVuc = (x: Dong) => (x.cha ? theoId.get(x.cha) ?? x : x).n.linh_vuc;   // nhiệm vụ con đi theo lĩnh vực của nhiệm vụ lớn
   const khoa = (x: Dong) => nhomTheo === 'nhom' ? x.nhom : nhomTheo === 'don_vi' ? (x.n.chu_tri_don_vi_id ?? '_chua_giao')
-    : nhomTheo === 'linh_vuc' ? x.n.linh_vuc : (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu;
+    : nhomTheo === 'linh_vuc' ? linhVuc(x) : (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu;
   const ds2 = la.map((x) => ({ ...x, nhom: khoa(x) }));
   let nhom: NhomA4[] = nhomTheo === 'nhom' ? nhomGoc
     : nhomTheo === 'don_vi' ? [...dv.map((d) => ({ id: d.id, ky_hieu: '', ten: d.ten })), { id: '_chua_giao', ky_hieu: '', ten: 'Chưa giao đơn vị chủ trì' }]
@@ -222,6 +224,7 @@ export default function DanhMucNhiemVu() {
   const [themCon, setThemCon] = useState<string | null>(null);   // thêm nhiệm vụ con vào nhiệm vụ lớn (id)
   const [moTk, setMoTk] = useState(false);
   const [chiToi, setChiToi] = useState(true); // đầu mối lĩnh vực: mặc định chỉ hiện nhiệm vụ đơn vị mình chủ trì
+  const [moCon, setMoCon] = useState<Set<string> | null>(null);   // nhiệm vụ lớn đang mở nhiệm vụ con (null = mặc định: Thường trực thu gọn, đơn vị mở sẵn)
   const [chiTuan, setChiTuan] = useState(true);   // chỉ hiện nhiệm vụ phải báo cáo trong tuần đang chọn (ẩn việc đã hoàn thành từ các tuần trước)
   const [moDoc, setMoDoc] = useState(false);   // màn đọc toàn bộ kết quả báo cáo
   const [moLoc, setMoLoc] = useState(false); // điện thoại: thu gọn các tuỳ chọn lọc phụ
@@ -354,6 +357,15 @@ export default function DanhMucNhiemVu() {
   const nhomTheo: NhomTheo = rieng.nhomTheo ?? 'nhom', tieuChi = tieuChiCua(rieng);
   const xem = sapXepXem(hien, nhomDs, data?.dv ?? [], nhomTheo, tieuChi);
   const macDinhXem = nhomTheo === 'nhom' && !tieuChi.length;
+  // Nút Chi tiết: nhiệm vụ lớn thu gọn thì ẩn các nhiệm vụ con trên bảng (xuất Word/Excel, thống kê, lọc vẫn tính đủ). Đang tìm/lọc thì luôn hiện nhiệm vụ con khớp.
+  const dangLoc = !!tim.trim() || locs.length > 0 || !!locDv;
+  const dsLon = tatCa.filter((x) => x.con.length).map((x) => x.n.id);
+  const daMoCon = (id: string) => (moCon ? moCon.has(id) : donVi);
+  const hienCon = (id: string) => dangLoc || daMoCon(id);
+  const gapDuoc = macDinhXem && !dangLoc;
+  const batCon = (id: string) => setMoCon((c) => { const n = new Set(c ?? (donVi ? dsLon : [])); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const moTatCaCon = dsLon.length > 0 && dsLon.every(daMoCon);
+  const dsBang = macDinhXem ? xem.ds.filter((x) => !x.cha || hienCon(x.cha)) : xem.ds;
   const viecLa = phamVi.filter((x) => !x.con.length);
 
   if (loi) return <HopLoi loi={loi} taiLai={taiLai} />;
@@ -451,9 +463,15 @@ export default function DanhMucNhiemVu() {
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
       {docRong && <div className="sm:hidden"><DocBaoCao nhung pham={tatCaTuan ? 'tatca' : 'tuan'} ds={hien.filter((x) => !x.con.length)} tuan={tuan} dong={() => setDocRong(false)} /></div>}
+      {gapDuoc && dsLon.length > 0 && (
+        <div className={cx('flex items-center gap-2 text-[0.8125rem]', docRong && 'max-sm:hidden')}>
+          <span className="text-mo">{dsLon.length} nhiệm vụ lớn có nhiệm vụ con</span>
+          <button type="button" onClick={() => setMoCon(new Set(moTatCaCon ? [] : dsLon))} className="h-8 rounded-lg border border-vien bg-white px-3 text-xs font-semibold hover:bg-nen-2">{moTatCaCon ? 'Thu gọn nhiệm vụ con' : 'Mở tất cả nhiệm vụ con'}</button>
+        </div>
+      )}
       <div className={cx('flex items-start gap-4', docRong && 'max-sm:hidden')}>
         <div className="min-w-0 flex-1">
-          <BangA4 tatCaTuan={tatCaTuan} ch={chBang} ds={xem.ds} nhomDs={xem.nhom} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
+          <BangA4 tatCaTuan={tatCaTuan} ch={chBang} ds={dsBang} nhomDs={xem.nhom} batCon={gapDuoc ? batCon : undefined} daMoCon={daMoCon} keoDuoc={suaDuocBang && macDinhXem} rieng={rieng} setRieng={setRieng} suaDuoc={suaDuocBang} chon={chon}
             mo={(id) => { setOSua(null); setChon((c) => (c === id ? null : id)); }} luuCH={luuCH} suaDong={suaDong} capNhatNv={capNhatNv}
             oDangMo={oSua ? `${oSua.id}:${oSua.khoa}` : null} hanTuan={tuan.han.getTime()} lechTuan={luiTuan}
             luuO={(x, khoa, v) => { setOSua(null); void luuOSua(x, khoa, v, capNhatNv, suaDong); }} dongO={() => setOSua(null)}
@@ -541,7 +559,7 @@ export default function DanhMucNhiemVu() {
       })()}
       {suaDuocBang && themCon && (() => { const cha = tatCa.find((y) => y.n.id === themCon); return cha && (
         <FormNhiemVu mo tieuDe={`Thêm nhiệm vụ con của: ${cha.so}. ${cha.n.ten.slice(0, 50)}`} dau={{ nhom: cha.n.nhom, linh_vuc: cha.n.linh_vuc, tham_quyen: cha.n.tham_quyen ?? '' }}
-          dong={() => setThemCon(null)} xong={(id) => { setThemCon(null); suaDong(id, { cha: cha.n.id, nhom: cha.nhom, thu_tu: Date.now() }); setChon(id); void taiLai(); }} />); })()}
+          dong={() => setThemCon(null)} xong={(id) => { setThemCon(null); suaDong(id, { cha: cha.n.id, nhom: cha.nhom, thu_tu: Date.now() }); setMoCon((c) => new Set([...(c ?? (donVi ? dsLon : [])), cha.n.id])); setChon(id); void taiLai(); }} />); })()}
       {suaDuocBang && <FormNhiemVu mo={moThem} dong={() => setMoThem(false)} xong={(id) => { setMoThem(false); setChon(id); void taiLai(); }} />}
       {sua && <FormNhiemVu mo dong={() => setSua(null)} id={sua.id} dau={tuNhiemVu(sua)} xong={() => { setSua(null); void taiLai(); }} />}
       {moCaiDat && <HopCaiDat ch={ch} dong={() => setMoCaiDat(false)} luu={async (c) => { await luuCH(c); setMoCaiDat(false); }} soNv={(g) => tatCa.filter((x) => x.nhom === g).length} />}
@@ -628,7 +646,7 @@ function Zoom({ z, dat }: { z?: number | 'vua'; dat: (z: number | 'vua') => void
 
 // ---------- Bảng A4
 type BangProps = {
-  ch: CauHinhA4; ds: Dong[]; nhomDs: NhomA4[]; keoDuoc: boolean; rieng: Rieng; setRieng: (r: Rieng) => void; suaDuoc: boolean; chon: string | null; rong: boolean;
+  ch: CauHinhA4; ds: Dong[]; nhomDs: NhomA4[]; batCon?: (id: string) => void; daMoCon: (id: string) => boolean; keoDuoc: boolean; rieng: Rieng; setRieng: (r: Rieng) => void; suaDuoc: boolean; chon: string | null; rong: boolean;
   mo: (id: string) => void; luuCH: (c: CauHinhA4) => Promise<void>; suaDong: (id: string, p: Partial<DongA4>) => void;
   capNhatNv: (id: string, p: Partial<NhiemVu>) => Promise<boolean>;
   keoTha: (id: string, dich: { id?: string; nhom?: string; truoc: boolean }) => void;
@@ -734,7 +752,7 @@ function HopSuaO({ x, khoa, oEl, nhan, dong, luu, noiDungO }: { x: Dong; khoa: K
   );
 }
 
-function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, luuO, dongO, oDangMo, hanTuan, lechTuan = 0, tatCaTuan = false, rong: coDuLieu }: BangProps) {
+function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, luuCH, suaDong, keoTha, moO, luuO, dongO, oDangMo, hanTuan, lechTuan = 0, tatCaTuan = false, rong: coDuLieu }: BangProps) {
   const vo = useRef<HTMLDivElement>(null);
   const giay = useRef<HTMLDivElement>(null);
   const [rongVo, setRongVo] = useState(1000);
@@ -853,7 +871,9 @@ function BangA4({ ch, ds, nhomDs, keoDuoc, rieng, setRieng, suaDuoc, chon, mo, l
         ? <span onPointerDown={(e) => batDauKeo(e, x)} title="Kéo để đưa nhiệm vụ lên, xuống" className={cx('-mx-[2pt] inline-flex cursor-grab touch-none select-none items-center whitespace-nowrap active:cursor-grabbing', x.so.length > 3 && 'text-[0.85em]')}><GripVertical className="h-[0.9em] w-[0.9em] shrink-0 text-[#B9A9AC]" />{x.so}</span>
         : <span className={cx('whitespace-nowrap', x.so.length > 3 && 'text-[0.85em]')}>{x.so}</span>}<div title="Kéo để đổi chiều cao hàng, bấm đúp để trả về tự động" onPointerDown={(e) => keoDong(e, x)} onDoubleClick={(e) => { e.stopPropagation(); veLaiCao(x); }}
         className="absolute -bottom-1 left-0 z-10 h-2 w-[4000px] cursor-row-resize hover:bg-do/20" /></>;
-      case 'ten': return <span className={cx('block whitespace-pre-wrap', x.cha && 'ml-[8pt] border-l-[2.5px] border-[#C99A2E] pl-[6pt]', x.con.length > 0 && 'font-bold')}>{x.n.ten}{x.n.trang_thai_giao === 'de_xuat' && <span className="ml-1 rounded bg-[#FEF3C7] px-1 font-sans text-[7.5pt] font-semibold text-[#92400E]">Chờ duyệt giao</span>}</span>;
+      case 'ten': return <span className={cx('block whitespace-pre-wrap', x.cha && 'ml-[8pt] border-l-[2.5px] border-[#C99A2E] pl-[6pt]', x.con.length > 0 && 'font-bold')}>{x.n.ten}{x.n.trang_thai_giao === 'de_xuat' && <span className="ml-1 rounded bg-[#FEF3C7] px-1 font-sans text-[7.5pt] font-semibold text-[#92400E]">Chờ duyệt giao</span>}
+        {batCon && x.con.length > 0 && <button type="button" aria-expanded={daMoCon(x.n.id)} onClick={(e) => { e.stopPropagation(); batCon(x.n.id); }} title={daMoCon(x.n.id) ? 'Ẩn các nhiệm vụ con' : 'Hiện các nhiệm vụ con'}
+          className="mt-1 flex items-center gap-1 rounded-md border border-[#C99A2E] bg-white px-1.5 py-0.5 font-sans text-[8pt] font-semibold text-[#8E1B22] hover:bg-[#FFF8E6] print:hidden"><ChevronDown className={cx('h-3 w-3 transition', daMoCon(x.n.id) && 'rotate-180')} />{daMoCon(x.n.id) ? 'Thu gọn' : `Chi tiết · ${x.con.length} nhiệm vụ con`}</button>}</span>;
       case 'chu_tri': return <><span className="whitespace-pre-wrap">{x.d.chu_tri_vb || chuTriMacDinh(x)}</span>
         {x.n.chu_tri_ten && <span className="mt-0.5 block font-sans text-[7.5pt] text-[#7A1A27]" title="Đơn vị được giao chủ trì trên hệ thống">▸ {tenNgan(x.n.chu_tri_ten)}</span>}</>;
       case 'san_pham': return <span className="whitespace-pre-wrap">{x.n.san_pham}</span>;
