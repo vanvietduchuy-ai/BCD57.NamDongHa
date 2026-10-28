@@ -6,7 +6,7 @@ import { homNayVN } from './dinhDang';
 
 export const KHOA_CAU_HINH = 'danh_muc_a4';
 
-export type KhoaCot = 'tt' | 'ten' | 'nguon_vb' | 'chu_tri' | 'san_pham' | 'han' | 'tien_do' | 'ket_qua_tuan' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma';
+export type KhoaCot = 'tt' | 'ten' | 'nguon_vb' | 'chu_tri' | 'san_pham' | 'han' | 'tien_do' | 'ket_qua_tuan' | 'minh_chung' | 'tinh_trang' | 'lanh_dao' | 'ma' | 'ma_tinh';
 export type CotA4 = { khoa: KhoaCot; nhan: string; rong: number; hien: boolean };
 export type NhomA4 = { id: string; ky_hieu: string; ten: string };
 // Thông tin riêng của từng dòng trong bảng (không có trong bảng nhiem_vu)
@@ -15,7 +15,7 @@ export type KieuDG = 'ty_le' | 'so_luong' | 'tien_do' | 'ky';
 // mau_dv: mẫu số (tổng số) biến động theo thời gian -> đơn vị chủ trì được sửa khi báo cáo (bỏ trống = tự đoán theo tên nhiệm vụ)
 export type DanhGia = { kieu: KieuDG; chi_tieu?: number; tong?: number; mau_dv?: boolean };
 export type SoLieuDG = { tu: number; mau: number; luc: string };
-export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number; danh_gia?: DanhGia; so_lieu?: SoLieuDG; cha?: string; tt_tay?: { loai: LoaiTT; nhan: string } };   // tt_tay: tình trạng sửa tay (bỏ = tự động)   // cha: id nhiệm vụ lớn chứa nhiệm vụ này
+export type DongA4 = { nhom?: string; thu_tu?: number; nguon_vb?: string; han_vb?: string; chu_tri_vb?: string; tien_do_vb?: string; cao?: number; danh_gia?: DanhGia; so_lieu?: SoLieuDG; cha?: string; ma_tinh?: string[]; tt_tay?: { loai: LoaiTT; nhan: string } };   // tt_tay: tình trạng sửa tay (bỏ = tự động)   // cha: id nhiệm vụ lớn chứa nhiệm vụ này
 export type CauHinhA4 = {
   tieu_de: string; dong_goc: string; dong_phu: string; ghi_chu: string; canh_bao_ngay: number;
   kho: { huong: 'ngang' | 'doc'; co_chu: number; le: [number, number, number, number] };   // lề trên, phải, dưới, trái (mm)
@@ -35,6 +35,7 @@ export const COT_MAC_DINH: CotA4[] = [
   { khoa: 'tinh_trang', nhan: 'Tình trạng', rong: 7, hien: true },
   { khoa: 'lanh_dao', nhan: 'Lãnh đạo phụ trách', rong: 7, hien: false },
   { khoa: 'ma', nhan: 'Mã', rong: 5, hien: false },
+  { khoa: 'ma_tinh', nhan: 'Mã NV tỉnh', rong: 7, hien: false },   // mã nhiệm vụ cấp tỉnh giao (vd NV-BT-134) để báo cáo, xuất file
 ];
 
 export const CAU_HINH_MAC_DINH: CauHinhA4 = {
@@ -197,7 +198,7 @@ export type DongNhap = {
 };
 export type KetQuaDoc = { tieu_de: string; dong_phu: string; ghi_chu: string; dong: DongNhap[]; cot: string[] };
 
-async function docXmlTuDocx(f: File): Promise<string> {
+export async function docXmlTuDocx(f: File): Promise<string> {
   const XLSX = await import('xlsx');
   const buf = new Uint8Array(await f.arrayBuffer());
   const cfb = XLSX.CFB.read(buf, { type: 'array' });
@@ -207,7 +208,7 @@ async function docXmlTuDocx(f: File): Promise<string> {
 }
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-function chuCuaPhanTu(el: Element): string {
+export function chuCuaPhanTu(el: Element): string {
   return Array.from(el.getElementsByTagNameNS(W, 'p')).map((p) => Array.from(p.getElementsByTagNameNS(W, 't')).map((t) => t.textContent ?? '').join('')).join('\n').trim();
 }
 

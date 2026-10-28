@@ -19,6 +19,7 @@ import FormVanBan from '../components/FormVanBan';
 import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
+import ChonNvTinh from '../components/ChonNvTinh';
 
 const MM = 96 / 25.4;
 const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
@@ -263,6 +264,7 @@ export default function DanhMucNhiemVu() {
   const [moTk, setMoTk] = useState(false);
   const [chiToi, setChiToi] = useState(true); // đầu mối lĩnh vực: mặc định chỉ hiện nhiệm vụ đơn vị mình chủ trì
   const [moCon, setMoCon] = useState<Set<string> | null>(null);   // nhiệm vụ lớn đang mở nhiệm vụ con (null = mặc định: Thường trực thu gọn, đơn vị mở sẵn)
+  const [pickTinh, setPickTinh] = useState<string | null>(null);   // id nhiệm vụ đang chọn mã nhiệm vụ tỉnh giao
   const [chiTuan, setChiTuan] = useState(true);   // chỉ hiện nhiệm vụ phải báo cáo trong tuần đang chọn (ẩn việc đã hoàn thành từ các tuần trước)
   const [moDoc, setMoDoc] = useState(false);   // màn đọc toàn bộ kết quả báo cáo
   const [moLoc, setMoLoc] = useState(false); // điện thoại: thu gọn các tuỳ chọn lọc phụ
@@ -500,6 +502,8 @@ export default function DanhMucNhiemVu() {
         lui={luiTuan} chuanBi={quanTri} nhanTuan={(v) => v === TAT_CA_TUAN ? 'Tất cả các tuần (lịch sử)' : `${v === 0 ? 'Tuần này' : v < 0 ? 'Tuần sau' : v === 1 ? 'Tuần trước' : `${v} tuần trước`} · ${tuanCua(new Date(), data.bct, v).ten}`} datLui={(v) => { setOSua(null); setChon(null); setLuiTuan(v); }} />
       {moTk && <ThongKe ds={viecLa} tatCa={tatCa.filter((x) => !x.con.length && khopThe(x))} dv={data.dv} dvXem={coNgoai ? '' : dvXem}quanTri={!donVi} loc={setLocTT} chonDv={(id) => { setLocDv(id); }} />}
 
+      {pickTinh && (() => { const x = tatCa.find((y) => y.n.id === pickTinh); return x ? <ChonNvTinh dong={() => setPickTinh(null)} chon={x.d.ma_tinh ?? []} nhapDuoc={quanTri} tenNv={`${x.so ? `${x.so}. ` : ''}${x.n.ten}`}
+        luu={(ma) => { suaDong(x.n.id, { ma_tinh: ma.length ? ma : undefined }); setPickTinh(null); }} /> : null; })()}
       {moDoc && <DocBaoCao ds={hien.filter((x) => !x.con.length)} tuan={tuan} dong={() => setMoDoc(false)} />}
 
       {/* Bảng A4 + khung chi tiết bên phải (đứng cạnh bảng, không che) */}
@@ -518,6 +522,7 @@ export default function DanhMucNhiemVu() {
             luuO={(x, khoa, v) => { setOSua(null); void luuOSua(x, khoa, v, capNhatNv, suaDong); }} dongO={() => setOSua(null)}
             moO={(x, khoa, o) => {
               const baoCao = x.n.trang_thai_giao === 'da_duyet' && (quanTri || x.n.chu_tri_don_vi_id === hoSo?.don_vi_id);
+              if (khoa === 'ma_tinh') { if (suaDuocBang) setPickTinh(x.n.id); return false; }
               const duoc = khoa === 'ket_qua_tuan' ? x.canBct && baoCao : khoa === 'tien_do' ? !x.con.length && suaDuocBang : khoa === 'tinh_trang' ? suaDuocBang : suaDuocBang && !!O_SUA[khoa];
               if (!duoc) return false;
               if (khoa === 'ket_qua_tuan' && loiCuaSo) { setThongBao({ loi: loiCuaSo }); return false; }
@@ -547,7 +552,7 @@ export default function DanhMucNhiemVu() {
             rong={phamVi.length > 0} />
         </div>
         {dongChon && (
-          <KhungChiTiet key={dongChon.n.id} tienTo={tuan.tienTo} x={dongChon} ds={hien} chon={setChon} dong={() => setChon(null)} quanTri={suaDuocBang} tenDv={tenDv}
+          <KhungChiTiet moTinh={() => setPickTinh(dongChon.n.id)} key={dongChon.n.id} tienTo={tuan.tienTo} x={dongChon} ds={hien} chon={setChon} dong={() => setChon(null)} quanTri={suaDuocBang} tenDv={tenDv}
             duocBaoCao={dongChon.n.trang_thai_giao === 'da_duyet' && (quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id)}
             laChuTri={quanTri || dongChon.n.chu_tri_don_vi_id === hoSo?.don_vi_id}
             daGui={() => { setThongBao({ ok: 'Đã cập nhật kết quả thực hiện.' }); void taiLai(); }}
@@ -978,6 +983,7 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
       case 'tinh_trang': { const h = ttHienThi(x); const m = MAU_TT[h.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : h.tyLe ? 'Theo tỷ lệ so với chỉ tiêu' : 'Tình trạng tự động theo hạn và tiến độ'}>{h.nhan}{x.d.tt_tay && !(x.con.length && /\d+\s*\/\s*\d+\s*(nhiệm vụ )?(con )?(đã )?hoàn thành|\d+\s*việc quá hạn/i.test(x.d.tt_tay.nhan)) && ' ✎'}</span>; }
       case 'lanh_dao': return x.n.lanh_dao_phu_trach;
       case 'ma': return x.n.ma;
+      case 'ma_tinh': return x.d.ma_tinh?.length ? <span className="flex flex-col gap-0.5 font-sans font-semibold">{x.d.ma_tinh.map((m) => <span key={m}>{m}</span>)}</span> : <span className="text-[#8D8486]">—</span>;
     }
   };
 
@@ -1069,8 +1075,8 @@ const chuTriMacDinh = (x: Dong) => x.n.chu_tri_ten ? `${x.n.chu_tri_ten} chủ t
 
 
 // ---------- Dạng thẻ (điện thoại)
-function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon, dsNhom, chonNhom, taiLai }: {
-  taiLai: () => void;
+function KhungChiTiet({ moTinh, tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, laChuTri, daGui, sua, duyet, xoa, moTrang, dsVb, ganVb, luuTenNguon, luuDong, dsCha, chonCha, themCon, dsNhom, chonNhom, taiLai }: {
+  taiLai: () => void; moTinh: () => void;
   dsNhom: NhomA4[]; chonNhom: (id: string) => void;   // đổi nhóm trên bảng A4 (không cần kéo thả, dùng được khi bảng đang sắp xếp / lọc)
   tienTo: string; x: Dong; ds: Dong[]; chon: (id: string) => void; dong: () => void; quanTri: boolean; tenDv: (id: string | null) => string;
   dsVb: VbCanCu[]; ganVb: (id: string | null) => void; luuTenNguon: (t: string) => void; luuDong: (p: Partial<DongA4>) => void;
@@ -1182,6 +1188,12 @@ function KhungChiTiet({ tienTo, x, ds, chon, dong, quanTri, tenDv, duocBaoCao, l
             {dongTT('Sản phẩm', n.san_pham)}
             {dongTT('Phụ trách', n.lanh_dao_phu_trach)}
             {dongTT('Ghi chú', n.mo_ta)}
+            <div className="flex items-start gap-3 py-1.5 text-[0.8125rem]"><dt className="w-20 shrink-0 text-mo">NV tỉnh giao</dt>
+              <dd className="m-0 flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                {(x.d.ma_tinh ?? []).map((m) => <span key={m} className="mono rounded bg-nen-3 px-1.5 py-0.5 text-xs font-semibold">{m}</span>)}
+                {!x.d.ma_tinh?.length && <i className="text-mo">Chưa gắn</i>}
+                {quanTri && <button type="button" onClick={moTinh} className="text-xs font-semibold text-xanh hover:underline">{x.d.ma_tinh?.length ? 'Đổi' : 'Chọn'}</button>}
+              </dd></div>
           </dl>
 
           <section className="flex flex-col gap-1.5">
@@ -1904,6 +1916,7 @@ function oChu(c: KhoaCot, x: Dong): string {
     case 'tinh_trang': return ttHienThi(x).nhan;
     case 'lanh_dao': return x.n.lanh_dao_phu_trach ?? '';
     case 'ma': return x.n.ma ?? '';
+    case 'ma_tinh': return (x.d.ma_tinh ?? []).join('\n');
   }
 }
 // Màu nền hàng khi xuất Word / Excel: giống màu tô trên bảng (hoàn thành xanh, quá hạn đỏ nhạt, sắp đến hạn vàng, chưa triển khai xám, nhiệm vụ lớn kem)
@@ -2038,7 +2051,7 @@ function DocBaoCao({ ds, tuan, dong, nhung = false, pham: phamCo }: { ds: Dong[]
     return [...m.entries()].sort((a, b) => a[0].localeCompare(b[0], 'vi'));
   }, [ds, tuan, pham, chiCo]);
   const tong = nhom.reduce((a, [, v]) => a + v.length, 0), coBc = nhom.reduce((a, [, v]) => a + v.filter((r) => r.bc.length).length, 0);
-  const vanBan = () => nhom.map(([dv, v]) => `${dv.toUpperCase()}\n` + v.map(({ x, bc }) => `- ${x.so ? `${x.so}. ` : ''}${x.n.ten}\n` + (bc.length
+  const vanBan = () => nhom.map(([dv, v]) => `${dv.toUpperCase()}\n` + v.map(({ x, bc }) => `- ${x.so ? `${x.so}. ` : ''}${x.d.ma_tinh?.length ? `[${x.d.ma_tinh.join(', ')}] ` : ''}${x.n.ten}\n` + (bc.length
     ? bc.map((b) => `  ${pham === 'tatca' ? `[${b.ten}] ` : ''}${b.noi}`).join('\n') : '  (chưa báo cáo)')).join('\n')).join('\n\n');
   const chep = async () => { try { await navigator.clipboard.writeText(`${pham === 'tuan' ? tuan.ten : 'Kết quả báo cáo các tuần'}\n\n${vanBan()}`); setDaChep(true); setTimeout(() => setDaChep(false), 2000); } catch { window.alert('Không sao chép được — trình duyệt chặn.'); } };
   return (
@@ -2061,7 +2074,7 @@ function DocBaoCao({ ds, tuan, dong, nhung = false, pham: phamCo }: { ds: Dong[]
             <ul className="m-0 flex list-none flex-col p-0">
               {v.map(({ x, bc }) => (
                 <li key={x.n.id} className="flex flex-col gap-1 border-b border-[#F1EEE7] px-4 py-2.5 last:border-0">
-                  <span className="text-[0.8438rem] font-semibold leading-snug">{x.so ? `${x.so}. ` : ''}{x.n.ten}</span>
+                  <span className="text-[0.8438rem] font-semibold leading-snug">{x.so ? `${x.so}. ` : ''}{x.n.ten}{x.d.ma_tinh?.length ? <span className="mono ml-1.5 text-xs font-normal text-mo">[{x.d.ma_tinh.join(', ')}]</span> : null}</span>
                   {!bc.length && <span className="text-xs text-[#9F1239]">{pham === 'tuan' ? 'Chưa báo cáo tuần này' : 'Chưa có báo cáo tuần'}</span>}
                   {bc.map((b) => (
                     <div key={b.khoa} className="flex flex-col rounded-lg bg-nen px-3 py-1.5 text-[0.8125rem] leading-snug">
