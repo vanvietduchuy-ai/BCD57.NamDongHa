@@ -20,6 +20,7 @@ import MinhChungVanBan from '../components/MinhChungVanBan';
 import { DangTai, HopLoi, HopThoai, lopO, Nut, O, TieuDeTrang, cx } from '../components/ui';
 import FormNhiemVu, { tuNhiemVu } from '../components/FormNhiemVu';
 import ChonNvTinh from '../components/ChonNvTinh';
+import MinhChungAnh from '../components/MinhChungAnh';
 
 const MM = 96 / 25.4;
 const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
@@ -1242,6 +1243,12 @@ function NhapMinhChung({ x, duocSua, quanTri, dsVb, moTrang, xong }: { x: Dong; 
     setChonKho(false); setTim(''); xong();
   };
   const go = async (t: MinhChungO) => {
+    if (t.loai === 'tep') {
+      if (!window.confirm(`Gỡ tệp "${t.ten}" khỏi minh chứng của nhiệm vụ?`)) return;
+      const { error } = await supabase.from('tep').delete().eq('id', t.id);
+      if (error) setLoi(loiDe(error)); else xong();
+      return;
+    }
     if (!window.confirm(`Gỡ minh chứng "${t.ten}" khỏi nhiệm vụ? Văn bản vẫn còn trong kho và sổ văn bản.`)) return;
     const { error } = await supabase.from('nhiem_vu_van_ban').delete().eq('nhiem_vu_id', x.n.id).eq('van_ban_id', t.id);
     if (error) setLoi(loiDe(error)); else xong();
@@ -1252,11 +1259,11 @@ function NhapMinhChung({ x, duocSua, quanTri, dsVb, moTrang, xong }: { x: Dong; 
         <button className="flex items-center gap-1 text-xs font-semibold text-mo hover:text-[#8E1B22]" onClick={moTrang} title="Ảnh, Word, Excel… đính kèm ở trang đầy đủ"><Paperclip className="h-3.5 w-3.5" />Tệp khác</button></h3>
       {x.mc.length ? x.mc.map((t, i) => (
         <div key={i} className="flex items-start gap-2 rounded-lg bg-nen-2 px-2.5 py-1.5">
-          <button type="button" onClick={() => void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url)} title="Xem văn bản" className="flex min-w-0 flex-1 flex-col text-left">
+          <button type="button" onClick={() => void moTepDrive(t.loai, t.id, t.ten_tep, 'xem', t.url)} title={t.loai === 'tep' ? 'Xem tệp' : 'Xem văn bản'} className="flex min-w-0 flex-1 flex-col text-left">
             <span className="mono text-[0.8125rem] font-semibold text-[#1E4F86] hover:underline">{t.ten}</span>
             {t.trich_yeu && <span className="truncate text-[11.5px] text-mo">{t.trich_yeu}</span>}
           </button>
-          {t.loai === 'van_ban' && (quanTri || duocSua) && <button type="button" onClick={() => void go(t)} aria-label="Gỡ minh chứng" title="Gỡ khỏi nhiệm vụ" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nguy hover:bg-nguy-nhat"><X className="h-3.5 w-3.5" /></button>}
+          {(quanTri || duocSua) && <button type="button" onClick={() => void go(t)} aria-label="Gỡ minh chứng" title="Gỡ khỏi nhiệm vụ" className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-nguy hover:bg-nguy-nhat"><X className="h-3.5 w-3.5" /></button>}
         </div>)) : <span className="text-[0.8125rem] text-mo">Chưa có minh chứng.</span>}
       {duocSua && <>
         <div className="grid grid-cols-2 gap-1.5">
@@ -1264,6 +1271,7 @@ function NhapMinhChung({ x, duocSua, quanTri, dsVb, moTrang, xong }: { x: Dong; 
           <button type="button" onClick={() => setChonKho(!chonKho)} aria-pressed={chonKho}
             className={cx('flex min-h-11 items-center justify-center gap-1.5 rounded-xl border border-dashed px-2 text-[0.8125rem] font-semibold', chonKho ? 'border-[#8E1B22] bg-[#FFF3D6] text-[#8E1B22]' : 'border-vien-2 text-mo-2 hover:border-[#8E1B22] hover:text-[#8E1B22]')}>
             <Search className="h-4 w-4" />Chọn trong kho</button>
+          <MinhChungAnh nhiemVuId={x.n.id} xong={xong} />
         </div>
         {chonKho && <div className="flex flex-col gap-1 rounded-xl border border-vien bg-white p-2">
           <input autoFocus className={cx(lopO, 'min-h-9 text-[0.8125rem]')} placeholder="Tìm số, ký hiệu, trích yếu, ngày…" value={tim} onChange={(e) => setTim(e.target.value)} />
