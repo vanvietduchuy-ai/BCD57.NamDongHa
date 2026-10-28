@@ -983,7 +983,7 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
       case 'tinh_trang': { const h = ttHienThi(x); const m = MAU_TT[h.loai]; return <span className="inline-block rounded px-1 font-sans text-[7.8pt] font-semibold leading-snug" style={{ color: m.chu, background: m.nen }} title={x.d.tt_tay ? 'Tình trạng sửa tay' : h.tyLe ? 'Theo tỷ lệ so với chỉ tiêu' : 'Tình trạng tự động theo hạn và tiến độ'}>{h.nhan}{x.d.tt_tay && !(x.con.length && /\d+\s*\/\s*\d+\s*(nhiệm vụ )?(con )?(đã )?hoàn thành|\d+\s*việc quá hạn/i.test(x.d.tt_tay.nhan)) && ' ✎'}</span>; }
       case 'lanh_dao': return x.n.lanh_dao_phu_trach;
       case 'ma': return x.n.ma;
-      case 'ma_tinh': return x.d.ma_tinh?.length ? <span className="flex flex-col gap-0.5 font-sans font-semibold">{x.d.ma_tinh.map((m) => <span key={m}>{m}</span>)}</span> : <span className="text-[#8D8486]">—</span>;
+      case 'ma_tinh': return x.d.ma_tinh?.length ? <span className="flex flex-col gap-0.5 whitespace-nowrap text-center font-sans text-[8pt] font-semibold leading-snug text-[#1E3A5F]">{x.d.ma_tinh.map((m) => <span key={m}>{m}</span>)}</span> : <span className="text-[#8D8486]">—</span>;
     }
   };
 

@@ -35,7 +35,7 @@ export const COT_MAC_DINH: CotA4[] = [
   { khoa: 'tinh_trang', nhan: 'Tình trạng', rong: 7, hien: true },
   { khoa: 'lanh_dao', nhan: 'Lãnh đạo phụ trách', rong: 7, hien: false },
   { khoa: 'ma', nhan: 'Mã', rong: 5, hien: false },
-  { khoa: 'ma_tinh', nhan: 'Mã NV tỉnh', rong: 7, hien: false },   // mã nhiệm vụ cấp tỉnh giao (vd NV-BT-134) để báo cáo, xuất file
+  { khoa: 'ma_tinh', nhan: 'Mã NV tỉnh', rong: 9, hien: false },   // mã nhiệm vụ cấp tỉnh giao (vd NV-BT-134) để báo cáo, xuất file
 ];
 
 export const CAU_HINH_MAC_DINH: CauHinhA4 = {
@@ -51,7 +51,8 @@ export const CAU_HINH_MAC_DINH: CauHinhA4 = {
 // Ghép cấu hình đã lưu với mặc định (thêm cột mới nếu bản lưu cũ chưa có)
 export function ghepCauHinh(luu: Partial<CauHinhA4> | null | undefined): CauHinhA4 {
   const l = luu ?? {};
-  const cot = COT_MAC_DINH.map((c) => ({ ...c, ...(l.cot ?? []).find((x) => x.khoa === c.khoa) }));
+  const cot = COT_MAC_DINH.map((c) => ({ ...c, ...(l.cot ?? []).find((x) => x.khoa === c.khoa) }))
+    .map((c) => (c.khoa === 'ma_tinh' && c.rong < 9 ? { ...c, rong: 9 } : c));   // bản lưu đầu (rộng 7) quá hẹp, mã bị rớt dòng
   if (l.cot?.length) {
     // Cột đã bỏ (vd. thời hạn theo văn bản, kết quả) tự rơi khỏi bảng; cột mới đặt ngay sau cột đứng trước nó trong mặc định
     const thuTu = l.cot.map((c) => c.khoa as string);
