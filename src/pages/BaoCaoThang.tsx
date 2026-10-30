@@ -8,7 +8,7 @@ import { useDuLieu } from '../lib/useDuLieu';
 import { homNayVN } from '../lib/dinhDang';
 import {
   BANG, batBuocKy, CH_MAC_DINH, chotMs, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, tenKy, tinhO, TT_BANG, ttBang,
-  nguonTuanBaoCao, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang,
+  nguonTuanBaoCao, thongKeNhiemVu, type NvThongKe, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang,
 } from '../lib/baoCaoThang';
 import { DangTai, HopLoi, HopThoai, Nut, The, TieuDeTrang, cx, lopO } from '../components/ui';
 
@@ -27,16 +27,23 @@ export default function BaoCaoThang() {
   const [moPc, setMoPc] = useState(false);
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
-    const [ch, dv, cur, truoc, nv, cn] = await Promise.all([
+    const [ch, dv, cur, truoc, nv, cn, nvf, hoan, a4] = await Promise.all([
       taiCauHinh(),
       supabase.from('don_vi').select('id, ten').eq('hoat_dong', true).order('thu_tu'),
       taiDuLieu(ky),
       taiDuLieu(kyTruoc(ky)).catch(() => ({} as DuLieu)),
       supabase.from('v_nhiem_vu').select('id, ten').limit(1000),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc').order('luc', { ascending: false }).limit(5000),
+      supabase.from('v_nhiem_vu').select('id, ten, han, trang_thai, san_pham, can_cu_so_ky_hieu').eq('trang_thai_giao', 'da_duyet').limit(1000),
+      supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, luc').eq('trang_thai_moi', 'hoan_thanh').limit(5000),
+      supabase.from('cau_hinh').select('gia_tri').eq('khoa', 'danh_muc_a4').maybeSingle(),
     ]);
+    const dong = ((a4.data as { gia_tri?: { dong?: Record<string, { cha?: string; nguon_vb?: string }> } } | null)?.gia_tri?.dong) ?? {};
+    const cha = new Set(Object.values(dong).map((d) => d.cha).filter((x): x is string => !!x));
+    const nguonVb = Object.fromEntries(Object.entries(dong).map(([id, d]) => [id, d.nguon_vb]));
+    const tkNv = thongKeNhiemVu((nvf.data ?? []) as NvThongKe[], (hoan.data ?? []) as { nhiem_vu_id: string; luc: string }[], cha, nguonVb, ky, ch.chot);
     const dsNv = (nv.data ?? []) as { id: string; ten: string }[], dsCn = (cn.data ?? []) as { nhiem_vu_id: string; noi_dung: string; luc: string }[];
-    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tuan: nguonTuanBaoCao(dsNv, dsCn, chotMs(ky, ch.chot)), tuanTruoc: nguonTuanBaoCao(dsNv, dsCn, chotMs(kyTruoc(ky), ch.chot)) };
+    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tkNv, tuan: nguonTuanBaoCao(dsNv, dsCn, chotMs(ky, ch.chot)), tuanTruoc: nguonTuanBaoCao(dsNv, dsCn, chotMs(kyTruoc(ky), ch.chot)) };
   }, [ky]);
 
   const ch = data?.ch ?? CH_MAC_DINH;
@@ -95,6 +102,26 @@ export default function BaoCaoThang() {
     setData((x) => (x ? { ...x, cur: moi } : x));
     const e = await luuO(ky, cac);
     setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã chép ${cac.length} ô từ ${tenKy(kyTruoc(ky))} (chỉ các ô còn trống).` });
+  };
+  const dienTuNv = async (bang: '1.1' | '1.2') => {
+    const tk = data?.tkNv; if (!tk) return;
+    const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
+    const moi = { ...cur };
+    const dat = (dong: string, cot: string, v: string) => { const k = khoaO(bang, dong, cot); if ((cur[k] ?? '') === v) return; cac.push({ bang, dong, cot, gia_tri: v }); if (v) moi[k] = v; else delete moi[k]; };
+    if (bang === '1.1') for (const [d, v] of Object.entries(tk.so)) dat(d, 'xa', v);
+    else {
+      const b12 = BANG.find((x) => x.id === '1.2')!;
+      const cu = dongDongSo(b12, cur, 0);
+      const chuan = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const daCo = Array.from({ length: cu }, (_, i) => chuan(cur[khoaO(bang, `r${i + 1}`, 'ten')] ?? '')).filter(Boolean);
+      // Chỉ thêm nhiệm vụ chưa có trong bảng (khớp theo phần đầu tên); không đụng tới dòng đã nhập
+      const moiHang = tk.hang.filter((h) => { const k = chuan(h.ten).slice(0, 28); return !daCo.some((t) => t.includes(k) || chuan(h.ten).includes(t.slice(0, 28))); });
+      moiHang.forEach((h, j) => { for (const c of ['ten', 'nhom', 'vb', 'han', 'kq', 'sp'] as const) dat(`r${cu + j + 1}`, c, h[c]); });
+    }
+    if (!cac.length) { setThongBao({ ok: 'Bảng đã đủ so với nhiệm vụ trên web.' }); return; }
+    setData((x) => (x ? { ...x, cur: moi } : x));
+    const e = await luuO(ky, cac);
+    setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã điền ${cac.length} ô Bảng ${bang} từ nhiệm vụ trên web.` });
   };
   const chotSo = async () => {
     const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
@@ -200,7 +227,7 @@ export default function BaoCaoThang() {
           {bangCuaTab.map((b) => (
             <BangA4 key={b.id} b={b} ky={ky} ctx={ctx} khoaHT={khoa} nhap={nhapDuoc(b)} loi={loiCua[b.id]} soDong={soDongCua(b)}
               ghi={(d, c, v) => ghi(b, d, c, v)} themDong={() => setThem((t) => ({ ...t, [b.id]: soDongCua(b) + 1 }))} xoaDong={(i) => xoaDong(b, i, soDongCua(b))}
-              chep={() => saoChepKyTruoc(b)} dv={(ch.phan_cong[b.id] ?? []).map(tenDv).filter(Boolean).join(', ')} />
+              chep={() => saoChepKyTruoc(b)} tuDien={b.id === '1.1' || b.id === '1.2' ? () => dienTuNv(b.id as '1.1' | '1.2') : undefined} dv={(ch.phan_cong[b.id] ?? []).map(tenDv).filter(Boolean).join(', ')} />
           ))}
         </>
       )}
@@ -216,9 +243,9 @@ const TabNut = ({ on, bam, children }: { on: boolean; bam: () => void; children:
 );
 
 // ---------- Một bảng dạng trang A4
-function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong, chep, dv }: {
+function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong, chep, dv, tuDien }: {
   b: BangB; ky: string; ctx: Ctx; khoaHT: boolean; nhap: boolean; loi: LoiO[]; soDong: number;
-  ghi: (dong: string, cot: string, v: string) => void; themDong: () => void; xoaDong: (i: number) => void; chep: () => void; dv: string;
+  ghi: (dong: string, cot: string, v: string) => void; themDong: () => void; xoaDong: (i: number) => void; chep: () => void; dv: string; tuDien?: () => void;
 }) {
   const tt = ttBang(ctx.cur, b.id);
   const sua = nhap && tt === 'can';
@@ -249,6 +276,7 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
               <input disabled={!nhap} placeholder="Giải trình / lý do" className={cx(lopO, 'min-h-9 flex-1 py-1 text-[0.8125rem]')} defaultValue={giaiTrinh(ctx.cur, b.id)} key={giaiTrinh(ctx.cur, b.id)}
                 onBlur={(e) => ghi('_tt', 'gt', e.target.value.trim())} style={{ background: loi.some((x) => x.dong === 'r1' && x.cot === b.cot[0].k && x.msg.startsWith('Chưa có dòng')) ? NEN.thieu : undefined }} />
             )}
+            {sua && tuDien && <Nut kieu="chinh" className="min-h-9 text-xs" onClick={tuDien}>{b.id === '1.2' ? 'Thêm nhiệm vụ còn thiếu từ web' : 'Điền số từ nhiệm vụ trên web'}</Nut>}
             {sua && <Nut kieu="phu" className="min-h-9 text-xs" onClick={chep}>Chép từ {tenKy(kyTruoc(ky))}</Nut>}
           </div>
           {tt === 'can' && (

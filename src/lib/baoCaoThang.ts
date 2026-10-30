@@ -289,3 +289,28 @@ export function nguonTuanBaoCao(nv: { id: string; ten: string }[], cn: { nhiem_v
   }
   return kq;
 }
+
+// ---------- Bảng 1.1 / 1.2 tự điền từ bảng nhiệm vụ A4
+export type NvThongKe = { id: string; ten: string; han: string | null; trang_thai: string; san_pham: string | null; can_cu_so_ky_hieu: string | null };
+const ngayVN = (luc: string) => new Date(new Date(luc).getTime() + 7 * 3600_000).toISOString().slice(0, 10);
+const ngayHienThi = (d: string | null) => (d ? d.split('-').reverse().join('/') : 'Chưa xác định');
+export function thongKeNhiemVu(nv: NvThongKe[], hoan: { nhiem_vu_id: string; luc: string }[], cha: Set<string>, nguonVb: Record<string, string | undefined>, ky: string, chot: number) {
+  const dau = new Map<string, string>();   // ngày hoàn thành đầu tiên
+  for (const h of hoan) { const d = ngayVN(h.luc); const c = dau.get(h.nhiem_vu_id); if (!c || d < c) dau.set(h.nhiem_vu_id, d); }
+  const la = nv.filter((x) => !cha.has(x.id));   // nhiệm vụ lớn không đếm: chỉ đếm nhiệm vụ cụ thể
+  const mocChot = `${ky}-${String(chot).padStart(2, '0')}`;
+  const xong = la.filter((x) => x.trang_thai === 'hoan_thanh' && (dau.get(x.id) ?? '').startsWith(ky));
+  const dungHan = (x: NvThongKe) => !x.han || (dau.get(x.id) ?? '9') <= x.han;
+  const quaHan = la.filter((x) => x.trang_thai !== 'hoan_thanh' && x.han && x.han <= mocChot);
+  const so: Record<string, string> = {
+    d1: String(la.length), d2: String(la.filter((x) => x.han?.startsWith(ky)).length), d3: String(xong.length), d3a: String(xong.filter(dungHan).length),
+    d4: String(quaHan.length), d4a: String(quaHan.filter((x) => (x.han ?? '') < `${ky}-01`).length),
+  };
+  const hang = [
+    ...xong.map((x) => ({ x, kq: dungHan(x) ? 'Xong đúng hạn' : 'Xong quá hạn' })),
+    ...quaHan.map((x) => ({ x, kq: 'Quá hạn' })),
+  ].sort((a, b) => (a.x.han ?? '9999').localeCompare(b.x.han ?? '9999')).map(({ x, kq }) => ({
+    ten: x.ten, nhom: 'Xã', vb: nguonVb[x.id] ?? x.can_cu_so_ky_hieu ?? '', han: ngayHienThi(x.han), kq, sp: x.san_pham ?? '',
+  }));
+  return { so, hang };
+}
