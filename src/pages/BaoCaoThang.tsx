@@ -25,6 +25,7 @@ export default function BaoCaoThang() {
   const [them, setThem] = useState<Record<string, number>>({});
   const [thongBao, setThongBao] = useState<{ loi?: string; ok?: string } | null>(null);
   const [moPc, setMoPc] = useState(false);
+  const [moMoc, setMoMoc] = useState(false);
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
     const [ch, dv, cur, truoc, nv, cn, nvf, hoan, a4, vbr] = await Promise.all([
@@ -46,7 +47,8 @@ export default function BaoCaoThang() {
     const ddau = `${ky}-01`, dcuoi = `${ky}-31`;
     const vbs = ((vbr.data ?? []) as { so_ky_hieu: string | null; trich_yeu: string; ngay_ban_hanh: string | null }[]).filter((x) => x.ngay_ban_hanh && x.ngay_ban_hanh <= dcuoi);
     const trongThang = vbs.filter((x) => x.ngay_ban_hanh! >= ddau);
-    const tk13 = { d2: String(trongThang.length), d3: String(vbs.length), ten: trongThang.map((x) => `${x.so_ky_hieu ? x.so_ky_hieu + ': ' : ''}${x.trich_yeu}`).join('; ') };
+    const dsVb = vbs.map((x) => ({ so: x.so_ky_hieu ?? '', ngay: x.ngay_ban_hanh!, ty: x.trich_yeu, thang: x.ngay_ban_hanh! >= ddau })).sort((a, z) => z.ngay.localeCompare(a.ngay));
+    const tk13 = { ds: dsVb, d2: String(trongThang.length), d3: String(vbs.length), ten: trongThang.map((x) => `${x.so_ky_hieu ? x.so_ky_hieu + ': ' : ''}${x.trich_yeu}`).join('; ') };
     const tkNv = thongKeNhiemVu((nvf.data ?? []) as NvThongKe[], (hoan.data ?? []) as { nhiem_vu_id: string; luc: string }[], cha, nguonVb, ky, ch.chot);
     const dsNv = (nv.data ?? []) as { id: string; ten: string }[], dsCn = (cn.data ?? []) as { nhiem_vu_id: string; noi_dung: string; luc: string }[];
     return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tkNv, tk13, tuan: nguonTuanBaoCao(dsNv, dsCn, chotMs(ky, ch.chot)), tuanTruoc: nguonTuanBaoCao(dsNv, dsCn, chotMs(kyTruoc(ky), ch.chot)) };
@@ -198,6 +200,7 @@ export default function BaoCaoThang() {
     <div className="flex flex-col gap-4">
       <TieuDeTrang tren="Gửi Cơ quan Thường trực BCĐ 57 tỉnh · mẫu XA003" ten={`Báo cáo tháng (Tỉnh) · ${tenKy(ky)}`}
         phai={<>
+          {quanTri && <Nut kieu="phu" icon={<Settings2 className="h-4 w-4" />} ngan="Mốc thời gian" onClick={() => setMoMoc(true)}>Mốc thời gian</Nut>}
           {quanTri && <Nut kieu="phu" icon={<Settings2 className="h-4 w-4" />} ngan="Phân công" onClick={() => setMoPc(true)}>Phân công bảng</Nut>}
           {quanTri && (ch.khoa.includes(ky)
             ? <Nut kieu="phu" icon={<LockOpen className="h-4 w-4" />} ngan="Mở khoá" onClick={() => datCH({ ...ch, khoa: ch.khoa.filter((x) => x !== ky) }, 'Đã mở khoá kỳ')}>Mở khoá kỳ</Nut>
@@ -272,11 +275,12 @@ export default function BaoCaoThang() {
           {bangCuaTab.map((b) => (
             <BangA4 key={b.id} b={b} ky={ky} ctx={ctx} khoaHT={khoa} nhap={nhapDuoc(b)} loi={loiCua[b.id]} soDong={soDongCua(b)}
               ghi={(d, c, v) => ghi(b, d, c, v)} themDong={() => setThem((t) => ({ ...t, [b.id]: soDongCua(b) + 1 }))} xoaDong={(i) => xoaDong(b, i, soDongCua(b))}
-              chep={() => saoChepKyTruoc(b)} tuDien={b.id === '1.1' || b.id === '1.2' || b.id === '1.3' ? () => dienTuNv(b.id as '1.1' | '1.2' | '1.3') : undefined} dv={(ch.phan_cong[b.id] ?? []).map(tenDv).filter(Boolean).join(', ')} />
+              duoi={b.id === '1.3' ? <DsVanBan ds={data?.tk13.ds ?? []} /> : undefined} chep={() => saoChepKyTruoc(b)} tuDien={b.id === '1.1' || b.id === '1.2' || b.id === '1.3' ? () => dienTuNv(b.id as '1.1' | '1.2' | '1.3') : undefined} dv={(ch.phan_cong[b.id] ?? []).map(tenDv).filter(Boolean).join(', ')} />
           ))}
         </>
       )}
 
+      {moMoc && <MocThoiGian ch={ch} ky={ky} dong={() => setMoMoc(false)} luu={(c) => { void datCH(c, 'Đã lưu mốc thời gian'); setMoMoc(false); }} />}
       {moPc && data && <PhanCong ch={ch} dv={data.dv} dong={() => setMoPc(false)} luu={(c) => { void datCH(c, 'Đã lưu phân công'); setMoPc(false); }} />}
     </div>
   );
@@ -288,9 +292,9 @@ const TabNut = ({ on, bam, children }: { on: boolean; bam: () => void; children:
 );
 
 // ---------- Một bảng dạng trang A4
-function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong, chep, dv, tuDien }: {
+function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong, chep, dv, tuDien, duoi }: {
   b: BangB; ky: string; ctx: Ctx; khoaHT: boolean; nhap: boolean; loi: LoiO[]; soDong: number;
-  ghi: (dong: string, cot: string, v: string) => void; themDong: () => void; xoaDong: (i: number) => void; chep: () => void; dv: string; tuDien?: () => void;
+  ghi: (dong: string, cot: string, v: string) => void; themDong: () => void; xoaDong: (i: number) => void; chep: () => void; dv: string; tuDien?: () => void; duoi?: ReactNode;
 }) {
   const tt = ttBang(ctx.cur, b.id);
   const sua = nhap && tt === 'can';
@@ -355,6 +359,7 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
           )}
           {b.dongDong && sua && tt === 'can' && <div><Nut kieu="phu" className="min-h-9 text-xs" icon={<Plus className="h-4 w-4" />} onClick={themDong}>Thêm {b.dongDong}</Nut></div>}
           {khoaHT && !nhap && <div className="font-sans text-xs text-mo">Bảng chỉ xem — kỳ đã khoá hoặc bảng không thuộc phân công của bạn.</div>}
+          {duoi}
           {loi.length > 0 && (
             <ul className="m-0 list-disc pl-5 font-sans text-xs text-nguy">{loi.slice(0, 6).map((x, i) => <li key={i}>{x.msg}</li>)}{loi.length > 6 && <li>… và {loi.length - 6} ô khác</li>}</ul>
           )}
@@ -396,6 +401,67 @@ function OCell({ b, dong, c, ctx, sua, loi, ghi }: { b: BangB; dong: string; c: 
   );
 }
 
+function MocThoiGian({ ch, ky, dong, luu }: { ch: CauHinhBCTh; ky: string; dong: () => void; luu: (c: CauHinhBCTh) => void }) {
+  const [chot, setChot] = useState(String(ch.chot)), [gui, setGui] = useState(String(ch.gui));
+  const c = Number(chot), g = Number(gui);
+  const hopLe = Number.isInteger(c) && Number.isInteger(g) && c >= 1 && c <= 28 && g >= 1 && g <= 28 && c <= g;
+  return (
+    <HopThoai mo dong={dong} tieuDe="Mốc thời gian báo cáo tháng" rong="max-w-md">
+      <div className="flex flex-col gap-3 text-[0.8125rem]">
+        <label className="flex flex-col gap-1 font-semibold">Ngày chốt số liệu hằng tháng (số liệu báo cáo tuần được lấy đến hết ngày này)
+          <input type="number" min={1} max={28} className={cx(lopO, 'min-h-10 w-28')} value={chot} onChange={(e) => setChot(e.target.value)} />
+        </label>
+        <label className="flex flex-col gap-1 font-semibold">Hạn gửi báo cáo lên tỉnh (hết ngày này đơn vị không nhập được nữa)
+          <input type="number" min={1} max={28} className={cx(lopO, 'min-h-10 w-28')} value={gui} onChange={(e) => setGui(e.target.value)} />
+        </label>
+        <p className="m-0 text-mo">Áp dụng cho mọi kỳ, trong đó có {tenKy(ky)}. Ngày chốt không được sau hạn gửi; chọn trong khoảng 1–28 để tháng nào cũng có ngày này.</p>
+        {!hopLe && <p className="m-0 font-semibold text-nguy">Mốc chưa hợp lệ.</p>}
+      </div>
+      <div className="mt-3 flex justify-end gap-2">
+        <Nut kieu="phu" onClick={dong}>Huỷ</Nut>
+        <Nut kieu="chinh" disabled={!hopLe} onClick={() => luu({ ...ch, chot: c, gui: g })}>Lưu mốc</Nut>
+      </div>
+    </HopThoai>
+  );
+}
+
+function DsVanBan({ ds }: { ds: { so: string; ngay: string; ty: string; thang: boolean }[] }) {
+  const d = (x: string) => x.split('-').reverse().join('/');
+  return (
+    <div className="font-sans text-[0.8125rem]">
+      <div className="mb-1 font-bold">Danh sách văn bản đã ban hành (lấy từ Kho văn bản · {ds.filter((x) => x.thang).length} trong tháng, {ds.length} lũy kế từ đầu năm)</div>
+      {ds.length === 0 ? <div className="text-mo">Chưa có văn bản nào ở thư mục "BCĐ, Đảng ủy phường ban hành" trong kỳ này.</div> : (
+        <table className="w-full border-collapse text-[13px]">
+          <thead><tr>{['TT', 'Số, ký hiệu', 'Ngày ban hành', 'Trích yếu', 'Trong tháng'].map((h) => <th key={h} className="border border-[#57534e] bg-[#F5F5F4] px-2 py-1 text-center font-bold">{h}</th>)}</tr></thead>
+          <tbody>{ds.map((x, i) => (
+            <tr key={i} style={x.thang ? { background: '#E7E5E4' } : undefined}>
+              <td className="border border-[#57534e] px-2 py-1 text-center align-top">{i + 1}</td>
+              <td className="border border-[#57534e] px-2 py-1 align-top">{x.so || '—'}</td>
+              <td className="border border-[#57534e] px-2 py-1 text-center align-top">{d(x.ngay)}</td>
+              <td className="whitespace-pre-wrap break-words border border-[#57534e] px-2 py-1 align-top">{x.ty}</td>
+              <td className="border border-[#57534e] px-2 py-1 text-center align-top">{x.thang ? 'Có' : ''}</td>
+            </tr>))}</tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+// Gợi ý phân công theo chức năng (khớp theo tên đơn vị); Cơ quan Thường trực luôn nhập được mọi bảng
+const GOI_Y: Record<string, string[]> = {
+  '1.1': ['Thường trực'], '1.2': ['Thường trực'], '1.3': ['Thường trực'], '1.4': ['Thường trực'],
+  '2.1': ['Phục vụ hành chính công'], '2.2': ['Thường trực'],
+  '3.1': ['Kinh tế', 'Văn hóa', 'Phục vụ hành chính công', 'Thường trực'], '3.2': ['HĐND', 'Kinh tế'], '3.3': ['HĐND', 'Thường trực'],
+  '4.1': ['Thường trực'], '4.2': ['Văn hóa'], '4.3': ['Văn hóa'],
+  '5.1': ['Kinh tế'], '5.2': ['Kinh tế'], '6.1': ['Thường trực'], '6.2': ['HĐND'],
+  '7.1': ['Thường trực'], '7.2': ['Thường trực'], '7.3': ['Thường trực'],
+};
+export function goiYPhanCong(dv: DonVi[]): Record<string, string[]> {
+  const r: Record<string, string[]> = {};
+  for (const [b, ks] of Object.entries(GOI_Y)) r[b] = ks.map((k) => dv.find((d) => d.ten.includes(k))?.id).filter((x): x is string => !!x);
+  return r;
+}
+
 // ---------- Phân công bảng -> đơn vị
 function PhanCong({ ch, dv, dong, luu }: { ch: CauHinhBCTh; dv: DonVi[]; dong: () => void; luu: (c: CauHinhBCTh) => void }) {
   const [pc, setPc] = useState<Record<string, string[]>>(ch.phan_cong);
@@ -419,6 +485,7 @@ function PhanCong({ ch, dv, dong, luu }: { ch: CauHinhBCTh; dv: DonVi[]; dong: (
         ))}
       </div>
       <div className="sticky bottom-0 mt-3 flex justify-end gap-2 bg-white pt-2">
+        <Nut kieu="phu" onClick={() => setPc(goiYPhanCong(dv))}>Áp dụng gợi ý theo chức năng</Nut>
         <Nut kieu="phu" onClick={dong}>Huỷ</Nut>
         <Nut kieu="chinh" onClick={() => luu({ ...ch, phan_cong: pc })}>Lưu phân công</Nut>
       </div>
