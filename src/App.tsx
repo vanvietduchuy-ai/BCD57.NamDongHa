@@ -18,6 +18,7 @@ const KhoVanBan = lazy(() => import('./pages/KhoVanBan'));
 const SoanBaoCaoChung = lazy(() => import('./pages/SoanBaoCaoChung'));
 const SoCongVan = lazy(() => import('./pages/SoCongVan'));
 const BaoCaoTuan = lazy(() => import('./pages/BaoCaoTuan'));
+const BaoCaoThang = lazy(() => import('./pages/BaoCaoThang'));
 const VanBanDenDi = lazy(() => import('./pages/VanBanDenDi'));
 const CaiDatTrang = lazy(() => import('./pages/QuanTri').then((m) => ({ default: m.CaiDatTrang })));
 
@@ -49,6 +50,7 @@ function CacTrang() {
           <Route path="kho-van-ban" element={<KhoVanBan />} />
           <Route path="so-cong-van" element={<SoCongVan />} />
           <Route path="bao-cao-tuan" element={<BaoCaoTuan />} />
+          <Route path="bao-cao-thang" element={<BaoCaoThang />} />
           <Route path="van-ban" element={<Chan cho={['admin', 'quan_tri', 'don_vi']}><VanBanDenDi /></Chan>} />
           <Route path="quan-tri" element={<Chan cho={['admin']}><QuanTri /></Chan>} />
           <Route path="cai-dat" element={<Chan cho={['admin', 'quan_tri']}><CaiDatTrang /></Chan>} />
