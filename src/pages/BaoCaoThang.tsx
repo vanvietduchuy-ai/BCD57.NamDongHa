@@ -7,14 +7,12 @@ import { supabase } from '../lib/supabase';
 import { useDuLieu } from '../lib/useDuLieu';
 import { homNayVN } from '../lib/dinhDang';
 import {
-  BANG, batBuocKy, CH_MAC_DINH, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, tenKy, tinhO, TT_BANG, ttBang,
+  BANG, batBuocKy, CH_MAC_DINH, chotMs, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, tenKy, tinhO, TT_BANG, ttBang,
   nguonTuanBaoCao, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang,
 } from '../lib/baoCaoThang';
 import { DangTai, HopLoi, HopThoai, Nut, The, TieuDeTrang, cx, lopO } from '../components/ui';
 
 const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
-// Số liệu báo cáo tuần chỉ phản ánh hiện tại: tự điền cho kỳ đang báo cáo; kỳ cũ phải chốt số vào ô mới còn
-const quaHanKy = (ky: string) => ky < homNayVN().slice(0, 7);
 const NEN = { tay: '#FFF1A8', tuDong: '#E7E5E4', thieu: '#F8C9CF' };
 type DonVi = { id: string; ten: string };
 
@@ -35,16 +33,18 @@ export default function BaoCaoThang() {
       taiDuLieu(ky),
       taiDuLieu(kyTruoc(ky)).catch(() => ({} as DuLieu)),
       supabase.from('v_nhiem_vu').select('id, ten').limit(1000),
-      supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung').order('luc', { ascending: false }).limit(5000),
+      supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung, luc').order('luc', { ascending: false }).limit(5000),
     ]);
-    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tuan: nguonTuanBaoCao((nv.data ?? []) as { id: string; ten: string }[], (cn.data ?? []) as { nhiem_vu_id: string; noi_dung: string }[]) };
+    const dsNv = (nv.data ?? []) as { id: string; ten: string }[], dsCn = (cn.data ?? []) as { nhiem_vu_id: string; noi_dung: string; luc: string }[];
+    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tuan: nguonTuanBaoCao(dsNv, dsCn, chotMs(ky, ch.chot)), tuanTruoc: nguonTuanBaoCao(dsNv, dsCn, chotMs(kyTruoc(ky), ch.chot)) };
   }, [ky]);
 
   const ch = data?.ch ?? CH_MAC_DINH;
   const cur = data?.cur ?? {};
   const truoc = data?.truoc ?? {};
   const tuan = data?.tuan;
-  const ctx: Ctx = useMemo(() => ({ cur, truoc, tuan: ky === homNayVN().slice(0, 7) || !quaHanKy(ky) ? tuan : undefined }), [cur, truoc, tuan, ky]);
+  const tuanTruoc = data?.tuanTruoc;
+  const ctx: Ctx = useMemo(() => ({ cur, truoc, tuan, tuanTruoc }), [cur, truoc, tuan, tuanTruoc]);
   const quaHan = Date.now() > hanGuiMs(ky, ch.gui);
   const khoa = ch.khoa.includes(ky) || (quaHan && !ch.mo_lai.includes(ky));
   const duocPhanCong = (b: BangB) => !!donViId && (ch.phan_cong[b.id] ?? []).includes(donViId);

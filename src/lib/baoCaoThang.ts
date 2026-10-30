@@ -184,7 +184,7 @@ export const hanGuiMs = (ky: string, gui: number) => new Date(`${ky}-${String(gu
 
 // ---------- Tính giá trị hiển thị của ô (nhập tay > tự tính)
 export type TuanO = Record<string, { v: string; ten: string }>;   // số liệu tự lấy từ báo cáo tuần
-export type Ctx = { cur: DuLieu; truoc: DuLieu; tuan?: TuanO };
+export type Ctx = { cur: DuLieu; truoc: DuLieu; tuan?: TuanO; tuanTruoc?: TuanO };
 export function dongDongSo(b: BangB, cur: DuLieu, them: number): number {
   let n = 0;
   const re = new RegExp(`^${b.id.replace('.', '\\.')}\\|r(\\d+)\\|`);
@@ -202,6 +202,10 @@ export function tinhO(b: BangB, dong: string, c: CotB, ctx: Ctx, laTruoc = false
   const d = laTruoc ? ctx.truoc : ctx.cur;
   const tay = d[khoaO(b.id, dong, c.k)];
   const dg = b.dong?.find((x) => x.k === dong);
+  if (laTruoc && !c.chiDoc && !tay) {   // kỳ trước chưa có số: lấy số báo cáo tuần tại mốc chốt kỳ trước
+    const t = ctx.tuanTruoc?.[khoaO(b.id, dong, c.k)];
+    if (t) return { v: t.v, tuDong: true, nguon: t.ten };
+  }
   if (dg?.tong) {   // dòng tổng cộng: cộng các dòng trên (cột số)
     if (c.kieu !== 'so') return { v: '', tuDong: false };
     const ks = (b.dong ?? []).filter((x) => !x.tong);
@@ -265,11 +269,14 @@ const NGUON_TUAN: { tu: string[]; bang: string; dong: string[]; mau: string; dat
   { tu: ['chi tra luong huu'], bang: '2.2', dong: ['d6'], mau: 'ph', dat: 'lk' },
   { tu: ['du lieu dat dai'], bang: '3.1', dong: ['d1'], mau: 'kl', dat: 'lk' },
 ];
-export function nguonTuanBaoCao(nv: { id: string; ten: string }[], cn: { nhiem_vu_id: string; noi_dung: string }[]): TuanO {
+// Mốc chốt số liệu của kỳ: hết ngày `chot` của tháng báo cáo (giờ VN)
+export const chotMs = (ky: string, chot: number) => new Date(`${ky}-${String(chot).padStart(2, '0')}T23:59:59+07:00`).getTime();
+// moc: chỉ lấy báo cáo tuần có thời điểm không quá mốc này (số lũy kế tại mốc chốt)
+export function nguonTuanBaoCao(nv: { id: string; ten: string }[], cn: { nhiem_vu_id: string; noi_dung: string; luc: string }[], moc: number): TuanO {
   const kq: TuanO = {};
   const moiNhat = new Map<string, string>();   // cn xếp mới nhất trước
   for (const c of cn) {
-    if (moiNhat.has(c.nhiem_vu_id)) continue;
+    if (moiNhat.has(c.nhiem_vu_id) || new Date(c.luc).getTime() > moc) continue;
     const m = c.noi_dung.match(/Kết quả: (?:hoàn thành )?([\d.,]+)\/([\d.,]+)/);
     if (m) moiNhat.set(c.nhiem_vu_id, `${m[1]}/${m[2]}`);
   }
