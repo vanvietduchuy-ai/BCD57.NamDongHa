@@ -1,7 +1,7 @@
 // Báo cáo tháng gửi tỉnh (mẫu XA003): 19 bảng / 7 phụ lục dạng A4 động. Đơn vị được phân công nhập thẳng vào ô vàng;
 // ô xám web tự tính; ô hồng là ô thiếu hoặc nghi sai. Thường trực phân công bảng, khoá kỳ, xuất Excel.
-import { useMemo, useState, type ReactNode } from 'react';
-import { Download, Lock, LockOpen, Plus, Settings2, Trash2, TriangleAlert, CircleCheck } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Download, Lock, Redo2, Undo2, LockOpen, Plus, Settings2, Trash2, TriangleAlert, CircleCheck } from 'lucide-react';
 import { laQuanTri, useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { useDuLieu } from '../lib/useDuLieu';
@@ -67,28 +67,72 @@ export default function BaoCaoThang() {
     return m;
   }, [ctx, cur, ky, them]);
 
-  const ghi = async (b: BangB, dong: string, cot: string, gt: string) => {
-    const k = khoaO(b.id, dong, cot);
-    if ((cur[k] ?? '') === gt) return;
-    setData((x) => (x ? { ...x, cur: { ...x.cur, [k]: gt } } : x));
-    const e = await luuO(ky, [{ bang: b.id, dong, cot, gia_tri: gt }]);
-    if (e) { setThongBao({ loi: `Không lưu được: ${e}` }); void taiLai(); } else setThongBao(null);
+  // Mọi thay đổi đi qua `ap`: cập nhật màn hình, lưu, và ghi lại để Hoàn tác (Ctrl+Z) / Làm lại (Ctrl+Y)
+  type Cell = { bang: string; dong: string; cot: string; gia_tri: string };
+  type Buoc = { cu: Cell[]; moi: Cell[] };
+  const curRef = useRef(cur); curRef.current = cur;
+  const kyRef = useRef(ky); kyRef.current = ky;
+  const lui = useRef<Buoc[]>([]);
+  const tien = useRef<Buoc[]>([]);
+  const [dem, setDem] = useState({ lui: 0, tien: 0 });
+  const capNhatDem = () => setDem({ lui: lui.current.length, tien: tien.current.length });
+  const ghiCell = async (cac: Cell[]) => {
+    if (!cac.length) return null;
+    setData((x) => { if (!x) return x; const c = { ...x.cur }; for (const o of cac) { const k = khoaO(o.bang, o.dong, o.cot); if (o.gia_tri) c[k] = o.gia_tri; else delete c[k]; } return { ...x, cur: c }; });
+    const e = await luuO(kyRef.current, cac);
+    if (e) { setThongBao({ loi: `Không lưu được: ${e}` }); void taiLai(); }
+    return e;
   };
+  const ap = async (cac: Cell[], ok?: string) => {
+    const hien = curRef.current;
+    const doi = cac.filter((o) => (hien[khoaO(o.bang, o.dong, o.cot)] ?? '') !== o.gia_tri);
+    if (!doi.length) return false;
+    lui.current = [...lui.current.slice(-49), { cu: doi.map((o) => ({ ...o, gia_tri: hien[khoaO(o.bang, o.dong, o.cot)] ?? '' })), moi: doi }];
+    tien.current = []; capNhatDem();
+    const e = await ghiCell(doi);
+    if (!e) setThongBao(ok ? { ok } : null);
+    return true;
+  };
+  const hoanTac = async () => {
+    const st = lui.current.pop(); if (!st) return;
+    tien.current.push(st); capNhatDem();
+    const e = await ghiCell(st.cu);
+    if (!e) setThongBao({ ok: `Đã hoàn tác ${st.cu.length} ô.` });
+  };
+  const lamLai = async () => {
+    const st = tien.current.pop(); if (!st) return;
+    lui.current.push(st); capNhatDem();
+    const e = await ghiCell(st.moi);
+    if (!e) setThongBao({ ok: `Đã làm lại ${st.moi.length} ô.` });
+  };
+  const hoanTacRef = useRef(hoanTac); hoanTacRef.current = hoanTac;
+  const lamLaiRef = useRef(lamLai); lamLaiRef.current = lamLai;
+  useEffect(() => { lui.current = []; tien.current = []; capNhatDem(); }, [ky]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const f = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const ph = e.key.toLowerCase();
+      if (ph !== 'z' && ph !== 'y') return;
+      const t = e.target as HTMLElement | null;
+      // Đang gõ dở trong một ô: để trình duyệt hoàn tác chữ đang gõ
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA') && (t as HTMLInputElement).value !== (t as HTMLInputElement).defaultValue) return;
+      e.preventDefault();
+      if (ph === 'y' || e.shiftKey) void lamLaiRef.current(); else void hoanTacRef.current();
+    };
+    window.addEventListener('keydown', f);
+    return () => window.removeEventListener('keydown', f);
+  }, []);
+
+  const ghi = (b: BangB, dong: string, cot: string, gt: string) => ap([{ bang: b.id, dong, cot, gia_tri: gt }]);
   const xoaDong = async (b: BangB, i: number, n: number) => {
     // Dồn các dòng phía dưới lên, xoá dòng cuối
-    const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
-    const moi = { ...cur };
-    for (let r = i; r <= n; r++) for (const c of b.cot) {
-      const gt = r < n ? (cur[khoaO(b.id, `r${r + 1}`, c.k)] ?? '') : '';
-      if ((cur[khoaO(b.id, `r${r}`, c.k)] ?? '') !== gt) { cac.push({ bang: b.id, dong: `r${r}`, cot: c.k, gia_tri: gt }); if (gt) moi[khoaO(b.id, `r${r}`, c.k)] = gt; else delete moi[khoaO(b.id, `r${r}`, c.k)]; }
-    }
-    setData((x) => (x ? { ...x, cur: moi } : x));
+    const cac: Cell[] = [];
+    for (let r = i; r <= n; r++) for (const c of b.cot) cac.push({ bang: b.id, dong: `r${r}`, cot: c.k, gia_tri: r < n ? (cur[khoaO(b.id, `r${r + 1}`, c.k)] ?? '') : '' });
     setThem((t) => ({ ...t, [b.id]: Math.max(0, (t[b.id] ?? 0) - 1) }));
-    if (cac.length) { const e = await luuO(ky, cac); if (e) { setThongBao({ loi: `Không lưu được: ${e}` }); void taiLai(); } }
+    await ap(cac, `Đã xoá dòng ${i}. Bấm Hoàn tác (Ctrl+Z) nếu xoá nhầm.`);
   };
   const saoChepKyTruoc = async (b: BangB) => {
-    const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
-    const moi = { ...cur };
+    const cac: Cell[] = [];
     for (const [k, v] of Object.entries(truoc)) {
       if (!k.startsWith(`${b.id}|`) || k.includes('|_tt|') || cur[k]) continue;
       const [, dong, cot] = k.split('|');
@@ -96,18 +140,15 @@ export default function BaoCaoThang() {
       if (!c || c.chiDoc) continue;
       // Bảng cố định: lũy kế và các chỉ tiêu kỳ này sẽ khác; chỉ chép chữ và số "phải thực hiện / khối lượng / biên chế"
       if (!b.dongDong && c.kieu === 'so' && !['ph', 'kl', 'bc'].includes(cot)) continue;
-      cac.push({ bang: b.id, dong, cot, gia_tri: v }); moi[k] = v;
+      cac.push({ bang: b.id, dong, cot, gia_tri: v });
     }
     if (!cac.length) { setThongBao({ ok: 'Không có gì để chép từ kỳ trước.' }); return; }
-    setData((x) => (x ? { ...x, cur: moi } : x));
-    const e = await luuO(ky, cac);
-    setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã chép ${cac.length} ô từ ${tenKy(kyTruoc(ky))} (chỉ các ô còn trống).` });
+    await ap(cac, `Đã chép ${cac.length} ô từ ${tenKy(kyTruoc(ky))} (chỉ các ô còn trống).`);
   };
   const dienTuNv = async (bang: '1.1' | '1.2') => {
     const tk = data?.tkNv; if (!tk) return;
-    const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
-    const moi = { ...cur };
-    const dat = (dong: string, cot: string, v: string) => { const k = khoaO(bang, dong, cot); if ((cur[k] ?? '') === v) return; cac.push({ bang, dong, cot, gia_tri: v }); if (v) moi[k] = v; else delete moi[k]; };
+    const cac: Cell[] = [];
+    const dat = (dong: string, cot: string, v: string) => { cac.push({ bang, dong, cot, gia_tri: v }); };
     if (bang === '1.1') for (const [d, v] of Object.entries(tk.so)) dat(d, 'xa', v);
     else {
       const b12 = BANG.find((x) => x.id === '1.2')!;
@@ -118,19 +159,14 @@ export default function BaoCaoThang() {
       const moiHang = tk.hang.filter((h) => { const k = chuan(h.ten).slice(0, 28); return !daCo.some((t) => t.includes(k) || chuan(h.ten).includes(t.slice(0, 28))); });
       moiHang.forEach((h, j) => { for (const c of ['ten', 'nhom', 'vb', 'han', 'kq', 'sp'] as const) dat(`r${cu + j + 1}`, c, h[c]); });
     }
-    if (!cac.length) { setThongBao({ ok: 'Bảng đã đủ so với nhiệm vụ trên web.' }); return; }
-    setData((x) => (x ? { ...x, cur: moi } : x));
-    const e = await luuO(ky, cac);
-    setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã điền ${cac.length} ô Bảng ${bang} từ nhiệm vụ trên web.` });
+    const co = await ap(cac, `Đã điền Bảng ${bang} từ nhiệm vụ trên web. Bấm Hoàn tác (Ctrl+Z) nếu chưa đúng ý.`);
+    if (!co) setThongBao({ ok: 'Bảng đã đủ so với nhiệm vụ trên web.' });
   };
   const chotSo = async () => {
-    const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
-    const moi = { ...cur };
-    for (const [k, t] of Object.entries(tuan ?? {})) if (!cur[k]) { const [bang, dong, cot] = k.split('|'); cac.push({ bang, dong, cot, gia_tri: t.v }); moi[k] = t.v; }
+    const cac: Cell[] = [];
+    for (const [k, t] of Object.entries(tuan ?? {})) if (!cur[k]) { const [bang, dong, cot] = k.split('|'); cac.push({ bang, dong, cot, gia_tri: t.v }); }
     if (!cac.length) { setThongBao({ ok: 'Không có ô nào cần chốt từ báo cáo tuần.' }); return; }
-    setData((x) => (x ? { ...x, cur: moi } : x));
-    const e = await luuO(ky, cac);
-    setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã chốt ${cac.length} ô số liệu từ báo cáo tuần vào ${tenKy(ky)}.` });
+    await ap(cac, `Đã chốt ${cac.length} ô số liệu từ báo cáo tuần vào ${tenKy(ky)}.`);
   };
   const datCH = async (c: CauHinhBCTh, ok?: string) => {
     setData((x) => (x ? { ...x, ch: c } : x));
@@ -162,6 +198,8 @@ export default function BaoCaoThang() {
           {quanTri && quaHan && !ch.khoa.includes(ky) && (ch.mo_lai.includes(ky)
             ? <Nut kieu="phu" ngan="Đóng lại" onClick={() => datCH({ ...ch, mo_lai: ch.mo_lai.filter((x) => x !== ky) }, 'Đã đóng lại, đơn vị không nhập được nữa')}>Đóng lại</Nut>
             : <Nut kieu="phu" ngan="Mở lại" onClick={() => datCH({ ...ch, mo_lai: [...ch.mo_lai, ky] }, 'Đã mở lại cho đơn vị đính chính')}>Mở lại cho đơn vị</Nut>)}
+          <Nut kieu="phu" icon={<Undo2 className="h-4 w-4" />} disabled={!dem.lui} ngan="Hoàn tác" onClick={() => void hoanTac()} title="Hoàn tác (Ctrl+Z)">Hoàn tác</Nut>
+          <Nut kieu="phu" icon={<Redo2 className="h-4 w-4" />} disabled={!dem.tien} ngan="Làm lại" onClick={() => void lamLai()} title="Làm lại (Ctrl+Y)">Làm lại</Nut>
           {quanTri && <Nut kieu="phu" ngan="Chốt số" onClick={chotSo}>Chốt số từ báo cáo tuần</Nut>}
           <Nut kieu="chinh" icon={<Download className="h-4 w-4" />} ngan="Excel" onClick={() => xuatExcel(ky, dsBang, ctx, (b) => soDongCua(b))}>Xuất Excel</Nut>
         </>} />
@@ -263,7 +301,7 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
           : <span className="font-semibold text-cam-dam">Chưa đến kỳ quý</span>}
       </div>
       <div className="overflow-x-auto p-4 sm:p-6" style={{ fontFamily: FONT_A4 }}>
-        <div className="mx-auto flex min-w-[720px] max-w-[1050px] flex-col gap-3 text-[14px] text-black">
+        <div className={cx('mx-auto flex flex-col gap-3 text-[14px] text-black', b.cot.length >= 7 ? 'min-w-[1180px] max-w-[1400px]' : 'min-w-[720px] max-w-[1050px]')}>
           <div className="text-center text-[15px] font-bold">Bảng {b.id}. {b.ten}</div>
           {b.ghiChu && <div className="text-[12.5px] italic">Lưu ý: {b.ghiChu}</div>}
           <div className="flex flex-wrap items-center gap-2 font-sans text-[0.8125rem]">
@@ -326,17 +364,20 @@ function OCell({ b, dong, c, ctx, sua, loi, ghi }: { b: BangB; dong: string; c: 
   const dsChon = c.chon;
   const chiDoc = !sua || c.chiDoc || (b.dong?.find((x) => x.k === dong)?.tong ?? false);
   return (
-    <td className="border border-[#57534e] p-0 align-middle" style={{ background: nen, outline: loi ? '2px solid #B4232F' : undefined, outlineOffset: -2 }} title={loi?.msg ?? (nguon ? `Tự lấy từ báo cáo tuần: ${nguon}` : undefined)}>
+    <td className="border border-[#57534e] p-0 align-top" style={{ background: nen, outline: loi ? '2px solid #B4232F' : undefined, outlineOffset: -2 }} title={loi?.msg ?? (nguon ? `Tự lấy từ báo cáo tuần: ${nguon}` : undefined)}>
       {chiDoc ? (
-        <div className={cx('min-h-[34px] px-2 py-1.5', c.kieu === 'so' ? 'text-right tabular-nums' : '')}>{v}</div>
+        <div className={cx('min-h-[34px] whitespace-pre-wrap break-words px-2 py-1.5', c.kieu === 'so' ? 'text-right tabular-nums' : '')}>{v}</div>
       ) : dsChon ? (
         <select className="min-h-[34px] w-full bg-transparent px-1 text-[14px] outline-none" value={tay} onChange={(e) => ghi(e.target.value)}>
           <option value="">—</option>{dsChon.map((x) => <option key={x} value={x}>{x}</option>)}
         </select>
       ) : (
-        <input key={`${tay}|${v}`} defaultValue={tay || v} inputMode={c.kieu === 'so' ? 'decimal' : undefined}
+        <textarea key={`${tay}|${v}`} rows={1} defaultValue={tay || v} inputMode={c.kieu === 'so' ? 'decimal' : undefined}
           placeholder={tuDong && !tay ? v : undefined}
-          className={cx('min-h-[34px] w-full bg-transparent px-2 text-[14px] outline-none focus:bg-white/70', c.kieu === 'so' && 'text-right tabular-nums')}
+          ref={(el) => { if (el) { el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; } }}
+          onInput={(e) => { const el = e.currentTarget; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`; }}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.currentTarget.blur(); } }}
+          className={cx('block min-h-[34px] w-full resize-none overflow-hidden whitespace-pre-wrap break-words bg-transparent px-2 py-1.5 align-top text-[14px] leading-snug outline-none focus:bg-white/70', c.kieu === 'so' && 'text-right tabular-nums')}
           onBlur={(e) => {
             let t = e.target.value.trim();
             if (c.kieu === 'so' && t) { const n = docSo(t); if (n == null) { e.target.value = tay; return; } t = new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 3 }).format(n); }
