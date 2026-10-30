@@ -8,11 +8,13 @@ import { useDuLieu } from '../lib/useDuLieu';
 import { homNayVN } from '../lib/dinhDang';
 import {
   BANG, batBuocKy, CH_MAC_DINH, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, tenKy, tinhO, TT_BANG, ttBang,
-  type BangB, type CauHinhBCTh, type CotB, type DuLieu, type LoiO, type TtBang,
+  nguonTuanBaoCao, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang,
 } from '../lib/baoCaoThang';
 import { DangTai, HopLoi, HopThoai, Nut, The, TieuDeTrang, cx, lopO } from '../components/ui';
 
 const FONT_A4 = "'Times New Roman', Tinos, 'Liberation Serif', serif";
+// Số liệu báo cáo tuần chỉ phản ánh hiện tại: tự điền cho kỳ đang báo cáo; kỳ cũ phải chốt số vào ô mới còn
+const quaHanKy = (ky: string) => ky < homNayVN().slice(0, 7);
 const NEN = { tay: '#FFF1A8', tuDong: '#E7E5E4', thieu: '#F8C9CF' };
 type DonVi = { id: string; ten: string };
 
@@ -27,19 +29,22 @@ export default function BaoCaoThang() {
   const [moPc, setMoPc] = useState(false);
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
-    const [ch, dv, cur, truoc] = await Promise.all([
+    const [ch, dv, cur, truoc, nv, cn] = await Promise.all([
       taiCauHinh(),
       supabase.from('don_vi').select('id, ten').eq('hoat_dong', true).order('thu_tu'),
       taiDuLieu(ky),
       taiDuLieu(kyTruoc(ky)).catch(() => ({} as DuLieu)),
+      supabase.from('v_nhiem_vu').select('id, ten').limit(1000),
+      supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, noi_dung').order('luc', { ascending: false }).limit(5000),
     ]);
-    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc };
+    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tuan: nguonTuanBaoCao((nv.data ?? []) as { id: string; ten: string }[], (cn.data ?? []) as { nhiem_vu_id: string; noi_dung: string }[]) };
   }, [ky]);
 
   const ch = data?.ch ?? CH_MAC_DINH;
   const cur = data?.cur ?? {};
   const truoc = data?.truoc ?? {};
-  const ctx = useMemo(() => ({ cur, truoc }), [cur, truoc]);
+  const tuan = data?.tuan;
+  const ctx: Ctx = useMemo(() => ({ cur, truoc, tuan: ky === homNayVN().slice(0, 7) || !quaHanKy(ky) ? tuan : undefined }), [cur, truoc, tuan, ky]);
   const quaHan = Date.now() > hanGuiMs(ky, ch.gui);
   const khoa = ch.khoa.includes(ky) || (quaHan && !ch.mo_lai.includes(ky));
   const duocPhanCong = (b: BangB) => !!donViId && (ch.phan_cong[b.id] ?? []).includes(donViId);
@@ -91,6 +96,15 @@ export default function BaoCaoThang() {
     const e = await luuO(ky, cac);
     setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã chép ${cac.length} ô từ ${tenKy(kyTruoc(ky))} (chỉ các ô còn trống).` });
   };
+  const chotSo = async () => {
+    const cac: { bang: string; dong: string; cot: string; gia_tri: string }[] = [];
+    const moi = { ...cur };
+    for (const [k, t] of Object.entries(tuan ?? {})) if (!cur[k]) { const [bang, dong, cot] = k.split('|'); cac.push({ bang, dong, cot, gia_tri: t.v }); moi[k] = t.v; }
+    if (!cac.length) { setThongBao({ ok: 'Không có ô nào cần chốt từ báo cáo tuần.' }); return; }
+    setData((x) => (x ? { ...x, cur: moi } : x));
+    const e = await luuO(ky, cac);
+    setThongBao(e ? { loi: `Không lưu được: ${e}` } : { ok: `Đã chốt ${cac.length} ô số liệu từ báo cáo tuần vào ${tenKy(ky)}.` });
+  };
   const datCH = async (c: CauHinhBCTh, ok?: string) => {
     setData((x) => (x ? { ...x, ch: c } : x));
     const e = await luuCauHinh(c);
@@ -121,6 +135,7 @@ export default function BaoCaoThang() {
           {quanTri && quaHan && !ch.khoa.includes(ky) && (ch.mo_lai.includes(ky)
             ? <Nut kieu="phu" ngan="Đóng lại" onClick={() => datCH({ ...ch, mo_lai: ch.mo_lai.filter((x) => x !== ky) }, 'Đã đóng lại, đơn vị không nhập được nữa')}>Đóng lại</Nut>
             : <Nut kieu="phu" ngan="Mở lại" onClick={() => datCH({ ...ch, mo_lai: [...ch.mo_lai, ky] }, 'Đã mở lại cho đơn vị đính chính')}>Mở lại cho đơn vị</Nut>)}
+          {quanTri && <Nut kieu="phu" ngan="Chốt số" onClick={chotSo}>Chốt số từ báo cáo tuần</Nut>}
           <Nut kieu="chinh" icon={<Download className="h-4 w-4" />} ngan="Excel" onClick={() => xuatExcel(ky, dsBang, ctx, (b) => soDongCua(b))}>Xuất Excel</Nut>
         </>} />
 
@@ -137,7 +152,7 @@ export default function BaoCaoThang() {
           ? <span className="inline-flex items-center gap-1.5 rounded-full bg-nguy-nhat px-3 py-1 font-semibold text-nguy"><Lock className="h-3.5 w-3.5" />{ch.khoa.includes(ky) ? 'Đã khoá' : `Quá hạn gửi (ngày ${ch.gui})`}{!quanTri && ' · liên hệ Thường trực để đính chính'}</span>
           : <span className="rounded-full bg-[#DCFCE7] px-3 py-1 font-semibold text-[#166534]">Đang mở nhập</span>}
         <span className="ml-auto flex items-center gap-3 text-xs text-mo">
-          <Chu mau={NEN.tuDong}>Web tự tính</Chu><Chu mau={NEN.tay}>Ô nhập</Chu><Chu mau={NEN.thieu}>Thiếu / nghi sai</Chu>
+          <Chu mau={NEN.tuDong}>Web tự điền / tự tính</Chu><Chu mau={NEN.tay}>Ô nhập</Chu><Chu mau={NEN.thieu}>Thiếu / nghi sai</Chu>
         </span>
       </The>
 
@@ -202,7 +217,7 @@ const TabNut = ({ on, bam, children }: { on: boolean; bam: () => void; children:
 
 // ---------- Một bảng dạng trang A4
 function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong, chep, dv }: {
-  b: BangB; ky: string; ctx: { cur: DuLieu; truoc: DuLieu }; khoaHT: boolean; nhap: boolean; loi: LoiO[]; soDong: number;
+  b: BangB; ky: string; ctx: Ctx; khoaHT: boolean; nhap: boolean; loi: LoiO[]; soDong: number;
   ghi: (dong: string, cot: string, v: string) => void; themDong: () => void; xoaDong: (i: number) => void; chep: () => void; dv: string;
 }) {
   const tt = ttBang(ctx.cur, b.id);
@@ -276,14 +291,14 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
   );
 }
 
-function OCell({ b, dong, c, ctx, sua, loi, ghi }: { b: BangB; dong: string; c: CotB; ctx: { cur: DuLieu; truoc: DuLieu }; sua: boolean; loi?: LoiO; ghi: (v: string) => void }) {
-  const { v, tuDong } = tinhO(b, dong, c, ctx);
+function OCell({ b, dong, c, ctx, sua, loi, ghi }: { b: BangB; dong: string; c: CotB; ctx: Ctx; sua: boolean; loi?: LoiO; ghi: (v: string) => void }) {
+  const { v, tuDong, nguon } = tinhO(b, dong, c, ctx);
   const tay = ctx.cur[khoaO(b.id, dong, c.k)] ?? '';
   const nen = loi ? NEN.thieu : tuDong ? NEN.tuDong : sua && !c.chiDoc ? NEN.tay : undefined;
   const dsChon = c.chon;
   const chiDoc = !sua || c.chiDoc || (b.dong?.find((x) => x.k === dong)?.tong ?? false);
   return (
-    <td className="border border-[#57534e] p-0 align-middle" style={{ background: nen, outline: loi ? '2px solid #B4232F' : undefined, outlineOffset: -2 }} title={loi?.msg}>
+    <td className="border border-[#57534e] p-0 align-middle" style={{ background: nen, outline: loi ? '2px solid #B4232F' : undefined, outlineOffset: -2 }} title={loi?.msg ?? (nguon ? `Tự lấy từ báo cáo tuần: ${nguon}` : undefined)}>
       {chiDoc ? (
         <div className={cx('min-h-[34px] px-2 py-1.5', c.kieu === 'so' ? 'text-right tabular-nums' : '')}>{v}</div>
       ) : dsChon ? (
@@ -336,7 +351,7 @@ function PhanCong({ ch, dv, dong, luu }: { ch: CauHinhBCTh; dv: DonVi[]; dong: (
 }
 
 // ---------- Xuất Excel: mỗi bảng một sheet BANG_x_y, số liệu là số
-async function xuatExcel(ky: string, ds: BangB[], ctx: { cur: DuLieu; truoc: DuLieu }, soDong: (b: BangB) => number) {
+async function xuatExcel(ky: string, ds: BangB[], ctx: Ctx, soDong: (b: BangB) => number) {
   const XLSX = await import('xlsx-js-style');
   const wb = XLSX.utils.book_new();
   const [y, m] = ky.split('-');

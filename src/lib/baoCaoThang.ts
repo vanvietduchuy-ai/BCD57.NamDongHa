@@ -183,7 +183,8 @@ export function danhSachKy(homNay: string): string[] {
 export const hanGuiMs = (ky: string, gui: number) => new Date(`${ky}-${String(gui).padStart(2, '0')}T23:59:59+07:00`).getTime();
 
 // ---------- Tính giá trị hiển thị của ô (nhập tay > tự tính)
-export type Ctx = { cur: DuLieu; truoc: DuLieu };
+export type TuanO = Record<string, { v: string; ten: string }>;   // số liệu tự lấy từ báo cáo tuần
+export type Ctx = { cur: DuLieu; truoc: DuLieu; tuan?: TuanO };
 export function dongDongSo(b: BangB, cur: DuLieu, them: number): number {
   let n = 0;
   const re = new RegExp(`^${b.id.replace('.', '\\.')}\\|r(\\d+)\\|`);
@@ -192,12 +193,12 @@ export function dongDongSo(b: BangB, cur: DuLieu, them: number): number {
 }
 function ngu(b: BangB, ctx: Ctx, dong: string): Ngu {
   const gia = (d: DuLieu) => (dg: string, c: string) => {
-    const t = tinhO(b, dg, b.cot.find((x) => x.k === c)!, { cur: ctx.cur, truoc: ctx.truoc }, d === ctx.truoc);
+    const t = tinhO(b, dg, b.cot.find((x) => x.k === c)!, ctx, d === ctx.truoc);
     return docSo(t.v);
   };
   return { dong, lay: gia(ctx.cur), truoc: gia(ctx.truoc) };
 }
-export function tinhO(b: BangB, dong: string, c: CotB, ctx: Ctx, laTruoc = false): { v: string; tuDong: boolean } {
+export function tinhO(b: BangB, dong: string, c: CotB, ctx: Ctx, laTruoc = false): { v: string; tuDong: boolean; nguon?: string } {
   const d = laTruoc ? ctx.truoc : ctx.cur;
   const tay = d[khoaO(b.id, dong, c.k)];
   const dg = b.dong?.find((x) => x.k === dong);
@@ -206,6 +207,10 @@ export function tinhO(b: BangB, dong: string, c: CotB, ctx: Ctx, laTruoc = false
     const ks = (b.dong ?? []).filter((x) => !x.tong);
     const gt = ks.map((x) => docSo(tinhO(b, x.k, c, ctx, laTruoc).v));
     return gt.every((x) => x == null) ? { v: '', tuDong: true } : { v: hienSo(lamTron(gt.reduce<number>((a, x) => a + (x ?? 0), 0))), tuDong: true };
+  }
+  if (!laTruoc && !c.chiDoc && (tay == null || tay === '')) {   // có sẵn từ báo cáo tuần: tự điền, đơn vị không phải nhập lại
+    const t = ctx.tuan?.[khoaO(b.id, dong, c.k)];
+    if (t) return { v: t.v, tuDong: true, nguon: t.ten };
   }
   if (c.chiDoc || (tay == null || tay === '')) {
     if (c.tuTinh && !laTruoc) {
@@ -249,4 +254,31 @@ export function kiemTraBang(b: BangB, ky: string, ctx: Ctx, soDong: number): Loi
     for (let i = 1; i <= soDong; i++) for (const c of b.cot) if (c.bb && tinhO(b, `r${i}`, c, ctx).v === '' && b.cot.some((x) => ctx.cur[khoaO(b.id, `r${i}`, x.k)])) loi.push({ bang: b.id, dong: `r${i}`, cot: c.k, loai: 'thieu', msg: `Dòng ${i} · ${c.nhan}` });
   }
   return loi;
+}
+
+// ---------- Tự điền từ báo cáo tuần: nhiệm vụ có "Kết quả: a/b" -> ô của bảng (a = đã đạt lũy kế, b = số phải thực hiện / khối lượng)
+const khongDau = (x: string) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+const NGUON_TUAN: { tu: string[]; bang: string; dong: string[]; mau: string; dat: string }[] = [
+  { tu: ['kich hoat tai khoan dinh danh dien tu vneid muc 2'], bang: '2.2', dong: ['d1', 'd2'], mau: 'ph', dat: 'lk' },
+  { tu: ['chi tra nguoi co cong'], bang: '2.2', dong: ['d4'], mau: 'ph', dat: 'lk' },
+  { tu: ['chi tra doi tuong bao tro xa hoi'], bang: '2.2', dong: ['d5'], mau: 'ph', dat: 'lk' },
+  { tu: ['chi tra luong huu'], bang: '2.2', dong: ['d6'], mau: 'ph', dat: 'lk' },
+  { tu: ['du lieu dat dai'], bang: '3.1', dong: ['d1'], mau: 'kl', dat: 'lk' },
+];
+export function nguonTuanBaoCao(nv: { id: string; ten: string }[], cn: { nhiem_vu_id: string; noi_dung: string }[]): TuanO {
+  const kq: TuanO = {};
+  const moiNhat = new Map<string, string>();   // cn xếp mới nhất trước
+  for (const c of cn) {
+    if (moiNhat.has(c.nhiem_vu_id)) continue;
+    const m = c.noi_dung.match(/Kết quả: (?:hoàn thành )?([\d.,]+)\/([\d.,]+)/);
+    if (m) moiNhat.set(c.nhiem_vu_id, `${m[1]}/${m[2]}`);
+  }
+  for (const r of NGUON_TUAN) {
+    const n = nv.find((x) => moiNhat.has(x.id) && r.tu.some((k) => khongDau(x.ten).includes(k)));
+    if (!n) continue;
+    const [a, b] = moiNhat.get(n.id)!.split('/').map((x) => docSo(x.replace(/[.,]$/, '')));
+    if (a == null || b == null) continue;
+    for (const d of r.dong) { kq[khoaO(r.bang, d, r.dat)] = { v: hienSo(a), ten: n.ten }; kq[khoaO(r.bang, d, r.mau)] = { v: hienSo(b), ten: n.ten }; }
+  }
+  return kq;
 }
