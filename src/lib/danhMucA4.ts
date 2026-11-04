@@ -180,6 +180,7 @@ export function canBaoCaoTuan(n: NhiemVu, tt: TinhTrang, dg: DanhGia, daBaoTuan:
   if (!daBaoTuan && han && n.duyet_luc && new Date(n.duyet_luc).getTime() > han.getTime()) return false;
   if (daBaoTuan || xongSauTuan) return true;
   if (n.trang_thai === 'tam_dung') return false;
+  if (tt.loai === 'xong' && /^dam bao/.test(khongDau(tt.nhan.trim().toLowerCase()))) return true;   // "Đảm bảo" (tự tính hoặc ghi tay) không phải hoàn thành: tuần sau vẫn báo cáo
   if (dg.kieu === 'ty_le') return !(ttTay && tt.loai === 'xong') && n.trang_thai !== 'hoan_thanh';
   return n.trang_thai !== 'hoan_thanh' && tt.loai !== 'xong';
 }
