@@ -54,6 +54,13 @@ const tienDo3 = (x: Dong): TienDo3 => {
 };
 // Tỷ lệ % của nhiệm vụ đánh giá theo tỷ lệ (từ số liệu báo cáo mới nhất); dat: so với chỉ tiêu (undefined nếu không có chỉ tiêu)
 const tyLeNv = (x: Dong) => tyLeNhiemVu(x.n, x.cn, x.d);
+// Nhiệm vụ lớn mà MỌI nhiệm vụ con đều tính theo tỷ lệ %: kết quả nhiệm vụ lớn = TỔNG tỷ lệ của các nhiệm vụ con (con chưa có số liệu tính 0)
+const tongTyLeCon = (x: Dong) => {
+  if (!x.con.length || !x.con.every((c) => (c.d.danh_gia ?? goiYDanhGia(c.n)).kieu === 'ty_le')) return null;
+  const tyLe = x.con.reduce((t, c) => t + (tyLeNv(c)?.tyLe ?? 0), 0);
+  const chiTieu = (x.d.danh_gia ?? goiYDanhGia(x.n)).chi_tieu;
+  return { tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
+};
 // Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt (so với chỉ tiêu %); chưa đạt chỉ tiêu mà chưa đến hạn = Chưa đạt, quá hạn mà vẫn chưa đạt = Không đạt hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
 // Đạt và Đảm bảo được tính là HOÀN THÀNH (thống kê, lọc, nhiệm vụ lớn, không phải báo cáo tuần các kỳ sau)
 const ttHienThi = (x: Dong): { loai: LoaiTT; nhan: string; tyLe?: boolean } => {
@@ -353,6 +360,9 @@ export default function DanhMucNhiemVu() {
       if (g.con.length) {
         // Tổng hợp: % bình quân của nhiệm vụ con (tình trạng tổng hợp do tinhTrangTatCa tính)
         g.pt = Math.round(g.con.reduce((t, c) => t + c.pt, 0) / g.con.length);
+        // Mọi nhiệm vụ con tính theo tỷ lệ %: kết quả nhiệm vụ lớn = tổng tỷ lệ các nhiệm vụ con (so với chỉ tiêu nếu có)
+        const tong = tongTyLeCon(g);
+        if (tong) g.pt = Math.max(0, Math.min(100, Math.round(tong.chiTieu ? (tong.tyLe / tong.chiTieu) * 100 : tong.tyLe)));
       }
     }
     // Tình trạng: tự động theo hạn và tiến độ; Thường trực có thể sửa tay (tinhTrangTatCa đã áp)
@@ -932,7 +942,13 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
       </>;
       case 'han': return <><b className="whitespace-nowrap text-[0.95em]">{x.n.dinh_ky ? (x.n.ky_han ? ngayNgan(x.n.ky_han) : 'Định kỳ') : ngayNgan(x.n.han) || '—'}</b>{x.n.dinh_ky && <span className="block text-[0.9em] italic">(định kỳ)</span>}</>;
       case 'tien_do': {
-        if (x.con.length) return <span className="font-sans text-[8pt] font-semibold">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành · {x.pt}%</span>;
+        if (x.con.length) {
+          const tong = tongTyLeCon(x);
+          if (tong) return <><span className="font-sans text-[8pt] font-semibold" style={{ color: tong.dat === false ? '#9F1239' : tong.dat ? '#166534' : '#1E3A8A' }}>Tỷ lệ {soVN(tong.tyLe, 2)}%</span>
+            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Tổng các nhiệm vụ con{tong.chiTieu ? ` · CT ${soVN(tong.chiTieu, 2)}%` : ''}</span>
+            <span className="mt-0.5 block font-sans text-[7.5pt]">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành</span></>;
+          return <span className="font-sans text-[8pt] font-semibold">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành · {x.pt}%</span>;
+        }
         const sl = soLieuCua(x); const dg = x.d.danh_gia ?? goiYDanhGia(x.n);
         if (dg.kieu === 'tien_do') { const t = TIEN_DO_3[tienDo3(x)]; return <><span className="inline-block rounded px-1 font-sans text-[8pt] font-semibold" style={{ color: t.chu, background: t.nen }}>{t.nhan}</span>
           {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>; }
@@ -1910,7 +1926,8 @@ function oChu(c: KhoaCot, x: Dong): string {
       return t || x.d.nguon_vb || (x.vb ? tenVb(x.vb) : ''); }
     case 'han': return ngayNgan(x.n.han);
     case 'tien_do': {
-      if (x.con.length) return `${x.con.filter((c) => c.tt.loai === 'xong').length}/${x.con.length} nhiệm vụ con hoàn thành (${x.pt}%)`;
+      if (x.con.length) { const tong = tongTyLeCon(x), xongCon = `${x.con.filter((c) => c.tt.loai === 'xong').length}/${x.con.length} nhiệm vụ con hoàn thành`;
+        return tong ? `Tỷ lệ ${soVN(tong.tyLe, 2)}% (tổng các nhiệm vụ con${tong.chiTieu ? ` · CT ${soVN(tong.chiTieu, 2)}%` : ''})\n${xongCon}` : `${xongCon} (${x.pt}%)`; }
       const sl = soLieuCua(x);
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'tien_do') return `${TIEN_DO_3[tienDo3(x)].nhan}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'ty_le') { const t = tyLeNv(x);
