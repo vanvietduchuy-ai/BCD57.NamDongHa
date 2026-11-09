@@ -45,7 +45,16 @@ export default function BaoCaoThang() {
     const nguonVb = Object.fromEntries(Object.entries(dong).map(([id, d]) => [id, d.nguon_vb]));
     // Bảng 1.3: văn bản BCĐ, Đảng ủy phường ban hành trong Kho văn bản (đến hết tháng báo cáo)
     const ddau = `${ky}-01`, dcuoi = `${ky}-31`;
-    const vbs = ((vbr.data ?? []) as { so_ky_hieu: string | null; trich_yeu: string; ngay_ban_hanh: string | null }[]).filter((x) => x.ngay_ban_hanh && x.ngay_ban_hanh <= dcuoi);
+    const nk = (t: string | null) => (t ?? '').normalize('NFC').toLowerCase().replace(/\s+/g, '').replace(/[–—]/g, '-');
+    // Một văn bản có thể nằm trong Kho 2 lần (tải trùng): gộp theo số, ký hiệu + ngày ban hành (không có số thì theo trích yếu)
+    const gop = new Map<string, { so_ky_hieu: string | null; trich_yeu: string; ngay_ban_hanh: string | null }>();
+    for (const x of (vbr.data ?? []) as { so_ky_hieu: string | null; trich_yeu: string; ngay_ban_hanh: string | null }[]) {
+      if (!x.ngay_ban_hanh || x.ngay_ban_hanh > dcuoi) continue;
+      const k = `${x.ngay_ban_hanh}|${nk(x.so_ky_hieu) || nk(x.trich_yeu)}`;
+      const cu2 = gop.get(k);
+      if (!cu2 || (x.trich_yeu ?? '').length > (cu2.trich_yeu ?? '').length) gop.set(k, x);
+    }
+    const vbs = Array.from(gop.values());
     const trongThang = vbs.filter((x) => x.ngay_ban_hanh! >= ddau);
     const dsVb = vbs.map((x) => ({ so: x.so_ky_hieu ?? '', ngay: x.ngay_ban_hanh!, ty: x.trich_yeu, thang: x.ngay_ban_hanh! >= ddau })).sort((a, z) => z.ngay.localeCompare(a.ngay));
     const tk13 = { ds: dsVb, d2: String(trongThang.length), d3: String(vbs.length), ten: trongThang.map((x) => `${x.so_ky_hieu ? x.so_ky_hieu + ': ' : ''}${x.trich_yeu}`).join('; ') };

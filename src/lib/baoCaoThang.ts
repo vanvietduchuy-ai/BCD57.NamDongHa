@@ -246,6 +246,8 @@ export function kiemTraBang(b: BangB, ky: string, ctx: Ctx, soDong: number): Loi
       if (dg.tong || dg.tuy || (dg.quy && !laThangQuy(ky))) continue;
       for (const c of b.cot) if (c.bb && tinhO(b, dg.k, c, ctx).v === '') loi.push({ bang: b.id, dong: dg.k, cot: c.k, loai: 'thieu', msg: `${dg.nhan} · ${c.nhan}` });
     }
+    // Bảng 1.3: dòng 2, 4, 5 có số văn bản > 0 thì bắt buộc ghi tên văn bản (ô vàng cột "Tên văn bản")
+    if (b.id === '1.3') for (const dg of ['d2', 'd4', 'd5']) { const n = lay(dg, 'so'); if (n != null && n > 0 && tinhO(b, dg, b.cot.find((x) => x.k === 'ten')!, ctx).v.trim() === '') loi.push({ bang: b.id, dong: dg, cot: 'ten', loai: 'thieu', msg: `${b.dong.find((x) => x.k === dg)!.nhan} · cần ghi tên văn bản` }); }
     if (b.id === '1.4') for (const dg of ['d1', 'd2']) { const a = lay(dg, 'tl'), h = lay(dg, 'dh'); if (a != null && h != null && h > a) loi.push({ bang: b.id, dong: dg, cot: 'dh', loai: 'sai', msg: 'Số trả lời đúng hạn lớn hơn số đã trả lời' }); }
     if (b.id === '2.1') { const f = (a: string, bb: string, m: string) => { const x = lay(a, 'xa'), y = lay(bb, 'xa'); if (x != null && y != null && x > y) loi.push({ bang: b.id, dong: a, cot: 'xa', loai: 'sai', msg: m }); };
       f('d4', 'd3', 'Hồ sơ nộp trực tuyến lớn hơn hồ sơ tiếp nhận'); f('d6', 'd5', 'Hồ sơ đúng hạn lớn hơn hồ sơ đã giải quyết'); f('d2', 'd1', 'Thủ tục toàn trình lớn hơn tổng thủ tục'); }
