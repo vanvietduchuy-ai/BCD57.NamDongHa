@@ -1,5 +1,5 @@
 import { CHE_DO_THU, goiChucNang, supabase } from './supabase';
-export type ThuMuc = 'cap_tren_trung_uong' | 'cap_tren_tinh' | 'cap_tren_cong_an_tinh' | 'bcd_phuong_ban_hanh' | 'bao_cao_gui_cap_tren' | 'bao_cao_don_vi' | 'hop_bcd' | 'kiem_tra_giam_sat' | 'mau_bieu';
+export type ThuMuc = 'cap_tren_trung_uong' | 'cap_tren_tinh' | 'cap_tren_cong_an_tinh' | 'dang_uy_phuong' | 'ubnd_phuong' | 'phong_ban' | 'so_nganh' | 'bcd_phuong_ban_hanh' | 'bao_cao_gui_cap_tren' | 'bao_cao_don_vi' | 'hop_bcd' | 'kiem_tra_giam_sat' | 'mau_bieu';
 export type LoaiVb = 'nghi_quyet' | 'quyet_dinh' | 'chi_thi' | 'ket_luan' | 'ke_hoach' | 'chuong_trinh' | 'quy_che' | 'cong_van' | 'bao_cao' | 'to_trinh' | 'thong_bao' | 'giay_moi' | 'bien_ban' | 'khac';
 export type TtVb = 'du_thao' | 'ban_hanh' | 'het_hieu_luc';
 
@@ -7,6 +7,10 @@ export const THU_MUC: Record<ThuMuc, string> = {
   cap_tren_trung_uong: 'Trung ương',
   cap_tren_tinh: 'Tỉnh ủy, BCĐ tỉnh',
   cap_tren_cong_an_tinh: 'Công an tỉnh',
+  dang_uy_phuong: 'Đảng ủy phường',
+  ubnd_phuong: 'UBND phường',
+  phong_ban: 'Các phòng, ban',
+  so_nganh: 'Sở, ngành',
   bcd_phuong_ban_hanh: 'BCĐ, Đảng ủy phường ban hành',
   bao_cao_gui_cap_tren: 'Báo cáo gửi cấp trên',
   bao_cao_don_vi: 'Báo cáo của đơn vị',
@@ -58,7 +62,7 @@ export function idTuLinkDrive(s: string): string | null {
 
 // Thư mục -> sổ công văn của Cơ quan Thường trực (hồ sơ họp BCĐ không tự vào sổ)
 export const SO_THEO_THU_MUC = (t: ThuMuc): 'den' | 'di' | null =>
-  t.startsWith('cap_tren') ? 'den' : ['bcd_phuong_ban_hanh', 'bao_cao_gui_cap_tren'].includes(t) ? 'di' : null;
+  t.startsWith('cap_tren') || ['dang_uy_phuong', 'ubnd_phuong', 'phong_ban', 'so_nganh'].includes(t) ? 'den' : ['bcd_phuong_ban_hanh', 'bao_cao_gui_cap_tren'].includes(t) ? 'di' : null;
 
 // Xoá văn bản trong kho (Thường trực): gỡ khỏi sổ, bỏ liên kết; tệp Google Drive vào thùng rác
 export async function xoaVanBan(id: string) {
