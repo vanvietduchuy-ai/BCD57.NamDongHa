@@ -6,6 +6,7 @@ import { laQuanTri, useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { useDuLieu } from '../lib/useDuLieu';
 import { homNayVN } from '../lib/dinhDang';
+import { kieuBang, TayCot, TayHang, useKichThuocBang } from '../lib/kichThuocBang';
 import {
   BANG, batBuocKy, CH_MAC_DINH, chotMs, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, tenKy, tinhO, TT_BANG, ttBang,
   nguonTuanBaoCao, thongKeNhiemVu, type NvThongKe, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang,
@@ -308,6 +309,7 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
   const tt = ttBang(ctx.cur, b.id);
   const sua = nhap && tt === 'can';
   const loiO = (dong: string, cot: string) => loi.find((x) => x.dong === dong && x.cot === cot);
+  const kt = useKichThuocBang(`bct-${b.id}`);
   const th = 'border border-[#57534e] bg-[#F5F5F4] px-2 py-1.5 text-center text-[13px] font-bold align-middle';
   const hang: { k: string; nhan: string; dvt?: string; tong?: boolean }[] = b.dong ?? Array.from({ length: soDong }, (_, i) => ({ k: `r${i + 1}`, nhan: String(i + 1) }));
 
@@ -338,12 +340,15 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
             {sua && <Nut kieu="phu" className="min-h-9 text-xs" onClick={chep}>Chép từ {tenKy(kyTruoc(ky))}</Nut>}
           </div>
           {tt === 'can' && (
-            <table className="w-full border-collapse">
+            <div className="overflow-x-auto">
+            {kt.daChinh && <div className="mb-1 flex justify-end font-sans"><button className="text-xs text-mo underline" onClick={kt.datLai}>Đặt lại kích thước bảng</button></div>}
+            <table className={kt.cot ? 'border-collapse' : 'w-full border-collapse'} style={kieuBang(kt.cot)}>
+              {kt.cot && <colgroup>{kt.cot.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>}
               <thead>
                 <tr>
-                  <th className={th} style={{ width: b.dongDong ? 44 : '30%' }}>{b.cotNhan}</th>
-                  {b.dvt && <th className={th} style={{ width: 80 }}>Đơn vị tính</th>}
-                  {b.cot.map((c) => <th key={c.k} className={th} style={{ width: `${(c.rong ?? 1) * 8}%` }}>{c.nhan}</th>)}
+                  <th className={cx(th, 'relative')} style={{ width: b.dongDong ? 44 : '30%' }}>{b.cotNhan}<TayCot bam={kt.keoCot} i={0} /></th>
+                  {b.dvt && <th className={cx(th, 'relative')} style={{ width: 80 }}>Đơn vị tính<TayCot bam={kt.keoCot} i={1} /></th>}
+                  {b.cot.map((c, i) => <th key={c.k} className={cx(th, 'relative')} style={{ width: `${(c.rong ?? 1) * 8}%` }}>{c.nhan}<TayCot bam={kt.keoCot} i={i + 1 + (b.dvt ? 1 : 0)} /></th>)}
                   {b.dongDong && sua && <th className={th} style={{ width: 36 }} aria-label="Xoá dòng" />}
                 </tr>
                 <tr>
@@ -355,8 +360,8 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
               </thead>
               <tbody>
                 {hang.map((d, i) => (
-                  <tr key={d.k}>
-                    <td className={cx('border border-[#57534e] px-2 py-1 align-middle', b.dongDong ? 'text-center' : d.tong ? 'font-bold' : '')}>{d.nhan}</td>
+                  <tr key={d.k} style={kt.hang[d.k] ? { height: kt.hang[d.k] } : undefined}>
+                    <td className={cx('relative border border-[#57534e] px-2 py-1 align-middle', b.dongDong ? 'text-center' : d.tong ? 'font-bold' : '')}>{d.nhan}<TayHang bam={kt.keoHang} k={d.k} /></td>
                     {b.dvt && <td className="border border-[#57534e] px-2 py-1 text-center align-middle">{(d as { dvt?: string }).dvt}</td>}
                     {b.cot.map((c) => <OCell key={c.k} b={b} dong={d.k} c={c} ctx={ctx} sua={sua && !d.tong} loi={loiO(d.k, c.k)} ghi={(v) => ghi(d.k, c.k, v)} />)}
                     {b.dongDong && sua && <td className="border border-[#57534e] text-center"><button aria-label={`Xoá dòng ${i + 1}`} className="p-1 text-mo hover:text-nguy" onClick={() => xoaDong(i + 1)}><Trash2 className="h-4 w-4" /></button></td>}
@@ -365,6 +370,7 @@ function BangA4({ b, ky, ctx, khoaHT, nhap, loi, soDong, ghi, themDong, xoaDong,
                 {b.dongDong && soDong === 0 && <tr><td colSpan={b.cot.length + 1 + (b.dvt ? 1 : 0)} className="border border-[#57534e] p-3 text-center italic text-[#57534e]">Chưa có dòng nào</td></tr>}
               </tbody>
             </table>
+            </div>
           )}
           {b.dongDong && sua && tt === 'can' && <div><Nut kieu="phu" className="min-h-9 text-xs" icon={<Plus className="h-4 w-4" />} onClick={themDong}>Thêm {b.dongDong}</Nut></div>}
           {khoaHT && !nhap && <div className="font-sans text-xs text-mo">Bảng chỉ xem — kỳ đã khoá hoặc bảng không thuộc phân công của bạn.</div>}
@@ -436,21 +442,26 @@ function MocThoiGian({ ch, ky, dong, luu }: { ch: CauHinhBCTh; ky: string; dong:
 
 function DsVanBan({ ds }: { ds: { so: string; ngay: string; ty: string; thang: boolean }[] }) {
   const d = (x: string) => x.split('-').reverse().join('/');
+  const kt = useKichThuocBang('ds-van-ban');
   return (
     <div className="font-sans text-[0.8125rem]">
       <div className="mb-1 font-bold">Danh sách văn bản đã ban hành (lấy từ Kho văn bản · {ds.filter((x) => x.thang).length} trong tháng, {ds.length} lũy kế từ đầu năm)</div>
       {ds.length === 0 ? <div className="text-mo">Chưa có văn bản nào ở thư mục "BCĐ, Đảng ủy phường ban hành" trong kỳ này.</div> : (
-        <table className="w-full border-collapse text-[13px]">
-          <thead><tr>{['TT', 'Số, ký hiệu', 'Ngày ban hành', 'Trích yếu', 'Trong tháng'].map((h) => <th key={h} className="border border-[#57534e] bg-[#F5F5F4] px-2 py-1 text-center font-bold">{h}</th>)}</tr></thead>
+        <div className="overflow-x-auto">
+        {kt.daChinh && <div className="mb-1 flex justify-end"><button className="text-xs text-mo underline" onClick={kt.datLai}>Đặt lại kích thước bảng</button></div>}
+        <table className={cx(kt.cot ? '' : 'w-full', 'border-collapse text-[13px]')} style={kieuBang(kt.cot)}>
+          {kt.cot && <colgroup>{kt.cot.map((w, i) => <col key={i} style={{ width: w }} />)}</colgroup>}
+          <thead><tr>{['TT', 'Số, ký hiệu', 'Ngày ban hành', 'Trích yếu', 'Trong tháng'].map((h, i) => <th key={h} className="relative border border-[#57534e] bg-[#F5F5F4] px-2 py-1 text-center font-bold">{h}<TayCot bam={kt.keoCot} i={i} /></th>)}</tr></thead>
           <tbody>{ds.map((x, i) => (
-            <tr key={i} style={x.thang ? { background: '#E7E5E4' } : undefined}>
-              <td className="border border-[#57534e] px-2 py-1 text-center align-top">{i + 1}</td>
+            <tr key={i} style={{ ...(x.thang ? { background: '#E7E5E4' } : {}), ...(kt.hang[String(i)] ? { height: kt.hang[String(i)] } : {}) }}>
+              <td className="relative border border-[#57534e] px-2 py-1 text-center align-top">{i + 1}<TayHang bam={kt.keoHang} k={String(i)} /></td>
               <td className="border border-[#57534e] px-2 py-1 align-top">{x.so || '—'}</td>
               <td className="border border-[#57534e] px-2 py-1 text-center align-top">{d(x.ngay)}</td>
               <td className="whitespace-pre-wrap break-words border border-[#57534e] px-2 py-1 align-top">{x.ty}</td>
               <td className="border border-[#57534e] px-2 py-1 text-center align-top">{x.thang ? 'Có' : ''}</td>
             </tr>))}</tbody>
         </table>
+        </div>
       )}
     </div>
   );
