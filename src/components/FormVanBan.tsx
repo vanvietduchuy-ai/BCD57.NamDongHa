@@ -28,6 +28,8 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
   thuMucChoPhep?: ThuMuc[];
 }) {
   const [phien, setPhien] = useState(phienDau ?? '');
+  const [keo, setKeo] = useState(false);
+  const [loiKeo, setLoiKeo] = useState('');
   const [dangXoa, setDangXoa] = useState(false);
   const xoa = async () => {
     if (!vb || !window.confirm(`Xoá văn bản "${vb.so_ky_hieu ?? vb.trich_yeu}"?\n\nVăn bản bị gỡ khỏi sổ công văn, bỏ liên kết căn cứ / minh chứng nhiệm vụ; tệp trên Google Drive chuyển vào thùng rác.`)) return;
@@ -101,7 +103,23 @@ export default function FormVanBan({ mo, dong, vb, dau, xong, daXoa, phienDs, ph
     <HopThoai mo={mo} dong={dong} tieuDe={vb ? 'Sửa văn bản' : 'Thêm văn bản vào kho'} rong="max-w-2xl">
       <div className="flex flex-col gap-3.5">
         <O nhan={vb?.drive_file_id ? 'Thay tệp (PDF, Word .docx: tự đọc thông tin)' : 'Tệp văn bản (PDF, Word .docx: tự đọc thông tin)'}>
-          <input type="file" aria-label="Tệp văn bản" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip" className={cx(lopO, 'py-2')} onChange={(e) => void chonTep(e.target.files?.[0] ?? null)} />
+          <div
+            className={cx('flex flex-col gap-2 rounded-xl border-2 border-dashed p-3 transition-colors', keo ? 'border-do bg-[#FBEDEE]' : 'border-vien-2 bg-nen-2')}
+            onDragEnter={(e) => { e.preventDefault(); setKeo(true); }}
+            onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setKeo(true); }}
+            onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setKeo(false); }}
+            onDrop={(e) => {
+              e.preventDefault(); setKeo(false);
+              const f = e.dataTransfer.files?.[0];
+              if (!f) return;
+              if (e.dataTransfer.files.length > 1) setLoiKeo('Chỉ nhận một tệp mỗi lần; đã lấy tệp đầu tiên.'); else setLoiKeo('');
+              if (!/\.(pdf|docx?|xlsx?|jpe?g|png|zip)$/i.test(f.name)) { setLoiKeo('Định dạng không hỗ trợ. Chọn PDF, Word, Excel, ảnh hoặc zip.'); return; }
+              void chonTep(f);
+            }}>
+            <div className="text-center text-[0.8125rem] text-mo-2">{keo ? 'Thả tệp vào đây' : file ? `Đã chọn: ${file.name}` : 'Kéo thả tệp vào đây, hoặc bấm nút bên dưới để chọn'}</div>
+            <input type="file" aria-label="Tệp văn bản" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.zip" className={cx(lopO, 'py-2')} onChange={(e) => { setLoiKeo(''); void chonTep(e.target.files?.[0] ?? null); }} />
+            {loiKeo && <div className="text-center text-[0.75rem] text-nguy">{loiKeo}</div>}
+          </div>
         </O>
         {dangDoc && <div className="rounded-xl bg-xanh-nhat px-3 py-2 text-[0.8125rem] text-xanh">{dangDoc}</div>}
         {doc && !dangDoc && <div className="rounded-xl bg-nen-3 px-3 py-2 text-[0.7812rem] text-mo-2">{doc.ocr ? 'Bản scan: đã nhận dạng chữ.' : file && /\.docx$/i.test(file.name) ? 'Đã đọc tự động từ tệp Word.' : 'Đã đọc tự động từ PDF.'} Kiểm tra, sửa nếu sai.</div>}
