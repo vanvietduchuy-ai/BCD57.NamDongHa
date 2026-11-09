@@ -149,6 +149,37 @@ export async function taiDuLieu(ky: string): Promise<DuLieu> {
   for (const x of (data ?? []) as { bang: string; dong: string; cot: string; gia_tri: string }[]) r[khoaO(x.bang, x.dong, x.cot)] = x.gia_tri;
   return r;
 }
+// ---------- Theo dõi tiến độ nhập: số ô đã nhập, giờ nhập đầu / gần nhất, số ô nhập sau mốc chốt, đơn vị đã nhập (theo từng bảng)
+export type TienDoBang = { so: number; dau: number; cuoi: number; donVi: string[] };
+export async function taiTienDo(ky: string): Promise<Record<string, TienDoBang>> {
+  const { data, error } = await supabase.from('bao_cao_thang').select('bang, cap_nhat, don_vi_id').eq('ky', ky).limit(20000);
+  if (error) throw new Error(error.message);
+  const r: Record<string, TienDoBang> = {};
+  for (const x of (data ?? []) as { bang: string; cap_nhat: string; don_vi_id: string | null }[]) {
+    const t = new Date(x.cap_nhat).getTime();
+    const o = (r[x.bang] ??= { so: 0, dau: t, cuoi: t, donVi: [] });
+    o.so += 1; o.dau = Math.min(o.dau, t); o.cuoi = Math.max(o.cuoi, t);
+    if (x.don_vi_id && !o.donVi.includes(x.don_vi_id)) o.donVi.push(x.don_vi_id);
+  }
+  return r;
+}
+// Giờ Việt Nam dạng "dd/mm HH:mm"
+export const gioVN = (ms: number) => new Date(ms).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
+export const ngayDayDu = (ms: number) => new Date(ms).toLocaleDateString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric' });
+const NGAY_MS = 86400000;
+/** Chậm muộn của một bảng so với mốc chốt số liệu và hạn gửi tỉnh */
+export function chamMuon(du: boolean, td: TienDoBang | undefined, chot: number, han: number, bay: number): { nhan: string; muc: 'ok' | 'cho' | 'tre' | 'muon' } {
+  const soNgay = (ms: number) => Math.max(1, Math.ceil(ms / NGAY_MS));
+  if (!du) {
+    if (bay > han) return { nhan: `Quá hạn gửi ${soNgay(bay - han)} ngày, chưa đủ`, muc: 'tre' };
+    if (bay > chot) return { nhan: `Chậm ${soNgay(bay - chot)} ngày so với mốc chốt, chưa đủ`, muc: 'tre' };
+    return { nhan: `Còn ${soNgay(chot - bay)} ngày đến mốc chốt`, muc: 'cho' };
+  }
+  if (td && td.cuoi > han) return { nhan: `Hoàn thành muộn, quá hạn gửi (${gioVN(td.cuoi)})`, muc: 'muon' };
+  if (td && td.cuoi > chot) return { nhan: `Nhập muộn sau mốc chốt (${gioVN(td.cuoi)})`, muc: 'muon' };
+  return { nhan: 'Đúng hạn', muc: 'ok' };
+}
+
 export async function luuO(ky: string, cac: { bang: string; dong: string; cot: string; gia_tri: string }[]): Promise<string | null> {
   const { error } = await supabase.rpc('luu_bao_cao_thang', { p_ky: ky, p_cac: cac });
   return error ? error.message : null;

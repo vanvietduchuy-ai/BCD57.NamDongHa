@@ -8,8 +8,8 @@ import { useDuLieu } from '../lib/useDuLieu';
 import { homNayVN } from '../lib/dinhDang';
 import { kieuBang, TayCot, TayHang, useKichThuocBang } from '../lib/kichThuocBang';
 import {
-  BANG, batBuocKy, CH_MAC_DINH, chotMs, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, tenKy, tinhO, TT_BANG, ttBang,
-  nguonTuanBaoCao, thongKeNhiemVu, type NvThongKe, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang,
+  BANG, batBuocKy, CH_MAC_DINH, chotMs, danhSachKy, docSo, dongDongSo, giaiTrinh, hanGuiMs, khoaO, kiemTraBang, kyTruoc, laThangQuy, luuCauHinh, luuO, PHU_LUC, taiCauHinh, taiDuLieu, taiTienDo, tenKy, chamMuon, gioVN, ngayDayDu, tinhO, TT_BANG, ttBang,
+  nguonTuanBaoCao, thongKeNhiemVu, type NvThongKe, type BangB, type CauHinhBCTh, type Ctx, type CotB, type DuLieu, type LoiO, type TtBang, type TienDoBang,
 } from '../lib/baoCaoThang';
 import { DangTai, HopLoi, HopThoai, Nut, The, TieuDeTrang, cx, lopO } from '../components/ui';
 
@@ -29,7 +29,7 @@ export default function BaoCaoThang() {
   const [moMoc, setMoMoc] = useState(false);
 
   const { data, loi, dangTai, taiLai, setData } = useDuLieu(async () => {
-    const [ch, dv, cur, truoc, nv, cn, nvf, hoan, a4, vbr] = await Promise.all([
+    const [ch, dv, cur, truoc, nv, cn, nvf, hoan, a4, tienDo, vbr] = await Promise.all([
       taiCauHinh(),
       supabase.from('don_vi').select('id, ten').eq('hoat_dong', true).order('thu_tu'),
       taiDuLieu(ky),
@@ -39,6 +39,7 @@ export default function BaoCaoThang() {
       supabase.from('v_nhiem_vu').select('id, ten, han, trang_thai, san_pham, can_cu_so_ky_hieu').eq('trang_thai_giao', 'da_duyet').limit(1000),
       supabase.from('v_nhiem_vu_cap_nhat').select('nhiem_vu_id, luc').eq('trang_thai_moi', 'hoan_thanh').limit(5000),
       supabase.from('cau_hinh').select('gia_tri').eq('khoa', 'danh_muc_a4').maybeSingle(),
+      taiTienDo(ky).catch(() => ({} as Record<string, TienDoBang>)),
       supabase.from('van_ban').select('so_ky_hieu, trich_yeu, ngay_ban_hanh').eq('thu_muc', 'bcd_phuong_ban_hanh').eq('trang_thai', 'ban_hanh').gte('ngay_ban_hanh', `${ky.slice(0, 4)}-01-01`).limit(1000),
     ]);
     const dong = ((a4.data as { gia_tri?: { dong?: Record<string, { cha?: string; nguon_vb?: string }> } } | null)?.gia_tri?.dong) ?? {};
@@ -61,7 +62,7 @@ export default function BaoCaoThang() {
     const tk13 = { ds: dsVb, d2: String(trongThang.length), d3: String(vbs.length), ten: trongThang.map((x) => `${x.so_ky_hieu ? x.so_ky_hieu + ': ' : ''}${x.trich_yeu}`).join('; ') };
     const tkNv = thongKeNhiemVu((nvf.data ?? []) as NvThongKe[], (hoan.data ?? []) as { nhiem_vu_id: string; luc: string }[], cha, nguonVb, ky, ch.chot);
     const dsNv = (nv.data ?? []) as { id: string; ten: string }[], dsCn = (cn.data ?? []) as { nhiem_vu_id: string; noi_dung: string; luc: string }[];
-    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tkNv, tk13, tuan: nguonTuanBaoCao(dsNv, dsCn, chotMs(ky, ch.chot)), tuanTruoc: nguonTuanBaoCao(dsNv, dsCn, chotMs(kyTruoc(ky), ch.chot)) };
+    return { ch, dv: (dv.data ?? []) as DonVi[], cur, truoc, tkNv, tk13, tienDo, tuan: nguonTuanBaoCao(dsNv, dsCn, chotMs(ky, ch.chot)), tuanTruoc: nguonTuanBaoCao(dsNv, dsCn, chotMs(kyTruoc(ky), ch.chot)) };
   }, [ky]);
 
   const ch = data?.ch ?? CH_MAC_DINH;
@@ -193,6 +194,19 @@ export default function BaoCaoThang() {
     setThongBao(e ? { loi: `Không lưu được thiết lập: ${e}` } : ok ? { ok } : null);
   };
 
+  const bayGio = Date.now(), moCChot = chotMs(ky, ch.chot), hanGui = hanGuiMs(ky, ch.gui);
+  const cmBang = (b: BangB) => { const tt = ttBang(cur, b.id); return batBuocKy(b, ky) ? chamMuon(tt !== 'can' || !loiCua[b.id].length, data?.tienDo?.[b.id], moCChot, hanGui, bayGio) : null; };
+  const soMuon = dsBang.filter((b) => cmBang(b)?.muc === 'muon').length, soTre = dsBang.filter((b) => cmBang(b)?.muc === 'tre').length;
+  const theoDv = (() => {
+    const m = new Map<string, { ten: string; tong: number; du: number; tre: number }>();
+    for (const b of dsBang) for (const id of ch.phan_cong[b.id] ?? []) {
+      const ten = tenDv(id); if (!ten) continue;
+      const x = m.get(id) ?? { ten, tong: 0, du: 0, tre: 0 }; const cm = cmBang(b);
+      if (!batBuocKy(b, ky)) { m.set(id, x); continue; }
+      x.tong += 1; if (!loiCua[b.id].length || ttBang(cur, b.id) !== 'can') x.du += 1; if (cm?.muc === 'tre') x.tre += 1; m.set(id, x);
+    }
+    return Array.from(m.values()).filter((x) => x.tong > 0);
+  })();
   const tongLoi = dsBang.reduce((a, b) => a + loiCua[b.id].length, 0);
   const bangDu = dsBang.filter((b) => !loiCua[b.id].length && batBuocKy(b, ky)).length;
   const kyChon = danhSachKy(homNayVN().slice(0, 7));
@@ -260,18 +274,38 @@ export default function BaoCaoThang() {
                 <span className="text-[0.8125rem] text-mo">Đủ {bangDu}/{dsBang.length} bảng · {tongLoi} ô thiếu hoặc nghi sai</span>
               </div>
               <div className="h-2.5 overflow-hidden rounded-full bg-nen-3"><div className="h-full bg-do" style={{ width: `${dsBang.length ? Math.round((bangDu * 100) / dsBang.length) : 0}%` }} /></div>
+              <div className="grid gap-2 text-[0.8125rem] sm:grid-cols-3">
+                {[
+                  ['Mốc chốt số liệu', `hết ngày ${ngayDayDu(moCChot)}`, bayGio > moCChot ? 'Đã qua mốc chốt' : `Còn ${Math.ceil((moCChot - bayGio) / 86400000)} ngày`, bayGio > moCChot],
+                  ['Hạn gửi tỉnh', `hết ngày ${ngayDayDu(hanGui)}`, bayGio > hanGui ? (ch.mo_lai.includes(ky) ? 'Quá hạn, Thường trực đã mở lại' : 'Đã quá hạn') : `Còn ${Math.ceil((hanGui - bayGio) / 86400000)} ngày`, bayGio > hanGui],
+                  ['Chốt số liệu kỳ', khoa ? 'Kỳ đã khoá' : 'Chưa khoá kỳ', `${soMuon} bảng nhập muộn · ${soTre} bảng chậm chưa đủ`, soMuon + soTre > 0],
+                ].map(([t, v, ph, canh]) => (
+                  <div key={String(t)} className="rounded-xl border border-vien p-2.5" style={canh ? { background: '#FEF3C7' } : undefined}>
+                    <div className="text-mo">{t}</div><div className="font-bold">{v}</div><div className="text-mo">{ph}</div>
+                  </div>))}
+              </div>
+              {theoDv.length > 0 && (
+                <div className="flex flex-wrap gap-2 text-[0.75rem]">
+                  {theoDv.map((x) => <span key={x.ten} className="rounded-full border border-vien px-2.5 py-1">{x.ten}: <b>{x.du}/{x.tong}</b> bảng đủ{x.tre > 0 && <span className="text-nguy"> · {x.tre} chậm</span>}</span>)}
+                </div>)}
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[640px] border-collapse text-[0.8125rem]">
-                  <thead><tr className="bg-nen-2 text-left"><th className="border border-vien p-2">Bảng</th><th className="border border-vien p-2">Đơn vị nhập</th><th className="border border-vien p-2">Tình trạng</th><th className="border border-vien p-2">Cần bổ sung</th></tr></thead>
+                <table className="w-full min-w-[900px] border-collapse text-[0.8125rem]">
+                  <thead><tr className="bg-nen-2 text-left"><th className="border border-vien p-2">Bảng</th><th className="border border-vien p-2">Đơn vị nhập</th><th className="border border-vien p-2">Tình trạng</th><th className="border border-vien p-2">Đã nhập</th><th className="border border-vien p-2">Nhập đầu / gần nhất</th><th className="border border-vien p-2">Chậm muộn</th><th className="border border-vien p-2">Cần bổ sung</th></tr></thead>
                   <tbody>
                     {dsBang.map((b) => {
                       const l = loiCua[b.id]; const tt = ttBang(cur, b.id);
                       const trangThai = tt !== 'can' ? TT_BANG.find((x) => x.v === tt)!.nhan : !batBuocKy(b, ky) ? 'Chưa đến kỳ quý' : l.length ? `${l.length} ô` : 'Đủ';
+                      const td = data?.tienDo?.[b.id];
+                      const canBao = batBuocKy(b, ky);
+                      const cm = canBao ? chamMuon(tt !== 'can' || !l.length, td, moCChot, hanGui, bayGio) : null;
                       return (
                         <tr key={b.id} className="cursor-pointer hover:bg-nen-2" onClick={() => { setTab(b.pl); setTimeout(() => document.getElementById(`bang-${b.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }}>
                           <td className="border border-vien p-2 font-semibold">Bảng {b.id}<div className="font-normal text-mo">{b.ten}</div></td>
                           <td className="border border-vien p-2">{(ch.phan_cong[b.id] ?? []).map(tenDv).filter(Boolean).join(', ') || <span className="text-mo">Chưa phân công</span>}</td>
                           <td className="border border-vien p-2" style={{ background: l.length ? NEN.thieu : undefined }}>{trangThai}</td>
+                          <td className="border border-vien p-2 text-center">{td ? td.so : <span className="text-mo">0</span>}</td>
+                          <td className="border border-vien p-2 text-mo">{td ? <>{gioVN(td.dau)}<br />{gioVN(td.cuoi)}{td.donVi.length > 0 && <><br />{td.donVi.map(tenDv).filter(Boolean).join(', ')}</>}</> : 'Chưa nhập'}</td>
+                          <td className="border border-vien p-2 font-semibold" style={{ color: !cm ? undefined : cm.muc === 'ok' ? '#166534' : cm.muc === 'cho' ? '#57534e' : '#B4232F' }}>{cm ? cm.nhan : '—'}</td>
                           <td className="border border-vien p-2 text-mo">{l.slice(0, 3).map((x) => x.msg).join('; ')}{l.length > 3 ? `; … (+${l.length - 3})` : ''}</td>
                         </tr>
                       );
