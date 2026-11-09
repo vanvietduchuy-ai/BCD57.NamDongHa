@@ -38,15 +38,15 @@ const hieu = (a: number | null, b: number | null) => (a == null || b == null ? n
 
 export const BANG: BangB[] = [
   { id: '1.1', ten: 'Số lượng nhiệm vụ', pl: 1, cotNhan: 'Nội dung', ghiChu: 'Chỉ ghi số lượng nhiệm vụ được giao chủ trì. Mỗi nhiệm vụ chỉ tính ở một cột.',
-    cot: [so('tw', 'Nhiệm vụ Trung ương giao'), so('tinh', 'Nhiệm vụ BCĐ, UBND tỉnh giao'), so('xa', 'Nhiệm vụ giao cấp xã', { bb: true }),
+    cot: [so('tw', 'Nhiệm vụ Trung ương giao', { bb: true }), so('tinh', 'Nhiệm vụ BCĐ, UBND tỉnh giao', { bb: true }), so('xa', 'Nhiệm vụ giao cấp xã', { bb: true }),
       so('tong', 'Tổng số', { chiDoc: true, tuTinh: (c) => { const t = ['tw', 'tinh', 'xa'].map((k) => c.lay(c.dong, k)); return t.every((x) => x == null) ? null : hienSo(lamTron(t.reduce<number>((a, x) => a + (x ?? 0), 0))); } })],
     dong: [D('d1', '1. Tổng số nhiệm vụ có thời hạn đang theo dõi'), D('d2', '2. Số nhiệm vụ đến hạn trong tháng'), D('d3', '3. Số nhiệm vụ hoàn thành trong tháng'),
       D('d3a', '3a. Trong đó: hoàn thành đúng hạn'), D('d4', '4. Số nhiệm vụ quá hạn chưa hoàn thành'), D('d4a', '4a. Trong đó: tồn từ các tháng trước'),
       D('d5', '5. Số nhiệm vụ đề nghị điều chỉnh thời hạn hoặc dừng thực hiện'), D('d6', '6. Số nhiệm vụ thường xuyên (báo riêng, không tính vào dòng 1)')] },
   { id: '1.2', ten: 'Danh sách nhiệm vụ hoàn thành hoặc quá hạn trong tháng', pl: 1, cotNhan: 'STT', dongDong: 'nhiệm vụ',
     ghiChu: 'Chỉ ghi nhiệm vụ hoàn thành hoặc quá hạn trong tháng; không ghi "đang hoàn thiện", "cơ bản xong".',
-    cot: [chu('ten', 'Tên nhiệm vụ', { rong: 3, bb: true }), { k: 'nhom', nhan: 'Nhóm', kieu: 'chon', chon: ['Trung ương', 'Tỉnh', 'Xã'], bb: true }, chu('vb', 'Văn bản giao (số, ngày)', { rong: 2 }),
-      chu('han', 'Thời hạn'), { k: 'kq', nhan: 'Kết quả', kieu: 'chon', chon: ['Xong đúng hạn', 'Xong quá hạn', 'Quá hạn'], bb: true }, chu('sp', 'Sản phẩm cụ thể đã có', { rong: 2 }),
+    cot: [chu('ten', 'Tên nhiệm vụ', { rong: 3, bb: true }), { k: 'nhom', nhan: 'Nhóm', kieu: 'chon', chon: ['Trung ương', 'Tỉnh', 'Xã'], bb: true }, chu('vb', 'Văn bản giao (số, ngày)', { rong: 2, bb: true }),
+      chu('han', 'Thời hạn', { bb: true }), { k: 'kq', nhan: 'Kết quả', kieu: 'chon', chon: ['Xong đúng hạn', 'Xong quá hạn', 'Quá hạn'], bb: true }, chu('sp', 'Sản phẩm cụ thể đã có', { rong: 2 }),
       chu('mc', 'Văn bản, biên bản chứng minh (số, ngày)', { rong: 2 }), chu('lydo', 'Lý do quá hạn và thời hạn mới đề xuất', { rong: 2 })] },
   { id: '1.3', ten: 'Văn bản thể chế thuộc thẩm quyền của tỉnh', pl: 1, cotNhan: 'Nội dung', ghiChu: 'Dòng 5 ghi rõ văn bản Trung ương đang chờ (số hiệu, điều, khoản) và chờ từ tháng nào.',
     cot: [so('so', 'Số văn bản', { bb: true }), chu('ten', 'Tên văn bản (đối với dòng 2, 4, 5)', { rong: 3 })],
@@ -71,8 +71,8 @@ export const BANG: BangB[] = [
       D('d7', '7. Tiện ích của Đề án 06 được giao chỉ tiêu (ghi tên tiện ích)', { dvt: 'Tiện ích', tuy: true })] },
   { id: '3.1', ten: 'Cơ sở dữ liệu chuyên ngành do tỉnh quản lý', pl: 3, cotNhan: 'Cơ sở dữ liệu', dvt: true, ghiChu: 'Chỉ nhập phần thuộc địa bàn phường. "Thực hiện trong tháng" tự tính từ lũy kế nếu để trống.',
     cot: [so('kl', 'Khối lượng phải thực hiện', { bb: true }), so('lk', 'Đã đạt "đúng, đủ, sạch, sống" lũy kế', { bb: true }),
-      so('th', 'Thực hiện trong tháng', { tuTinh: (c) => hieu(c.lay(c.dong, 'lk'), c.truoc(c.dong, 'lk')) }),
-      { k: 'kn', nhan: 'Đã kết nối CSDL quốc gia', kieu: 'chon', chon: ['Có', 'Không'] }, chu('cq', 'Cơ quan cung cấp số liệu', { rong: 2 })],
+      so('th', 'Thực hiện trong tháng', { bb: true, tuTinh: (c) => hieu(c.lay(c.dong, 'lk'), c.truoc(c.dong, 'lk')) }),
+      { k: 'kn', nhan: 'Đã kết nối CSDL quốc gia', kieu: 'chon', chon: ['Có', 'Không'], bb: true }, chu('cq', 'Cơ quan cung cấp số liệu', { rong: 2 })],
     dong: [D('d1', '1. Đất đai', { dvt: 'Thửa' }), D('d2', '2. Hộ tịch: khai sinh', { dvt: 'Bản ghi' }), D('d3', '3. Hộ tịch: kết hôn', { dvt: 'Bản ghi' }),
       D('d4', '4. Bảo trợ xã hội', { dvt: 'Đối tượng' }), D('d5', '5. Cơ sở dữ liệu khác (ghi tên)', { dvt: '', tuy: true })] },
   { id: '3.2', ten: 'Điều kiện hạ tầng tối thiểu', pl: 3, cotNhan: 'Nội dung', quy: true, ghiChu: 'Báo cáo định kỳ theo quý (tháng 3, 6, 9, 12). "Số còn lại cuối tháng" tự tính = đầu tháng trừ đã xử lý.',
@@ -85,23 +85,23 @@ export const BANG: BangB[] = [
       D('d3a', '3a. Trong đó: số sự cố đã xử lý xong'), D('d4', '4. Số điểm yếu nghiêm trọng chưa khắc phục'),
       D('d5', '5. Số lần gián đoạn của hệ thống dùng chung'), D('d5a', '5a. Tổng số giờ gián đoạn')] },
   { id: '4.1', ten: 'Kết quả trong tháng của từng bài toán lớn', pl: 4, cotNhan: 'STT', dongDong: 'bài toán', ghiChu: 'Bài toán mới ở bước ban hành kế hoạch ghi "chưa có sản phẩm".',
-    cot: [chu('ten', 'Tên bài toán', { rong: 2, bb: true }), chu('cq', 'Cơ quan chủ trì'), chu('tg', 'Viện, trường, doanh nghiệp tham gia'), chu('moc', 'Mốc phải đạt trong tháng'),
-      chu('kq', 'Kết quả thực tế (Đạt / Chưa đạt; sản phẩm)', { rong: 2 }), chu('noi', 'Nơi thử nghiệm, đối tượng thụ hưởng'), so('kp', 'Kinh phí đã chi lũy kế (tỷ đồng)'), chu('vm', 'Vướng mắc')] },
+    cot: [chu('ten', 'Tên bài toán', { rong: 2, bb: true }), chu('cq', 'Cơ quan chủ trì', { bb: true }), chu('tg', 'Viện, trường, doanh nghiệp tham gia'), chu('moc', 'Mốc phải đạt trong tháng'),
+      chu('kq', 'Kết quả thực tế (Đạt / Chưa đạt; sản phẩm)', { rong: 2, bb: true }), chu('noi', 'Nơi thử nghiệm, đối tượng thụ hưởng'), so('kp', 'Kinh phí đã chi lũy kế (tỷ đồng)'), chu('vm', 'Vướng mắc')] },
   { id: '4.2', ten: 'Nhiệm vụ khoa học và công nghệ cấp tỉnh', pl: 4, cotNhan: 'Nội dung', dvt: true, ghiChu: 'Doanh nghiệp tham gia thực tế là có hợp đồng, góp vốn, thử nghiệm hoặc mua sản phẩm; ký biên bản ghi nhớ không tính. Vốn chỉ tính tiền đã nhận.',
-    cot: [so('th', 'Trong tháng'), so('lk', 'Lũy kế từ đầu năm'), chu('cc', 'Căn cứ số liệu', { rong: 2 })],
+    cot: [so('th', 'Trong tháng', { bb: true }), so('lk', 'Lũy kế từ đầu năm', { bb: true }), chu('cc', 'Căn cứ số liệu', { rong: 2 })],
     dong: [D('d1', '1. Số nhiệm vụ đang thực hiện', { dvt: 'Nhiệm vụ' }), D('d2', '2. Số nhiệm vụ nghiệm thu', { dvt: 'Nhiệm vụ' }), D('d3', '3. Số nhiệm vụ có kết quả được chuyển giao, ứng dụng', { dvt: 'Nhiệm vụ' }),
       D('d4', '4. Số nhiệm vụ có doanh nghiệp tham gia thực tế', { dvt: 'Nhiệm vụ' }), D('d5', '5. Vốn ngoài ngân sách đã nhận cho nhiệm vụ', { dvt: 'Tỷ đồng' }),
       D('d6', '6. Số hợp đồng chuyển giao, thương mại hóa kết quả đã ký', { dvt: 'Hợp đồng' }), D('d7', '7. Giá trị hợp đồng tại dòng 6', { dvt: 'Tỷ đồng' })] },
   { id: '4.3', ten: 'Tổ chức hỗ trợ đổi mới sáng tạo của tỉnh', pl: 4, cotNhan: 'Tổ chức',
-    cot: [{ k: 'tt', nhan: 'Trạng thái', kieu: 'chon', chon: ['Đang hoạt động', 'Đang chuẩn bị', 'Đang chuyển đổi', 'Chưa có'] }, chu('kq', 'Kết quả trong tháng (số giao dịch, số dự án hỗ trợ, kinh phí)', { rong: 2 }), chu('vm', 'Vướng mắc', { rong: 2 })],
+    cot: [{ k: 'tt', nhan: 'Trạng thái', kieu: 'chon', chon: ['Đang hoạt động', 'Đang chuẩn bị', 'Đang chuyển đổi', 'Chưa có'], bb: true }, chu('kq', 'Kết quả trong tháng (số giao dịch, số dự án hỗ trợ, kinh phí)', { rong: 2 }), chu('vm', 'Vướng mắc', { rong: 2 })],
     dong: [D('d1', '1. Trung tâm đổi mới sáng tạo'), D('d2', '2. Sàn giao dịch công nghệ'), D('d3', '3. Quỹ phát triển khoa học, công nghệ và đổi mới sáng tạo'), D('d4', '4. Vườn ươm, không gian sáng tạo')] },
   { id: '5.1', ten: 'Dự toán và giải ngân (đơn vị: tỷ đồng)', pl: 5, cotNhan: 'Nội dung', ghiChu: 'Đơn vị tính TỶ ĐỒNG (không nhập triệu đồng). Khi dự toán thay đổi, ghi ở cột ghi chú tổng chi cân đối ngân sách địa phương và lý do.',
     cot: [so('dt', 'Dự toán, kế hoạch vốn được giao', { bb: true }), so('pb', 'Đã phân bổ chi tiết', { bb: true }),
       so('cpb', 'Chưa phân bổ', { chiDoc: true, tuTinh: (c) => hieu(c.lay(c.dong, 'dt'), c.lay(c.dong, 'pb')) }), so('gt', 'Giải ngân trong tháng', { bb: true }), so('gl', 'Giải ngân lũy kế từ đầu năm', { bb: true }), chu('gc', 'Ghi chú', { rong: 2 })],
     dong: [D('d1', '1. Chi thường xuyên'), D('d2', '2. Chi đầu tư'), D('t', 'Tổng cộng', { tong: true })] },
   { id: '5.2', ten: 'Dự án chưa được phân bổ vốn hoặc giải ngân chậm', pl: 5, cotNhan: 'STT', dongDong: 'dự án',
-    cot: [chu('ten', 'Tên dự án', { rong: 2, bb: true }), chu('cdt', 'Chủ đầu tư'), so('tm', 'Tổng mức đầu tư (tỷ đồng)'), so('von', 'Vốn giao năm (tỷ đồng)'), so('gn', 'Đã giải ngân (tỷ đồng)'),
-      { k: 'buoc', nhan: 'Bước đang dừng', kieu: 'chon', chon: ['Chủ trương', 'Thẩm định', 'Phê duyệt', 'Lựa chọn nhà thầu', 'Thanh toán'] }, chu('cq', 'Cơ quan đang xử lý hồ sơ'), so('ngay', 'Số ngày ở bước hiện tại'), chu('dx', 'Đề xuất xử lý', { rong: 2 })] },
+    cot: [chu('ten', 'Tên dự án', { rong: 2, bb: true }), chu('cdt', 'Chủ đầu tư', { bb: true }), so('tm', 'Tổng mức đầu tư (tỷ đồng)'), so('von', 'Vốn giao năm (tỷ đồng)'), so('gn', 'Đã giải ngân (tỷ đồng)'),
+      { k: 'buoc', nhan: 'Bước đang dừng', kieu: 'chon', chon: ['Chủ trương', 'Thẩm định', 'Phê duyệt', 'Lựa chọn nhà thầu', 'Thanh toán'], bb: true }, chu('cq', 'Cơ quan đang xử lý hồ sơ'), so('ngay', 'Số ngày ở bước hiện tại'), chu('dx', 'Đề xuất xử lý', { rong: 2 })] },
   { id: '6.1', ten: 'Xã, phường, đặc khu chưa có kết quả theo các chỉ tiêu then chốt', pl: 6, cotNhan: 'Chỉ tiêu', ghiChu: 'Nhập 0 hoặc 1. Phường thuộc diện nào thì nhập 1 và ghi tên phường ở cột "Tên xã chưa có kết quả"; không thuộc diện thì nhập 0. Dòng 4 báo cáo theo quý.',
     cot: [so('v', 'Số xã chưa có kết quả (0 / 1)', { bb: true }), chu('ten', 'Tên xã chưa có kết quả', { rong: 2 }), chu('bp', 'Biện pháp trong tháng và kết quả', { rong: 3 })],
     dong: [D('d1', '1. Xã chưa phát sinh hồ sơ nộp trực tuyến'), D('d2', '2. Xã chưa có hồ sơ cấp kết quả điện tử'), D('d3', '3. Xã chưa thực hiện chi trả an sinh xã hội không dùng tiền mặt'),
@@ -114,10 +114,10 @@ export const BANG: BangB[] = [
     cot: [chu('dn', 'Điểm nghẽn (nêu cụ thể quy định, hệ thống hoặc địa bàn đang vướng)', { rong: 4, bb: true }), { k: 'tq', nhan: 'Thẩm quyền xử lý', kieu: 'chon', chon: ['Tỉnh', 'Trung ương'], bb: true }, { k: 'tu', nhan: 'Phát sinh từ tháng', kieu: 'ngay' },
       so('tt', 'Số tháng tồn đọng'), chu('viec', 'Việc đã làm trong tháng', { rong: 3 }), { k: 'kq', nhan: 'Kết quả', kieu: 'chon', chon: ['Đã xong', 'Đang chờ', 'Quá hạn'], bb: true }] },
   { id: '7.2', ten: 'Kiến nghị với Trung ương', pl: 7, cotNhan: 'STT', dongDong: 'kiến nghị', ghiChu: 'Chỉ ghi kiến nghị mới hoặc chưa được giải quyết; không ghi kiến nghị chung không gắn với địa phương.',
-    cot: [chu('nd', 'Nội dung kiến nghị', { rong: 3, bb: true }), chu('cq', 'Cơ quan có thẩm quyền', { rong: 2 }), chu('sp', 'Sản phẩm mong muốn', { rong: 2 }), chu('han', 'Thời hạn đề nghị'),
-      chu('vb', 'Văn bản đã gửi (số, ngày)', { rong: 2 }), { k: 'tt', nhan: 'Tình trạng', kieu: 'chon', chon: ['Đã trả lời', 'Chưa trả lời'] }, so('ton', 'Số tháng tồn đọng')] },
+    cot: [chu('nd', 'Nội dung kiến nghị', { rong: 3, bb: true }), chu('cq', 'Cơ quan có thẩm quyền', { rong: 2, bb: true }), chu('sp', 'Sản phẩm mong muốn', { rong: 2 }), chu('han', 'Thời hạn đề nghị'),
+      chu('vb', 'Văn bản đã gửi (số, ngày)', { rong: 2 }), { k: 'tt', nhan: 'Tình trạng', kieu: 'chon', chon: ['Đã trả lời', 'Chưa trả lời'], bb: true }, so('ton', 'Số tháng tồn đọng')] },
   { id: '7.3', ten: 'Đối chiếu mục tiêu đề ra trong tháng trước', pl: 7, cotNhan: 'STT', dongDong: 'cam kết',
-    cot: [chu('ck', 'Cam kết tại báo cáo tháng trước', { rong: 3, bb: true }), { k: 'kq', nhan: 'Kết quả', kieu: 'chon', chon: ['Đạt', 'Chưa đạt'], bb: true }, chu('sp', 'Sản phẩm, số liệu đạt được', { rong: 3 }), chu('lydo', 'Lý do chưa đạt và thời hạn mới', { rong: 2 })] },
+    cot: [chu('ck', 'Cam kết tại báo cáo tháng trước', { rong: 3, bb: true }), { k: 'kq', nhan: 'Kết quả', kieu: 'chon', chon: ['Đạt', 'Chưa đạt'], bb: true }, chu('sp', 'Sản phẩm, số liệu đạt được', { rong: 3, bb: true }), chu('lydo', 'Lý do chưa đạt và thời hạn mới', { rong: 2 })] },
 ];
 
 export const TT_BANG = [
@@ -246,6 +246,11 @@ export function kiemTraBang(b: BangB, ky: string, ctx: Ctx, soDong: number): Loi
       if (dg.tong || dg.tuy || (dg.quy && !laThangQuy(ky))) continue;
       for (const c of b.cot) if (c.bb && tinhO(b, dg.k, c, ctx).v === '') loi.push({ bang: b.id, dong: dg.k, cot: c.k, loai: 'thieu', msg: `${dg.nhan} · ${c.nhan}` });
     }
+    // Ô ghi chú bắt buộc khi có số phát sinh (theo ghi chú của mẫu)
+    const canGhi = (dg: string, ck: string, dk: number | null, msg: string) => { if (dk != null && dk > 0 && tinhO(b, dg, b.cot.find((x) => x.k === ck)!, ctx).v.trim() === '') loi.push({ bang: b.id, dong: dg, cot: ck, loai: 'thieu', msg: `${b.dong!.find((x) => x.k === dg)!.nhan} · ${msg}` }); };
+    if (b.id === '1.4') for (const dg of ['d1', 'd2']) canGhi(dg, 'lap', lay(dg, 'tn'), 'ghi vấn đề lặp lại nhiều nhất hoặc "Không có vấn đề lặp lại"');
+    if (b.id === '3.2') for (const dg of b.dong) canGhi(dg.k, 'xa', lay(dg.k, 'cuoi'), 'ghi tên xã còn lại');
+    if (b.id === '6.2') for (const dg of b.dong.filter((x) => !x.tong)) canGhi(dg.k, 'lydo', lay(dg.k, 'th'), 'ghi lý do chưa bố trí đủ');
     // Bảng 1.3: dòng 2, 4, 5 có số văn bản > 0 thì bắt buộc ghi tên văn bản (ô vàng cột "Tên văn bản")
     if (b.id === '1.3') for (const dg of ['d2', 'd4', 'd5']) { const n = lay(dg, 'so'); if (n != null && n > 0 && tinhO(b, dg, b.cot.find((x) => x.k === 'ten')!, ctx).v.trim() === '') loi.push({ bang: b.id, dong: dg, cot: 'ten', loai: 'thieu', msg: `${b.dong.find((x) => x.k === dg)!.nhan} · cần ghi tên văn bản` }); }
     if (b.id === '1.4') for (const dg of ['d1', 'd2']) { const a = lay(dg, 'tl'), h = lay(dg, 'dh'); if (a != null && h != null && h > a) loi.push({ bang: b.id, dong: dg, cot: 'dh', loai: 'sai', msg: 'Số trả lời đúng hạn lớn hơn số đã trả lời' }); }
