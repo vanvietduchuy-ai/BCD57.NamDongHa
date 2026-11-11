@@ -54,12 +54,14 @@ const tienDo3 = (x: Dong): TienDo3 => {
 };
 // Tỷ lệ % của nhiệm vụ đánh giá theo tỷ lệ (từ số liệu báo cáo mới nhất); dat: so với chỉ tiêu (undefined nếu không có chỉ tiêu)
 const tyLeNv = (x: Dong) => tyLeNhiemVu(x.n, x.cn, x.d);
-// Nhiệm vụ lớn mà MỌI nhiệm vụ con đều tính theo tỷ lệ %: kết quả nhiệm vụ lớn = TỔNG tỷ lệ của các nhiệm vụ con (con chưa có số liệu tính 0)
+// Nhiệm vụ lớn mà MỌI nhiệm vụ con đều tính theo tỷ lệ %: kết quả nhiệm vụ lớn = TỔNG TỬ SỐ / TỔNG MẪU SỐ của các nhiệm vụ con (không cộng dồn % nên không vượt 100%); con chưa có số liệu bỏ qua
 const tongTyLeCon = (x: Dong) => {
   if (!x.con.length || !x.con.every((c) => (c.d.danh_gia ?? goiYDanhGia(c.n)).kieu === 'ty_le')) return null;
-  const tyLe = x.con.reduce((t, c) => t + (tyLeNv(c)?.tyLe ?? 0), 0);
+  let tu = 0, mau = 0;
+  for (const c of x.con) { const t = tyLeNv(c); if (t) { tu += t.tu; mau += t.mau; } }
+  const tyLe = mau > 0 ? Math.min(100, (tu / mau) * 100) : 0;
   const chiTieu = (x.d.danh_gia ?? goiYDanhGia(x.n)).chi_tieu;
-  return { tyLe, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
+  return { tyLe, tu, mau, chiTieu, dat: chiTieu ? tyLe >= chiTieu - 1e-9 : undefined };
 };
 // Tình trạng hiển thị: nhiệm vụ tỷ lệ đã có số liệu -> Đạt (so với chỉ tiêu %); chưa đạt chỉ tiêu mà chưa đến hạn = Chưa đạt, quá hạn mà vẫn chưa đạt = Không đạt hoặc Đảm bảo (không đặt chỉ tiêu); sửa tay thì giữ nguyên
 // Đạt và Đảm bảo được tính là HOÀN THÀNH (thống kê, lọc, nhiệm vụ lớn, không phải báo cáo tuần các kỳ sau)
@@ -945,7 +947,7 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
         if (x.con.length) {
           const tong = tongTyLeCon(x);
           if (tong) return <><span className="font-sans text-[8pt] font-semibold" style={{ color: tong.dat === false ? '#9F1239' : tong.dat ? '#166534' : '#1E3A8A' }}>Tỷ lệ {soVN(tong.tyLe, 2)}%</span>
-            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Tổng các nhiệm vụ con{tong.chiTieu ? ` · CT ${soVN(tong.chiTieu, 2)}%` : ''}</span>
+            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Tổng các nhiệm vụ con: {soVN(tong.tu)}/{soVN(tong.mau)}{tong.chiTieu ? ` · CT ${soVN(tong.chiTieu, 2)}%` : ''}</span>
             <span className="mt-0.5 block font-sans text-[7.5pt]">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành</span></>;
           return <span className="font-sans text-[8pt] font-semibold">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành · {x.pt}%</span>;
         }
