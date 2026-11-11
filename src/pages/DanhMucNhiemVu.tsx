@@ -947,7 +947,7 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
         if (x.con.length) {
           const tong = tongTyLeCon(x);
           if (tong) return <><span className="font-sans text-[8pt] font-semibold" style={{ color: tong.dat === false ? '#9F1239' : tong.dat ? '#166534' : '#1E3A8A' }}>Tỷ lệ {soVN(tong.tyLe, 2)}%</span>
-            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Tổng các nhiệm vụ con: {soVN(tong.tu)}/{soVN(tong.mau)}{tong.chiTieu ? ` · CT ${soVN(tong.chiTieu, 2)}%` : ''}</span>
+            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Tổng các nhiệm vụ con: {soVN(tong.tu)}/{soVN(tong.mau)}{tong.chiTieu ? <span className="print:hidden">{` · CT ${soVN(tong.chiTieu, 2)}%`}</span> : null}</span>
             <span className="mt-0.5 block font-sans text-[7.5pt]">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành</span></>;
           return <span className="font-sans text-[8pt] font-semibold">{x.con.filter((c) => c.tt.loai === 'xong').length}/{x.con.length} nhiệm vụ con hoàn thành · {x.pt}%</span>;
         }
@@ -957,7 +957,7 @@ function BangA4({ ch, ds, nhomDs, batCon, daMoCon, keoDuoc, rieng, setRieng, sua
         // Nhiệm vụ tỷ lệ: ghi tỷ lệ % tính từ số liệu (không ghi "Hoàn thành 100%")
         if (dg.kieu === 'ty_le') { const t = tyLeNv(x); return <>{t
           ? <><span className="font-sans text-[8pt] font-semibold" style={{ color: t.dat === false ? '#9F1239' : t.dat ? '#166534' : '#1E3A8A' }}>Tỷ lệ {soVN(t.tyLe, 2)}%</span>
-            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(t.tu)}/{soVN(t.mau)}{t.chiTieu ? ` · CT ${soVN(t.chiTieu, 2)}%` : ''}</span></>
+            <span className="mt-0.5 block font-sans text-[7.5pt] text-[#1E3A8A]">Đạt {soVN(t.tu)}/{soVN(t.mau)}{t.chiTieu ? <span className="print:hidden">{` · CT ${soVN(t.chiTieu, 2)}%`}</span> : null}</span></>
           : <span className="font-sans text-[8pt] italic text-[#8D8486]">Chưa có số liệu</span>}
           {x.d.tien_do_vb && <span className="mt-0.5 block whitespace-pre-wrap">{x.d.tien_do_vb}</span>}</>; }
         return <><span className="font-sans text-[8pt] font-semibold">{TT_NV[x.ttHien].nhan} · {x.ptHien}%</span>
@@ -1929,11 +1929,11 @@ function oChu(c: KhoaCot, x: Dong): string {
     case 'han': return ngayNgan(x.n.han);
     case 'tien_do': {
       if (x.con.length) { const tong = tongTyLeCon(x), xongCon = `${x.con.filter((c) => c.tt.loai === 'xong').length}/${x.con.length} nhiệm vụ con hoàn thành`;
-        return tong ? `Tỷ lệ ${soVN(tong.tyLe, 2)}% (tổng các nhiệm vụ con${tong.chiTieu ? ` · CT ${soVN(tong.chiTieu, 2)}%` : ''})\n${xongCon}` : `${xongCon} (${x.pt}%)`; }
+        return tong ? `Tỷ lệ ${soVN(tong.tyLe, 2)}% (tổng các nhiệm vụ con)\n${xongCon}` : `${xongCon} (${x.pt}%)`; }
       const sl = soLieuCua(x);
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'tien_do') return `${TIEN_DO_3[tienDo3(x)].nhan}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
       if ((x.d.danh_gia ?? goiYDanhGia(x.n)).kieu === 'ty_le') { const t = tyLeNv(x);
-        return `${t ? `Tỷ lệ ${soVN(t.tyLe, 2)}%\nĐạt ${soVN(t.tu)}/${soVN(t.mau)}${t.chiTieu ? ` · CT ${soVN(t.chiTieu, 2)}%` : ''}` : 'Chưa có số liệu'}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`; }
+        return `${t ? `Tỷ lệ ${soVN(t.tyLe, 2)}%\nĐạt ${soVN(t.tu)}/${soVN(t.mau)}` : 'Chưa có số liệu'}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`; }
       return `${TT_NV[x.ttHien].nhan} (${x.ptHien}%)${sl && (x.d.danh_gia ?? goiYDanhGia(x.n)).kieu !== 'tien_do' ? `\nĐạt ${soVN(sl.tu)}/${soVN(sl.mau)}` : ''}${x.d.tien_do_vb ? `\n${x.d.tien_do_vb}` : ''}`;
     }
     case 'ket_qua_tuan': { if (x.con.length) return `${x.con.filter((c) => c.tuanCn.length).length}/${x.con.filter((c) => c.canBct).length} nhiệm vụ con đã báo cáo tuần này`;
